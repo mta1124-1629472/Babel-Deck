@@ -2,9 +2,9 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
-using Babel_Deck.ViewModels;
+using Babel.Deck.ViewModels;
 
-namespace Babel_Deck;
+namespace Babel.Deck;
 
 /// <summary>
 /// Given a view model, returns the corresponding view if possible.
