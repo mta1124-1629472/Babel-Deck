@@ -1,4 +1,4 @@
-﻿namespace Babel_Deck.ViewModels;
+﻿namespace Babel.Deck.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {

@@ -4,10 +4,10 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using System.Linq;
 using Avalonia.Markup.Xaml;
-using Babel_Deck.ViewModels;
-using Babel_Deck.Views;
+using Babel.Deck.ViewModels;
+using Babel.Deck.Views;
 
-namespace Babel_Deck;
+namespace Babel.Deck;
 
 public partial class App : Application
 {

@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "rp2lZXFJzMg=",
+  "dgSpecHash": "AcSz8jXj9DE=",
   "success": true,
-  "projectFilePath": "D:\\Dev\\Babel Deck\\Babel Deck.csproj",
+  "projectFilePath": "D:\\Dev\\Babel-Deck\\BabelDeck.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\ander\\.nuget\\packages\\avalonia\\11.3.12\\avalonia.11.3.12.nupkg.sha512",
     "C:\\Users\\ander\\.nuget\\packages\\avalonia.angle.windows.natives\\2.1.25547.20250602\\avalonia.angle.windows.natives.2.1.25547.20250602.nupkg.sha512",

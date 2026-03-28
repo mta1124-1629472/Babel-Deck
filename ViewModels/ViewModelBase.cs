@@ -1,6 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Babel_Deck.ViewModels;
+namespace Babel.Deck.ViewModels;
 
 public abstract class ViewModelBase : ObservableObject
 {

@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <AssemblyName>Babel.Deck</AssemblyName>
+    <RootNamespace>Babel.Deck</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
