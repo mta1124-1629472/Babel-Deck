@@ -20,7 +20,7 @@
 - Duration property can be read.
 - Play/pause works reliably when called after media is ready.
 - Seek functionality works.
-- HasEnded property returns correct state (false immediately after load).
+- HasEnded property returns the expected state in the verified test path (false immediately after load).
 - Dispose works cleanly.
 - Multiple load/unload cycles complete without hangs.
 - Core headless lifecycle behavior has passing coverage for initialize, load plus duration, dispose, and repeated load/unload cycles.
@@ -67,7 +67,7 @@ Milestone 02 is complete. The core libmpv functionality has been verified:
 - Duration can be read
 - Play/pause is reliable
 - Seek works
-- HasEnded reports correct state
+- HasEnded reports the expected non-ended state in the verified test path
 - Clean disposal works
 - Repeated load/unload cycles complete without hangs
 
