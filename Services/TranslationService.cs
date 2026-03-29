@@ -92,7 +92,7 @@ async def translate():
     }
     
     if 'segments' in data:
-        for seg in data['segments']:
+        for idx, seg in enumerate(data['segments']):
             text = seg.get('text', '')
             translated_text = ''
             if text:
@@ -102,8 +102,10 @@ async def translate():
                 except Exception as e:
                     print(f'Error translating: {e}', file=sys.stderr)
             
+            start = seg.get('start', 0)
             result['segments'].append({
-                'start': seg.get('start', 0),
+                'id': f'segment_{start}',
+                'start': start,
                 'end': seg.get('end', 0),
                 'text': text,
                 'translatedText': translated_text
@@ -194,6 +196,7 @@ asyncio.run(translate())
 
     private class SegmentJson
     {
+        public string? Id { get; set; }
         public double Start { get; set; }
         public double End { get; set; }
         public string? Text { get; set; }

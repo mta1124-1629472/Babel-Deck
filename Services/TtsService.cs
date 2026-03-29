@@ -159,6 +159,93 @@ asyncio.run(generate())
             }
         }
     }
+
+    public async Task<TtsResult> GenerateSegmentTtsAsync(
+        string text,
+        string outputAudioPath,
+        string voice = "en-US-AriaNeural")
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            throw new ArgumentException("Segment text cannot be empty", nameof(text));
+        }
+
+        var script = @"
+import sys
+import asyncio
+import edge_tts
+
+async def generate():
+    text = sys.argv[1]
+    voice = sys.argv[2] if len(sys.argv) > 2 else 'en-US-AriaNeural'
+    output_path = sys.argv[3]
+    
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save(output_path)
+    
+    print(f'Segment TTS generated: {output_path}')
+
+asyncio.run(generate())
+";
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"tts_seg_{Guid.NewGuid():N}.py");
+        await File.WriteAllTextAsync(scriptPath, script);
+
+        try
+        {
+            _log.Info($"Starting segment TTS generation: {text.Substring(0, Math.Min(30, text.Length))}... -> {outputAudioPath}");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = _pythonPath,
+                Arguments = $"\"{scriptPath}\" \"{text}\" \"{voice}\" \"{outputAudioPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                throw new InvalidOperationException("Failed to start TTS process.");
+            }
+
+            var stdout = await proc.StandardOutput.ReadToEndAsync();
+            var stderr = await proc.StandardError.ReadToEndAsync();
+
+            proc.WaitForExit();
+
+            if (proc.ExitCode != 0)
+            {
+                _log.Error($"Segment TTS failed with exit code {proc.ExitCode}", new Exception(stderr));
+                throw new InvalidOperationException($"Segment TTS failed: {stderr}");
+            }
+
+            if (!File.Exists(outputAudioPath))
+            {
+                throw new InvalidOperationException($"Segment TTS output file not created: {outputAudioPath}");
+            }
+
+            _log.Info($"Segment TTS completed: {outputAudioPath}");
+
+            var fileInfo = new FileInfo(outputAudioPath);
+            
+            return new TtsResult(
+                true,
+                outputAudioPath,
+                voice,
+                fileInfo.Length,
+                null);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath))
+            {
+                File.Delete(scriptPath);
+            }
+        }
+    }
 }
 
 public sealed record TtsResult(

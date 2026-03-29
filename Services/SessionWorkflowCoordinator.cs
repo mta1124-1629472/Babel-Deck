@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Babel.Deck.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -327,6 +329,93 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
         };
 
         _log.Info($"TTS complete: {ttsPath}, size: {result.FileSizeBytes} bytes");
+
+        var segmentsDir = Path.Combine(ttsDir, "segments");
+        Directory.CreateDirectory(segmentsDir);
+
+        CurrentSession = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            TtsPath = ttsPath,
+            TtsVoice = voice,
+            TtsGeneratedAtUtc = DateTimeOffset.UtcNow,
+            TtsSegmentsPath = segmentsDir,
+            TtsSegmentAudioPaths = new Dictionary<string, string>(),
+            StatusMessage = $"TTS generated ({voice}). Dubbing complete.",
+        };
+
+        SaveCurrentSession();
+    }
+
+    public async Task RegenerateSegmentTtsAsync(string segmentId)
+    {
+        if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
+        {
+            throw new InvalidOperationException("No translation available. Please translate first.");
+        }
+
+        if (!File.Exists(CurrentSession.TranslationPath))
+        {
+            throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
+        }
+
+        var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
+        var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
+        
+        var segments = translationData.GetProperty("segments");
+        string? segmentText = null;
+        
+        foreach (var seg in segments.EnumerateArray())
+        {
+            var id = seg.GetProperty("id").GetString();
+            if (id == segmentId)
+            {
+                var textProp = seg.GetProperty("translatedText");
+                segmentText = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
+                break;
+            }
+        }
+
+        if (string.IsNullOrEmpty(segmentText))
+        {
+            throw new InvalidOperationException($"Segment not found: {segmentId}");
+        }
+
+        _ttsService ??= new TtsService(_log);
+
+        var sessionDir = GetSessionDirectory();
+        var segmentsDir = Path.Combine(sessionDir, "tts", "segments");
+        Directory.CreateDirectory(segmentsDir);
+
+        var segmentAudioPath = Path.Combine(segmentsDir, $"{segmentId}.mp3");
+
+        _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText.Substring(0, Math.Min(30, segmentText.Length))}...");
+
+        var result = await _ttsService.GenerateSegmentTtsAsync(
+            segmentText,
+            segmentAudioPath,
+            CurrentSession.TtsVoice ?? "en-US-AriaNeural");
+
+        if (!result.Success)
+        {
+            var errorMsg = result.ErrorMessage ?? "Unknown TTS error";
+            _log.Error($"Segment TTS regeneration failed: {errorMsg}", new Exception(errorMsg));
+            throw new InvalidOperationException($"Segment TTS regeneration failed: {errorMsg}");
+        }
+
+        var currentSegments = CurrentSession.TtsSegmentAudioPaths ?? new Dictionary<string, string>();
+        var updatedSegments = new Dictionary<string, string>(currentSegments)
+        {
+            [segmentId] = segmentAudioPath
+        };
+
+        CurrentSession = CurrentSession with
+        {
+            TtsSegmentAudioPaths = updatedSegments,
+            StatusMessage = $"Regenerated TTS for segment {segmentId}.",
+        };
+
+        _log.Info($"Segment TTS regenerated: {segmentId} -> {segmentAudioPath}");
         SaveCurrentSession();
     }
 

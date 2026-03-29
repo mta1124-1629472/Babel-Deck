@@ -377,4 +377,82 @@ public class SessionWorkflowTests : IDisposable
             Directory.Delete(_testLogDir, true);
         }
     }
+
+    [Fact]
+    public async Task RegenerateSegmentTts_ProducesSingleSegmentAudio()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_regen_seg.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
+
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
+        Assert.NotNull(coordinator.CurrentSession.TtsSegmentsPath);
+
+        var translationJson = await File.ReadAllTextAsync(coordinator.CurrentSession.TranslationPath!);
+        var translationData = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(translationJson);
+        var segments = translationData.GetProperty("segments");
+        var firstSegment = segments[0];
+        var segmentId = firstSegment.GetProperty("id").GetString();
+
+        Assert.NotNull(segmentId);
+
+        await coordinator.RegenerateSegmentTtsAsync(segmentId);
+
+        Assert.NotNull(coordinator.CurrentSession.TtsSegmentAudioPaths);
+        Assert.True(coordinator.CurrentSession.TtsSegmentAudioPaths!.ContainsKey(segmentId));
+        
+        var segmentAudioPath = coordinator.CurrentSession.TtsSegmentAudioPaths[segmentId];
+        Assert.True(File.Exists(segmentAudioPath), $"Segment audio should exist at: {segmentAudioPath}");
+        
+        var fileInfo = new FileInfo(segmentAudioPath);
+        Assert.True(fileInfo.Length > 0, "Segment audio should have non-zero size");
+    }
+
+    [Fact]
+    public async Task RegenerateSegmentTts_ThenReopen_PreservesChange()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_regen_seg_reopen.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
+
+        var translationJson = await File.ReadAllTextAsync(coordinator.CurrentSession.TranslationPath!);
+        var translationData = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(translationJson);
+        var segments = translationData.GetProperty("segments");
+        var segmentId = segments[0].GetProperty("id").GetString();
+
+        await coordinator.RegenerateSegmentTtsAsync(segmentId!);
+
+        var segmentAudioPath = coordinator.CurrentSession.TtsSegmentAudioPaths![segmentId!];
+        var sessionId = coordinator.CurrentSession.SessionId;
+
+        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        Assert.Equal(sessionId, coordinator.CurrentSession.SessionId);
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
+        Assert.NotNull(coordinator.CurrentSession.TtsSegmentAudioPaths);
+        Assert.True(coordinator.CurrentSession.TtsSegmentAudioPaths!.ContainsKey(segmentId));
+        Assert.True(File.Exists(coordinator.CurrentSession.TtsSegmentAudioPaths[segmentId]),
+            "After reopen, regenerated segment audio should still exist");
+    }
 }
