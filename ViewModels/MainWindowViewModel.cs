@@ -1,6 +1,13 @@
-﻿namespace Babel.Deck.ViewModels;
+using Babel.Deck.Services;
+
+namespace Babel.Deck.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
-    public string Greeting { get; } = "Welcome to Avalonia!";
+    public MainWindowViewModel(SessionWorkflowCoordinator coordinator)
+    {
+        Coordinator = coordinator;
+    }
+
+    public SessionWorkflowCoordinator Coordinator { get; }
 }
