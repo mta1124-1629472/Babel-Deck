@@ -15,7 +15,10 @@ public sealed record WorkflowSessionSnapshot(
     DateTimeOffset? TranscribedAtUtc = null,
     string? TranslationPath = null,
     string? TargetLanguage = null,
-    DateTimeOffset? TranslatedAtUtc = null)
+    DateTimeOffset? TranslatedAtUtc = null,
+    string? TtsPath = null,
+    string? TtsVoice = null,
+    DateTimeOffset? TtsGeneratedAtUtc = null)
 {
     public static WorkflowSessionSnapshot CreateNew(DateTimeOffset nowUtc)
     {
