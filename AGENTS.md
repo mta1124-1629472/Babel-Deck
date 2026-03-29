@@ -178,9 +178,14 @@ Do not introduce:
 
 unless the current milestone requires them to deliver a real gate.
 
+### 10. Inference hosting discipline
 
+Do not treat WSL, containers, or NVIDIA-managed serving as mandatory foundation work before the first real local inference slice is proven.
 
-\### 10. Keep one owner for session/workflow state
+Keep Python inference behind a clear boundary so hosting can evolve later.
+Do not hard-code WSL-only assumptions or introduce deployment complexity that outruns the current milestone.
+
+\### 11. Keep one owner for session/workflow state
 
 Do not scatter product state across views, random services, and helper classes.
 
