@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "d:\\Dev\\Babel-Deck\\BabelDeck.csproj": {}
+    "D:\\Dev\\Babel-Deck\\BabelDeck.csproj": {}
   },
   "projects": {
-    "d:\\Dev\\Babel-Deck\\BabelDeck.csproj": {
+    "D:\\Dev\\Babel-Deck\\BabelDeck.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "d:\\Dev\\Babel-Deck\\BabelDeck.csproj",
+        "projectUniqueName": "D:\\Dev\\Babel-Deck\\BabelDeck.csproj",
         "projectName": "Babel.Deck",
-        "projectPath": "d:\\Dev\\Babel-Deck\\BabelDeck.csproj",
+        "projectPath": "D:\\Dev\\Babel-Deck\\BabelDeck.csproj",
         "packagesPath": "C:\\Users\\ander\\.nuget\\packages\\",
-        "outputPath": "d:\\Dev\\Babel-Deck\\obj\\",
+        "outputPath": "D:\\Dev\\Babel-Deck\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

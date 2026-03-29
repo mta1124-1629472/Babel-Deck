@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Xunit;
@@ -596,5 +597,108 @@ public class SessionWorkflowTests : IDisposable
             }
         }
         Assert.True(foundUpdated, "Updated segment should exist after reopen");
+    }
+
+    [Fact]
+    public void BuildSegmentWorkflowList_ReflectsArtifactState()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_segment_list.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        coordinator.TranscribeMediaAsync().GetAwaiter().GetResult();
+        coordinator.TranslateTranscriptAsync("en", "es").GetAwaiter().GetResult();
+        coordinator.GenerateTtsAsync().GetAwaiter().GetResult();
+
+        var segmentsList = coordinator.GetSegmentWorkflowList();
+
+        Assert.NotEmpty(segmentsList);
+        
+        var firstSegment = segmentsList[0];
+        Assert.NotNull(firstSegment.SegmentId);
+        Assert.True(firstSegment.StartSeconds >= 0);
+        Assert.True(firstSegment.EndSeconds > firstSegment.StartSeconds);
+        Assert.False(string.IsNullOrEmpty(firstSegment.SourceText));
+        Assert.True(firstSegment.HasTranslation);
+        Assert.NotNull(firstSegment.TranslatedText);
+    }
+
+    [Fact]
+    public void Reopen_ReconstructsMixedSegmentState()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_mixed_reopen.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        coordinator.TranscribeMediaAsync().GetAwaiter().GetResult();
+        coordinator.TranslateTranscriptAsync("en", "es").GetAwaiter().GetResult();
+        coordinator.GenerateTtsAsync().GetAwaiter().GetResult();
+
+        var segmentsBefore = coordinator.GetSegmentWorkflowList();
+        var sessionId = coordinator.CurrentSession.SessionId;
+
+        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        var segmentsAfter = coordinator.GetSegmentWorkflowList();
+
+        Assert.Equal(sessionId, coordinator.CurrentSession.SessionId);
+        Assert.Equal(segmentsBefore.Count, segmentsAfter.Count);
+
+        for (int i = 0; i < segmentsBefore.Count; i++)
+        {
+            Assert.Equal(segmentsBefore[i].SegmentId, segmentsAfter[i].SegmentId);
+            Assert.Equal(segmentsBefore[i].HasTranslation, segmentsAfter[i].HasTranslation);
+            Assert.Equal(segmentsBefore[i].HasTtsAudio, segmentsAfter[i].HasTtsAudio);
+        }
+    }
+
+    [Fact]
+    public void RegeneratedAndUntouchedSegments_RemainDistinct()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_distinct.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        coordinator.TranscribeMediaAsync().GetAwaiter().GetResult();
+        coordinator.TranslateTranscriptAsync("en", "es").GetAwaiter().GetResult();
+        coordinator.GenerateTtsAsync().GetAwaiter().GetResult();
+
+        var segmentsBefore = coordinator.GetSegmentWorkflowList();
+        Assert.True(segmentsBefore.Count >= 2, "Need at least 2 segments");
+
+        var firstSegmentId = segmentsBefore[0].SegmentId;
+        var secondSegmentId = segmentsBefore[1].SegmentId;
+
+        coordinator.RegenerateSegmentTtsAsync(firstSegmentId).GetAwaiter().GetResult();
+
+        var segmentsAfter = coordinator.GetSegmentWorkflowList();
+
+        var firstAfter = segmentsAfter[0];
+        var secondAfter = segmentsAfter[1];
+
+        Assert.Equal(firstSegmentId, firstAfter.SegmentId);
+        Assert.Equal(secondSegmentId, secondAfter.SegmentId);
+        
+        Assert.True(firstAfter.HasTtsAudio);
+        Assert.True(secondAfter.HasTtsAudio);
     }
 }
