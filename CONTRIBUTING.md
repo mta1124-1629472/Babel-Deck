@@ -82,6 +82,41 @@ A good smoke note says:
 - what exact gate was verified
 - anything still missing or fragile
 
+### Smoke note conventions
+
+Store milestone smoke notes under `docs/smoke/` using this naming pattern:
+
+- `milestone-01-foundation.md`
+- `milestone-02-headless-libmpv.md`
+
+Conventions:
+- lowercase
+- hyphen-separated
+- two-digit milestone number
+- no root-level milestone files
+- no separate `*_COMPLETE.md` file if the smoke note already records gate status
+
+Allowed status values:
+- `complete`
+- `partial`
+- `failed`
+
+A smoke note must include:
+- metadata
+- gate summary
+- verified items
+- unverified items
+- concrete evidence
+- conclusion
+- deferred items
+
+If any gate item remains unverified, the smoke note must not say `complete`.
+
+### Smoke note location
+
+Store milestone smoke notes under `docs/smoke/` using milestone-based filenames.
+Avoid root-level smoke-note files and avoid separate completion-note files unless there is a specific reason they add information not already present in the smoke note.
+
 Example:
 
 “Loaded sample media, generated transcript, persisted artifacts, restarted app, and confirmed transcript reopened correctly. This verifies the ingest/transcript persistence gate.”

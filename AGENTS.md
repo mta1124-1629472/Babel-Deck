@@ -332,38 +332,69 @@ Do not claim completion based on static inspection alone if the milestone is beh
 \---
 
 
+```md id="ag-smoke-template-rules"
+### Smoke note conventions
 
-\## Truthfulness Requirements
+All milestone smoke notes must use the repo smoke-note template and must live under `docs/smoke/`.
 
+#### File location
+Store smoke notes only in:
 
+- `docs/smoke/`
 
-When reporting status:
+Do not create root-level milestone evidence files unless explicitly asked.
 
-\- state what is actually working
+#### File naming
+Use this exact naming pattern:
 
-\- state what is partial
+- `milestone-01-foundation.md`
+- `milestone-02-headless-libmpv.md`
+- `milestone-03-media-ingest.md`
 
-\- state what is still missing
+Rules:
+- lowercase only
+- hyphen-separated
+- two-digit milestone number
+- short stable milestone label
+- no `_SMOKE_NOTE`
+- no `_COMPLETE`
 
-\- name any shortcuts or temporary seams
+#### File purpose
+A smoke note is the authoritative milestone evidence file.
 
+Do not create a second completion-summary file unless it adds genuinely different information.
+In normal use, the smoke note is also the completion record.
 
+#### Status values
+Allowed smoke note status values are only:
+- `complete`
+- `partial`
+- `failed`
 
-Do not describe aspirational structure as shipped behavior.
+Do not use vague status labels like:
+- `mostly done`
+- `substantially complete`
+- `good enough`
+- `appears working`
 
+#### Truthfulness rules
+- If any gate item is unverified, status cannot be `complete`.
+- If a behavior is inferred rather than demonstrated, it belongs under `What Was Not Verified` or `Deferred Items`.
+- If a milestone is partial, say `partial` plainly.
+- Do not mark a milestone complete while listing unresolved gate items.
 
+#### Required sections
+Every smoke note must contain:
+- Metadata
+- Gate Summary
+- What Was Verified
+- What Was Not Verified
+- Evidence
+- Notes
+- Conclusion
+- Deferred Items
 
-Bad:
-
-\- “local runtime support is in place” when only the settings shell exists
-
-
-
-Good:
-
-\- “local runtime UI exists, but no verified local inference path has been implemented yet”
-
-
+Do not replace these with looser summary prose.
 
 \---
 
