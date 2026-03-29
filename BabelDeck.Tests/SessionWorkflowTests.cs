@@ -22,12 +22,8 @@ public class SessionWorkflowTests : IDisposable
         Directory.CreateDirectory(_testLogDir);
         
         var mp4Path = Path.Combine(AppContext.BaseDirectory, "test-assets", "video", "sample.mp4");
-        var wavPath = Path.Combine(AppContext.BaseDirectory, "test-assets", "audio", "sample.wav");
         
-        if (File.Exists(wavPath))
-            _testMediaPath = wavPath;
-        else
-            _testMediaPath = mp4Path;
+        _testMediaPath = mp4Path;
     }
 
     private string GetTestLogPath() => Path.Combine(_testLogDir, "test.log");
@@ -120,6 +116,10 @@ public class SessionWorkflowTests : IDisposable
         var transcriptJson = await File.ReadAllTextAsync(coordinator.CurrentSession.TranscriptPath);
         Assert.NotEmpty(transcriptJson);
         Assert.Contains("segments", transcriptJson);
+        
+        var transcriptData = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(transcriptJson);
+        var segments = transcriptData.GetProperty("segments");
+        Assert.True(segments.GetArrayLength() > 0, "Transcript should have segments");
     }
 
     [Fact]
@@ -173,6 +173,99 @@ public class SessionWorkflowTests : IDisposable
         Assert.NotNull(transcriptPath);
 
         File.Delete(transcriptPath);
+
+        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        Assert.Contains("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TranslateTranscript_ProducesTranslatedSegments()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_translate.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+
+        Assert.Equal(SessionWorkflowStage.Transcribed, coordinator.CurrentSession.Stage);
+        Assert.NotNull(coordinator.CurrentSession.TranscriptPath);
+
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
+        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
+        Assert.NotNull(coordinator.CurrentSession.TargetLanguage);
+        Assert.Equal("en", coordinator.CurrentSession.TargetLanguage);
+        Assert.True(File.Exists(coordinator.CurrentSession.TranslationPath), 
+            $"Translation should exist at: {coordinator.CurrentSession.TranslationPath}");
+
+        var translationJson = await File.ReadAllTextAsync(coordinator.CurrentSession.TranslationPath);
+        Assert.NotEmpty(translationJson);
+        Assert.Contains("translatedText", translationJson);
+        Assert.Contains("en", translationJson);
+    }
+
+    [Fact]
+    public async Task TranslateTranscript_ThenReopen_ReusesTranslation()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_translate_reopen.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        var translationPath = coordinator.CurrentSession.TranslationPath;
+        var sessionId = coordinator.CurrentSession.SessionId;
+
+        Assert.NotNull(translationPath);
+        Assert.True(File.Exists(translationPath));
+
+        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        Assert.Equal(sessionId, coordinator.CurrentSession.SessionId);
+        Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
+        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
+        Assert.True(File.Exists(coordinator.CurrentSession.TranslationPath),
+            "After reopen, translation artifact should still exist");
+        Assert.DoesNotContain("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReopenWithMissingTranslation_SurfacesDegradedState()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_missing_translation.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        var translationPath = coordinator.CurrentSession.TranslationPath;
+        Assert.NotNull(translationPath);
+
+        File.Delete(translationPath);
 
         coordinator = new SessionWorkflowCoordinator(store, log);
         coordinator.Initialize();
