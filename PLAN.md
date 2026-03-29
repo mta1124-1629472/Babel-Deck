@@ -24,6 +24,8 @@ Playback matters, but as a supporting inspection and QA surface rather than the 
 - Do not generalize early for multiple providers, runtimes, or model families unless the current milestone is blocked without it.
 - Preserve old working code and experiments. Archive instead of deleting.
 - Treat architecture as a servant of the main loop, not as a parallel product.
+- Local and optimized inference paths should preserve a clear boundary between the desktop app and Python-backed inference services so they can later run natively, in WSL, or in containerized environments without changing the core product workflow.
+- Keep the desktop app and Python-backed inference separated by an explicit service/process boundary so local, WSL-hosted, containerized, or NVIDIA-managed deployment paths remain possible later without changing the core workflow.
 
 ---
 
@@ -241,10 +243,14 @@ Once the core workflow is real, add local paths for transcription, translation, 
 
 This milestone is where local execution starts to matter. It should come only after the cloud-backed or simplest main workflow has proven the actual product loop.
 
+Local inference should preserve a clear boundary between the desktop app and Python-backed inference services. Native local execution may be the first proving path, but WSL-hosted, containerized, and NVIDIA-managed serving paths should remain future-compatible deployment options rather than early prerequisites.
+
+
 Gate:
 - The main workflow can run locally on at least one supported machine configuration
 - Local capability is truthful and verified
 - Unsupported local paths remain clearly unsupported
+
 
 ---
 
@@ -252,6 +258,8 @@ Gate:
 Only now add richer runtime selection, hardware readiness checks, and optimized execution paths.
 
 This is a scaling and reliability milestone, not a foundation milestone.
+
+WSL, containers, and NVIDIA-managed serving paths should be evaluated here as deployment and reproducibility tools once the first real local workflow exists, not as foundation work before the product loop is proven.
 
 Gate:
 - Runtime routing is truthful
