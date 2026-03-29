@@ -1,0 +1,58 @@
+using System;
+
+namespace Babel.Deck.Services;
+
+/// <summary>
+/// Headless media transport interface for loading, playing, and controlling media playback.
+/// This is intentionally kept minimal for Milestone 2 - only what's needed to prove the transport works.
+/// </summary>
+public interface IMediaTransport : IDisposable
+{
+    /// <summary>
+    /// Loads a media file from the specified path.
+    /// </summary>
+    /// <param name="filePath">Path to the media file</param>
+    void Load(string filePath);
+    
+    /// <summary>
+    /// Starts media playback.
+    /// </summary>
+    void Play();
+    
+    /// <summary>
+    /// Pauses media playback.
+    /// </summary>
+    void Pause();
+    
+    /// <summary>
+    /// Seeks to the specified position in milliseconds.
+    /// </summary>
+    /// <param name="positionMs">Position in milliseconds</param>
+    void Seek(long positionMs);
+    
+    /// <summary>
+    /// Gets the current playback position in milliseconds.
+    /// </summary>
+    long CurrentTime { get; }
+    
+    /// <summary>
+    /// Gets the total duration of the loaded media in milliseconds.
+    /// Returns 0 if no media is loaded or duration is unknown.
+    /// </summary>
+    long Duration { get; }
+    
+    /// <summary>
+    /// Gets whether the media has ended playback.
+    /// </summary>
+    bool HasEnded { get; }
+    
+    /// <summary>
+    /// Event raised when media playback ends.
+    /// </summary>
+    event EventHandler? Ended;
+    
+    /// <summary>
+    /// Event raised when media transport encounters an error.
+    /// </summary>
+    event EventHandler<Exception>? ErrorOccurred;
+}
