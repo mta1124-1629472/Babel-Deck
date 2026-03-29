@@ -10,7 +10,9 @@ public sealed record WorkflowSessionSnapshot(
     string StatusMessage,
     string? SourceMediaPath = null,
     string? IngestedMediaPath = null,
-    DateTimeOffset? MediaLoadedAtUtc = null)
+    DateTimeOffset? MediaLoadedAtUtc = null,
+    string? TranscriptPath = null,
+    DateTimeOffset? TranscribedAtUtc = null)
 {
     public static WorkflowSessionSnapshot CreateNew(DateTimeOffset nowUtc)
     {

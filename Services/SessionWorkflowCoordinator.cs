@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using Babel.Deck.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -9,6 +10,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
 {
     private readonly SessionSnapshotStore _store;
     private readonly AppLog _log;
+    private TranscriptionService? _transcriptionService;
 
     [ObservableProperty]
     private WorkflowSessionSnapshot _currentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
@@ -42,25 +44,67 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
         else
         {
             var snapshot = loadResult.Snapshot;
-            bool artifactMissing = false;
+            bool mediaMissing = false;
+            bool transcriptMissing = false;
 
             if (!string.IsNullOrEmpty(snapshot.IngestedMediaPath) && 
                 !File.Exists(snapshot.IngestedMediaPath))
             {
                 _log.Warning($"Ingested media artifact missing: {snapshot.IngestedMediaPath}");
-                artifactMissing = true;
+                mediaMissing = true;
+            }
+
+            if (!string.IsNullOrEmpty(snapshot.TranscriptPath) && 
+                !File.Exists(snapshot.TranscriptPath))
+            {
+                _log.Warning($"Transcript artifact missing: {snapshot.TranscriptPath}");
+                transcriptMissing = true;
+            }
+
+            string statusMessage;
+            if (mediaMissing && transcriptMissing)
+            {
+                statusMessage = "Session had media and transcript but both artifacts are missing. Please re-load and re-transcribe.";
+            }
+            else if (mediaMissing)
+            {
+                statusMessage = "Session had media but artifact is missing. Please re-load media.";
+            }
+            else if (transcriptMissing)
+            {
+                statusMessage = "Session had transcript but artifact is missing. Please re-transcribe.";
+            }
+            else
+            {
+                statusMessage = snapshot.Stage >= SessionWorkflowStage.Transcribed
+                    ? "Resumed session with transcript. Ready for translation."
+                    : "Resumed saved foundation session. Downstream workflow milestones are still not implemented.";
             }
 
             CurrentSession = snapshot with
             {
                 LastUpdatedAtUtc = nowUtc,
-                StatusMessage = artifactMissing
-                    ? "Session had media but artifact is missing. Please re-load media."
-                    : "Resumed saved foundation session. Downstream workflow milestones are still not implemented.",
+                StatusMessage = statusMessage,
             };
-            SessionSource = artifactMissing
-                ? "Resumed session but media artifact is missing."
-                : "Resumed the saved foundation session.";
+
+            if (mediaMissing && transcriptMissing)
+            {
+                SessionSource = "Resumed session but both artifacts are missing.";
+            }
+            else if (mediaMissing)
+            {
+                SessionSource = "Resumed session but media artifact is missing.";
+            }
+            else if (transcriptMissing)
+            {
+                SessionSource = "Resumed session but transcript artifact is missing.";
+            }
+            else
+            {
+                SessionSource = snapshot.Stage >= SessionWorkflowStage.Transcribed
+                    ? "Resumed session with transcript."
+                    : "Resumed the saved foundation session.";
+            }
         }
 
         PersistenceStatus = loadResult.StatusMessage;
@@ -95,6 +139,53 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
             StatusMessage = "Media loaded. Ready for transcription.",
         };
 
+        SaveCurrentSession();
+    }
+
+    public async Task TranscribeMediaAsync()
+    {
+        if (string.IsNullOrEmpty(CurrentSession.IngestedMediaPath))
+        {
+            throw new InvalidOperationException("No media loaded. Please load media first.");
+        }
+
+        if (!File.Exists(CurrentSession.IngestedMediaPath))
+        {
+            throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
+        }
+
+        _transcriptionService ??= new TranscriptionService(_log);
+
+        var sessionDir = GetSessionDirectory();
+        var transcriptDir = Path.Combine(sessionDir, "transcripts");
+        Directory.CreateDirectory(transcriptDir);
+
+        var fileName = Path.GetFileNameWithoutExtension(CurrentSession.IngestedMediaPath);
+        var transcriptPath = Path.Combine(transcriptDir, $"{fileName}.json");
+
+        _log.Info($"Starting transcription: {CurrentSession.IngestedMediaPath}");
+
+        var result = await _transcriptionService.TranscribeAsync(
+            CurrentSession.IngestedMediaPath, 
+            transcriptPath);
+
+        if (!result.Success)
+        {
+            var errorMsg = result.ErrorMessage ?? "Unknown transcription error";
+            _log.Error($"Transcription failed: {errorMsg}", new Exception(errorMsg));
+            throw new InvalidOperationException($"Transcription failed: {errorMsg}");
+        }
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        CurrentSession = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            TranscriptPath = transcriptPath,
+            TranscribedAtUtc = nowUtc,
+            StatusMessage = $"Transcribed {result.Segments.Count} segments. Ready for translation.",
+        };
+
+        _log.Info($"Transcription complete: {result.Segments.Count} segments, language: {result.Language}");
         SaveCurrentSession();
     }
 

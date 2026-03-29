@@ -30,5 +30,6 @@
   <!-- Copy test media to output directory -->
   <ItemGroup>
     <None Include="..\test-assets\video\sample.mp4" Link="test-assets\video\sample.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\test-assets\audio\sample.wav" Link="test-assets\audio\sample.wav" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

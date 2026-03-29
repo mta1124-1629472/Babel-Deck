@@ -4,4 +4,5 @@ public enum SessionWorkflowStage
 {
     Foundation = 0,
     MediaLoaded = 1,
+    Transcribed = 2,
 }
