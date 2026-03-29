@@ -88,6 +88,38 @@ public class MediaTransportTests : IDisposable
         Assert.True(true, "Multiple load/unload cycles completed without hanging");
     }
 
+    [Fact]
+    public void TransportCanSeek()
+    {
+        // Arrange
+        _transport = new LibMpvHeadlessTransport();
+        _transport.Load(_testFilePath);
+        
+        // Call Play to ensure media is ready (this waits for duration internally)
+        _transport.Play();
+        
+        // Now seek to beginning
+        _transport.Seek(0);
+        
+        // Verify - current time should be non-negative
+        long currentTime = _transport.CurrentTime;
+        Assert.True(currentTime >= 0, $"Current time should be non-negative, got {currentTime}");
+    }
+
+    [Fact]
+    public void TransportCanReportEndedState()
+    {
+        // Arrange
+        _transport = new LibMpvHeadlessTransport();
+        _transport.Load(_testFilePath);
+        
+        // Act - get initial ended state
+        bool initialEnded = _transport.HasEnded;
+        
+        // Verify - at start, should not be ended
+        Assert.False(initialEnded, "Media should not be ended immediately after loading");
+    }
+
     public void Dispose()
     {
         _transport?.Dispose();
