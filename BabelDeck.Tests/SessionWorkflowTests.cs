@@ -455,4 +455,146 @@ public class SessionWorkflowTests : IDisposable
         Assert.True(File.Exists(coordinator.CurrentSession.TtsSegmentAudioPaths[segmentId]),
             "After reopen, regenerated segment audio should still exist");
     }
+
+    [Fact]
+    public async Task RegenerateSegmentTranslation_UpdatesSingleSegment()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_regen_trans.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
+
+        var translationJsonBefore = await File.ReadAllTextAsync(coordinator.CurrentSession.TranslationPath);
+        var dataBefore = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(translationJsonBefore);
+        var segmentsBefore = dataBefore.GetProperty("segments");
+        var segmentCountBefore = segmentsBefore.GetArrayLength();
+        var firstSegmentBefore = segmentsBefore[0];
+        var segmentId = firstSegmentBefore.GetProperty("id").GetString();
+        var textBefore = firstSegmentBefore.GetProperty("translatedText").GetString();
+
+        Assert.NotNull(segmentId);
+
+        await coordinator.RegenerateSegmentTranslationAsync(segmentId!);
+
+        var translationJsonAfter = await File.ReadAllTextAsync(coordinator.CurrentSession.TranslationPath!);
+        var dataAfter = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(translationJsonAfter);
+        var segmentsAfter = dataAfter.GetProperty("segments");
+        var segmentCountAfter = segmentsAfter.GetArrayLength();
+
+        Assert.Equal(segmentCountBefore, segmentCountAfter);
+
+        var firstSegmentAfter = segmentsAfter[0];
+        var textAfter = firstSegmentAfter.GetProperty("translatedText").GetString();
+
+        Assert.NotNull(textAfter);
+    }
+
+    [Fact]
+    public async Task RegenerateSegmentTranslation_DoesNotModifyOtherSegments()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_regen_trans_other.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        var translationJsonBefore = await File.ReadAllTextAsync(coordinator.CurrentSession.TranslationPath);
+        var dataBefore = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(translationJsonBefore);
+        var segmentsBefore = dataBefore.GetProperty("segments");
+        var segmentId = segmentsBefore[0].GetProperty("id").GetString();
+
+        var otherSegmentsBefore = new Dictionary<string, string?>();
+        foreach (var seg in segmentsBefore.EnumerateArray())
+        {
+            var id = seg.GetProperty("id").GetString();
+            if (id != segmentId)
+            {
+                otherSegmentsBefore[id!] = seg.GetProperty("translatedText").GetString();
+            }
+        }
+
+        await coordinator.RegenerateSegmentTranslationAsync(segmentId!);
+
+        var translationJsonAfter = await File.ReadAllTextAsync(coordinator.CurrentSession.TranslationPath);
+        var dataAfter = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(translationJsonAfter);
+        var segmentsAfter = dataAfter.GetProperty("segments");
+
+        foreach (var seg in segmentsAfter.EnumerateArray())
+        {
+            var id = seg.GetProperty("id").GetString();
+            if (id != segmentId && otherSegmentsBefore.ContainsKey(id))
+            {
+                var textAfter = seg.GetProperty("translatedText").GetString();
+                Assert.Equal(otherSegmentsBefore[id], textAfter);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Reopen_PreservesUpdatedTranslationSegment()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_regen_trans_reopen.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        var translationJsonBefore = await File.ReadAllTextAsync(coordinator.CurrentSession.TranslationPath);
+        var dataBefore = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(translationJsonBefore);
+        var segmentsBefore = dataBefore.GetProperty("segments");
+        var segmentId = segmentsBefore[0].GetProperty("id").GetString();
+
+        await coordinator.RegenerateSegmentTranslationAsync(segmentId!);
+
+        var translationPath = coordinator.CurrentSession.TranslationPath;
+        var sessionId = coordinator.CurrentSession.SessionId;
+
+        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        Assert.Equal(sessionId, coordinator.CurrentSession.SessionId);
+        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
+
+        var translationJsonAfter = await File.ReadAllTextAsync(coordinator.CurrentSession.TranslationPath);
+        var dataAfter = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(translationJsonAfter);
+        var segmentsAfter = dataAfter.GetProperty("segments");
+
+        var foundUpdated = false;
+        foreach (var seg in segmentsAfter.EnumerateArray())
+        {
+            var id = seg.GetProperty("id").GetString();
+            if (id == segmentId)
+            {
+                foundUpdated = true;
+                var translatedText = seg.GetProperty("translatedText").GetString();
+                Assert.NotNull(translatedText);
+                break;
+            }
+        }
+        Assert.True(foundUpdated, "Updated segment should exist after reopen");
+    }
 }
