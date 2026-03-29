@@ -7,7 +7,10 @@ public sealed record WorkflowSessionSnapshot(
     SessionWorkflowStage Stage,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset LastUpdatedAtUtc,
-    string StatusMessage)
+    string StatusMessage,
+    string? SourceMediaPath = null,
+    string? IngestedMediaPath = null,
+    DateTimeOffset? MediaLoadedAtUtc = null)
 {
     public static WorkflowSessionSnapshot CreateNew(DateTimeOffset nowUtc)
     {
