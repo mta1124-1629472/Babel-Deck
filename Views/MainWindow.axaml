@@ -9,12 +9,35 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="Babel Deck">
 
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainWindowViewModel/>
-    </Design.DataContext>
+    <Border Padding="24">
+        <StackPanel Spacing="12">
+            <TextBlock FontSize="28" FontWeight="SemiBold" Text="Babel Deck" />
+            <TextBlock TextWrapping="Wrap"
+                       Text="Milestone 1 foundation only. This build proves app boot, session ownership, persistence basics, and logging. Media ingest, transcription, translation, TTS, and preview are not implemented yet." />
 
-    <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Current stage" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Coordinator.CurrentSession.Stage}" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Session id" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Coordinator.CurrentSession.SessionId}" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Session source" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Coordinator.SessionSource}" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Workflow status" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="3" Grid.Column="1" TextWrapping="Wrap" Text="{Binding Coordinator.CurrentSession.StatusMessage}" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="State file" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="4" Grid.Column="1" TextWrapping="Wrap" Text="{Binding Coordinator.StateFilePath}" />
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Log file" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="5" Grid.Column="1" TextWrapping="Wrap" Text="{Binding Coordinator.LogFilePath}" />
+            </Grid>
+
+            <TextBlock TextWrapping="Wrap"
+                       Text="{Binding Coordinator.PersistenceStatus}" />
+        </StackPanel>
+    </Border>
 
 </Window>
