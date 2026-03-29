@@ -2345,11 +2345,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "d:\\Dev\\Babel-Deck\\BabelDeck.Tests\\BabelDeck.Tests.csproj",
+      "projectUniqueName": "D:\\Dev\\Babel-Deck\\BabelDeck.Tests\\BabelDeck.Tests.csproj",
       "projectName": "BabelDeck.Tests",
-      "projectPath": "d:\\Dev\\Babel-Deck\\BabelDeck.Tests\\BabelDeck.Tests.csproj",
+      "projectPath": "D:\\Dev\\Babel-Deck\\BabelDeck.Tests\\BabelDeck.Tests.csproj",
       "packagesPath": "C:\\Users\\ander\\.nuget\\packages\\",
-      "outputPath": "d:\\Dev\\Babel-Deck\\BabelDeck.Tests\\obj\\",
+      "outputPath": "D:\\Dev\\Babel-Deck\\BabelDeck.Tests\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -2371,8 +2371,8 @@
         "net10.0": {
           "targetAlias": "net10.0",
           "projectReferences": {
-            "d:\\Dev\\Babel-Deck\\BabelDeck.csproj": {
-              "projectPath": "d:\\Dev\\Babel-Deck\\BabelDeck.csproj"
+            "D:\\Dev\\Babel-Deck\\BabelDeck.csproj": {
+              "projectPath": "D:\\Dev\\Babel-Deck\\BabelDeck.csproj"
             }
           }
         }

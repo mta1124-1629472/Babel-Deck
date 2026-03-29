@@ -475,6 +475,75 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
         SaveCurrentSession();
     }
 
+    public List<WorkflowSegmentState> GetSegmentWorkflowList()
+    {
+        if (string.IsNullOrEmpty(CurrentSession.TranscriptPath) || !File.Exists(CurrentSession.TranscriptPath))
+        {
+            return new List<WorkflowSegmentState>();
+        }
+
+        var segments = new List<WorkflowSegmentState>();
+
+        var transcriptJson = File.ReadAllText(CurrentSession.TranscriptPath);
+        var transcriptData = JsonSerializer.Deserialize<JsonElement>(transcriptJson);
+        var transcriptSegments = transcriptData.GetProperty("segments");
+
+        Dictionary<string, string>? ttsSegmentPaths = null;
+        if (CurrentSession.TtsSegmentAudioPaths != null)
+        {
+            ttsSegmentPaths = CurrentSession.TtsSegmentAudioPaths;
+        }
+
+        Dictionary<string, string>? translationTexts = null;
+        if (!string.IsNullOrEmpty(CurrentSession.TranslationPath) && File.Exists(CurrentSession.TranslationPath))
+        {
+            translationTexts = new Dictionary<string, string>();
+            var translationJson = File.ReadAllText(CurrentSession.TranslationPath);
+            var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
+            var translationSegments = translationData.GetProperty("segments");
+            
+            foreach (var seg in translationSegments.EnumerateArray())
+            {
+                var id = seg.GetProperty("id").GetString();
+                if (id != null)
+                {
+                    var textProp = seg.GetProperty("translatedText");
+                    var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
+                    if (text != null)
+                    {
+                        translationTexts[id] = text;
+                    }
+                }
+            }
+        }
+
+        foreach (var seg in transcriptSegments.EnumerateArray())
+        {
+            var start = seg.GetProperty("start").GetDouble();
+            var id = start == (int)start ? $"segment_{start:0.0}" : $"segment_{start}";
+            
+            var end = seg.GetProperty("end").GetDouble();
+            
+            var textProp = seg.GetProperty("text");
+            var text = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() ?? "" : "";
+
+            var hasTranslation = translationTexts != null && translationTexts.ContainsKey(id);
+            var translatedText = hasTranslation ? translationTexts[id] : null;
+            var hasTtsAudio = ttsSegmentPaths != null && ttsSegmentPaths.ContainsKey(id);
+
+            segments.Add(new WorkflowSegmentState(
+                id,
+                start,
+                end,
+                text,
+                hasTranslation,
+                translatedText,
+                hasTtsAudio));
+        }
+
+        return segments;
+    }
+
     private string GetSessionDirectory()
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
