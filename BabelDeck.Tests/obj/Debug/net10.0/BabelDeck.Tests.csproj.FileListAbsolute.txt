@@ -161,4 +161,3 @@ D:\Dev\Babel-Deck\BabelDeck.Tests\obj\Debug\net10.0\refint\BabelDeck.Tests.dll
 D:\Dev\Babel-Deck\BabelDeck.Tests\obj\Debug\net10.0\BabelDeck.Tests.pdb
 D:\Dev\Babel-Deck\BabelDeck.Tests\obj\Debug\net10.0\BabelDeck.Tests.genruntimeconfig.cache
 D:\Dev\Babel-Deck\BabelDeck.Tests\obj\Debug\net10.0\ref\BabelDeck.Tests.dll
-D:\Dev\Babel-Deck\BabelDeck.Tests\bin\Debug\net10.0\test-assets\audio\sample.wav
