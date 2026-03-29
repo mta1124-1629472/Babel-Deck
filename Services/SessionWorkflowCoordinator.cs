@@ -419,6 +419,62 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
         SaveCurrentSession();
     }
 
+    public async Task RegenerateSegmentTranslationAsync(string segmentId)
+    {
+        if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
+        {
+            throw new InvalidOperationException("No translation available. Please translate first.");
+        }
+
+        if (!File.Exists(CurrentSession.TranslationPath))
+        {
+            throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
+        }
+
+        var translationJson = await File.ReadAllTextAsync(CurrentSession.TranslationPath);
+        var translationData = JsonSerializer.Deserialize<JsonElement>(translationJson);
+        
+        var segments = translationData.GetProperty("segments");
+        string? sourceText = null;
+        
+        foreach (var seg in segments.EnumerateArray())
+        {
+            var id = seg.GetProperty("id").GetString();
+            if (id == segmentId)
+            {
+                var textProp = seg.GetProperty("text");
+                sourceText = textProp.ValueKind == JsonValueKind.String ? textProp.GetString() : null;
+                break;
+            }
+        }
+
+        if (string.IsNullOrEmpty(sourceText))
+        {
+            throw new InvalidOperationException($"Source text not found for segment: {segmentId}");
+        }
+
+        _translationService ??= new TranslationService(_log);
+
+        var sourceLanguage = "es";
+        var targetLanguage = CurrentSession.TargetLanguage ?? "en";
+
+        _log.Info($"Regenerating translation for segment {segmentId}: {sourceText.Substring(0, Math.Min(30, sourceText.Length))}...");
+
+        var result = await _translationService.TranslateSingleSegmentAsync(
+            sourceText,
+            CurrentSession.TranslationPath,
+            CurrentSession.TranslationPath,
+            sourceLanguage,
+            targetLanguage);
+
+        _log.Info($"Segment translation regenerated: {segmentId}");
+        CurrentSession = CurrentSession with
+        {
+            StatusMessage = $"Regenerated translation for segment {segmentId}.",
+        };
+        SaveCurrentSession();
+    }
+
     private string GetSessionDirectory()
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

@@ -187,6 +187,131 @@ asyncio.run(translate())
         }
     }
 
+    public async Task<TranslationResult> TranslateSingleSegmentAsync(
+        string text,
+        string translationJsonPath,
+        string outputJsonPath,
+        string sourceLanguage,
+        string targetLanguage)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            throw new ArgumentException("Source text cannot be empty", nameof(text));
+        }
+
+        if (!File.Exists(translationJsonPath))
+        {
+            throw new FileNotFoundException($"Translation file not found: {translationJsonPath}");
+        }
+
+        var script = @"
+import sys
+import json
+import asyncio
+from googletrans import Translator
+
+async def translate():
+    text = sys.argv[1]
+    source_lang = sys.argv[2] if len(sys.argv) > 2 else 'es'
+    target_lang = sys.argv[3] if len(sys.argv) > 3 else 'en'
+    
+    translator = Translator()
+    
+    translated = await translator.translate(text, src=source_lang, dest=target_lang)
+    translated_text = translated.text if translated else ''
+    
+    # Read existing translation to preserve structure
+    try:
+        with open(sys.argv[4], 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except:
+        data = {'segments': []}
+    
+    # Update the specific segment
+    seg_id = sys.argv[5] if len(sys.argv) > 5 else ''
+    if 'segments' in data and seg_id:
+        for seg in data['segments']:
+            if seg.get('id') == seg_id:
+                seg['translatedText'] = translated_text
+                break
+    
+    output_path = sys.argv[4]
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    print(f'Single segment translated: {seg_id}')
+
+asyncio.run(translate())
+";
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"translate_seg_{Guid.NewGuid():N}.py");
+        await File.WriteAllTextAsync(scriptPath, script);
+
+        try
+        {
+            _log.Info($"Starting single segment translation: {text.Substring(0, Math.Min(30, text.Length))}...");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = _pythonPath,
+                Arguments = $"\"{scriptPath}\" \"{text}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{translationJsonPath}\" \"{""}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                throw new InvalidOperationException("Failed to start translation process.");
+            }
+
+            var stdout = await proc.StandardOutput.ReadToEndAsync();
+            var stderr = await proc.StandardError.ReadToEndAsync();
+
+            proc.WaitForExit();
+
+            if (proc.ExitCode != 0)
+            {
+                _log.Error($"Single segment translation failed with exit code {proc.ExitCode}", new Exception(stderr));
+                throw new InvalidOperationException($"Single segment translation failed: {stderr}");
+            }
+
+            _log.Info($"Single segment translation completed: {translationJsonPath}");
+
+            var jsonContent = await File.ReadAllTextAsync(translationJsonPath);
+            var translationData = JsonSerializer.Deserialize<TranslationJson>(jsonContent);
+
+            var segments = new List<TranslatedSegment>();
+            if (translationData?.Segments != null)
+            {
+                foreach (var seg in translationData.Segments)
+                {
+                    segments.Add(new TranslatedSegment(
+                        seg.Start,
+                        seg.End,
+                        seg.Text ?? "",
+                        seg.TranslatedText ?? ""));
+                }
+            }
+
+            return new TranslationResult(
+                true,
+                segments,
+                translationData?.SourceLanguage ?? sourceLanguage,
+                translationData?.TargetLanguage ?? targetLanguage,
+                null);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath))
+            {
+                File.Delete(scriptPath);
+            }
+        }
+    }
+
     private class TranslationJson
     {
         public string? SourceLanguage { get; set; }
