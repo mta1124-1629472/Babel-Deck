@@ -224,7 +224,10 @@ print('Transcription complete')
             {
                 foreach (var seg in transcriptionData.Segments)
                 {
-                    segments.Add(new TranscriptSegment(seg.Start, seg.End, seg.Text));
+                    if (!string.IsNullOrEmpty(seg.Text))
+                    {
+                        segments.Add(new TranscriptSegment(seg.Start, seg.End, seg.Text));
+                    }
                 }
             }
 
