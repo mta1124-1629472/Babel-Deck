@@ -80,6 +80,9 @@ Risks to keep in mind:
 
 If WSL is used, it should remain behind the same explicit service boundary as any other inference host.
 
+Current status: WSL GPU-backed PyTorch smoke testing has been verified on the development machine, so WSL remains a proven optional hosting path for future Python-backed inference work.
+
+
 ---
 
 ## Container Posture
