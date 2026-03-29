@@ -31,21 +31,23 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
     // Simplified wait event delegate without the output parameter we're not using
     private delegate int mpv_wait_event_delegate(IntPtr handle, double timeout);
     
-    // Libmpv function instances
-    private mpv_create_delegate _mpv_create;
-    private mpv_initialize_delegate _mpv_initialize;
-    private mpv_set_option_string_delegate _mpv_set_option_string;
-    private mpv_command_string_delegate _mpv_command_string;
-    private mpv_get_property_string_delegate _mpv_get_property_string;
-    private mpv_terminate_destroy_delegate _mpv_terminate_destroy;
-    private mpv_wait_event_delegate _mpv_wait_event;
+    // Libmpv function instances (initialized by LoadLibMpvFunctions in constructor)
+    private mpv_create_delegate? _mpv_create;
+    private mpv_initialize_delegate? _mpv_initialize;
+    private mpv_set_option_string_delegate? _mpv_set_option_string;
+    private mpv_command_string_delegate? _mpv_command_string;
+    private mpv_get_property_string_delegate? _mpv_get_property_string;
+    private mpv_terminate_destroy_delegate? _mpv_terminate_destroy;
+    private mpv_wait_event_delegate? _mpv_wait_event;
     
     // DLL handle
     private IntPtr _dllHandle = IntPtr.Zero;
     
     // Event for ended
+#pragma warning disable CS0067 // Events are never used in this headless implementation
     public event EventHandler? Ended;
     public event EventHandler<Exception>? ErrorOccurred;
+#pragma warning restore CS0067
     
     public LibMpvHeadlessTransport()
     {
@@ -60,7 +62,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         LoadLibMpvFunctions();
         
         // Create libmpv context
-        _handle = _mpv_create();
+        _handle = _mpv_create!();
         if (_handle == IntPtr.Zero)
         {
             throw new InvalidOperationException("Failed to create libmpv context.");
@@ -72,7 +74,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         SetOption("idle", "yes");  // Wait for commands instead of exiting
         
         // Initialize libmpv
-        if (_mpv_initialize(_handle) != 0)
+        if (_mpv_initialize!(_handle) != 0)
         {
             throw new InvalidOperationException("Failed to initialize libmpv.");
         }
@@ -120,7 +122,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
                 }
             }
         }
-        catch (Exception ex)
+        catch
         {
             // If we fail, we'll fall back to default loading below
             // For debugging, we could log the exception, but we'll just ignore and fall back.
@@ -163,7 +165,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
     
     private void SetOption(string name, string value)
     {
-        if (_mpv_set_option_string(_handle, name, value) < 0)
+        if (_mpv_set_option_string!(_handle, name, value) < 0)
         {
             throw new InvalidOperationException($"Failed to set libmpv option: {name}={value}");
         }
@@ -185,7 +187,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         // Convert Windows backslashes to forward slashes for libmpv
         string normalizedPath = filePath.Replace("\\", "/");
         string command = $"loadfile \"{normalizedPath}\"";
-        int result = _mpv_command_string(_handle, command);
+        int result = _mpv_command_string!(_handle, command);
         
         if (result < 0)
         {
@@ -215,12 +217,12 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         }
         
         // Now try to set pause to no
-        int result = _mpv_command_string(_handle, "set pause no");
+        int result = _mpv_command_string!(_handle, "set pause no");
         
         if (result < 0)
         {
             // Try alternative syntax
-            result = _mpv_command_string(_handle, "set_property pause no");
+            result = _mpv_command_string!(_handle, "set_property pause no");
             if (result < 0)
             {
                 throw new InvalidOperationException($"Failed to play (result: {result}).");
@@ -237,10 +239,10 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
             throw new ObjectDisposedException(nameof(LibMpvHeadlessTransport));
         }
         
-        int result = _mpv_command_string(_handle, "set pause yes");
+        int result = _mpv_command_string!(_handle, "set pause yes");
         if (result < 0)
         {
-            result = _mpv_command_string(_handle, "set_property pause yes");
+            result = _mpv_command_string!(_handle, "set_property pause yes");
             if (result < 0)
             {
                 throw new InvalidOperationException("Failed to set pause state.");
@@ -258,7 +260,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         }
         
         string command = $"seek {positionMs} absolute";
-        if (_mpv_command_string(_handle, command) < 0)
+        if (_mpv_command_string!(_handle, command) < 0)
         {
             throw new InvalidOperationException($"Failed to seek to {positionMs}ms.");
         }
@@ -273,7 +275,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
                 return 0;
             }
             
-            if (_mpv_get_property_string(_handle, "time-pos", out string? timePosStr) >= 0 && 
+            if (_mpv_get_property_string!(_handle, "time-pos", out string? timePosStr) >= 0 && 
                 double.TryParse(timePosStr, out double timePos))
             {
                 return (long)(timePos * 1000);
@@ -292,7 +294,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
                 return 0;
             }
             
-            if (_mpv_get_property_string(_handle, "duration", out string? durationStr) >= 0 && 
+            if (_mpv_get_property_string!(_handle, "duration", out string? durationStr) >= 0 && 
                 double.TryParse(durationStr, out double duration))
             {
                 return (long)(duration * 1000);
@@ -314,7 +316,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
             // Check if we've received an end file event
             // In a real implementation, we would poll events
             // For simplicity, we'll check the property
-            if (_mpv_get_property_string(_handle, "eof-reached", out string? eofStr) >= 0 && 
+            if (_mpv_get_property_string!(_handle, "eof-reached", out string? eofStr) >= 0 && 
                 bool.TryParse(eofStr, out bool eofReached))
             {
                 _hasEnded = eofReached;
@@ -336,7 +338,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         {
             if (_handle != IntPtr.Zero)
             {
-                _mpv_terminate_destroy(_handle);
+                _mpv_terminate_destroy!(_handle);
                 _handle = IntPtr.Zero;
             }
             
@@ -359,7 +361,7 @@ public class LibMpvHeadlessTransport : IMediaTransport, IDisposable
         }
         
         // Unload the file
-        _mpv_command_string(_handle, "stop");
+        _mpv_command_string!(_handle, "stop");
         _isLoaded = false;
         _isPaused = true;
         _hasEnded = false;
