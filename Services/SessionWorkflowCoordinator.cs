@@ -12,6 +12,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
     private readonly AppLog _log;
     private TranscriptionService? _transcriptionService;
     private TranslationService? _translationService;
+    private TtsService? _ttsService;
 
     [ObservableProperty]
     private WorkflowSessionSnapshot _currentSession = WorkflowSessionSnapshot.CreateNew(DateTimeOffset.UtcNow);
@@ -48,6 +49,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
             bool mediaMissing = false;
             bool transcriptMissing = false;
             bool translationMissing = false;
+            bool ttsMissing = false;
 
             if (!string.IsNullOrEmpty(snapshot.IngestedMediaPath) && 
                 !File.Exists(snapshot.IngestedMediaPath))
@@ -70,10 +72,21 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
                 translationMissing = true;
             }
 
+            if (!string.IsNullOrEmpty(snapshot.TtsPath) && 
+                !File.Exists(snapshot.TtsPath))
+            {
+                _log.Warning($"TTS artifact missing: {snapshot.TtsPath}");
+                ttsMissing = true;
+            }
+
             string statusMessage;
-            if (mediaMissing && transcriptMissing && translationMissing)
+            if (mediaMissing && transcriptMissing && translationMissing && ttsMissing)
             {
                 statusMessage = "Session had all artifacts but they are missing. Please restart the workflow.";
+            }
+            else if (ttsMissing && snapshot.Stage >= SessionWorkflowStage.TtsGenerated)
+            {
+                statusMessage = "Session had TTS but artifact is missing. Please regenerate TTS.";
             }
             else if (translationMissing && snapshot.Stage >= SessionWorkflowStage.Translated)
             {
@@ -89,11 +102,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
             }
             else
             {
-                statusMessage = snapshot.Stage >= SessionWorkflowStage.Translated
-                    ? "Resumed session with translation. Ready for TTS/dubbing."
-                    : snapshot.Stage >= SessionWorkflowStage.Transcribed
-                        ? "Resumed session with transcript. Ready for translation."
-                        : "Resumed saved foundation session. Downstream workflow milestones are still not implemented.";
+                statusMessage = snapshot.Stage >= SessionWorkflowStage.TtsGenerated
+                    ? "Resumed session with TTS. Dubbing complete."
+                    : snapshot.Stage >= SessionWorkflowStage.Translated
+                        ? "Resumed session with translation. Ready for TTS/dubbing."
+                        : snapshot.Stage >= SessionWorkflowStage.Transcribed
+                            ? "Resumed session with transcript. Ready for translation."
+                            : "Resumed saved foundation session. Downstream workflow milestones are still not implemented.";
             }
 
             CurrentSession = snapshot with
@@ -102,9 +117,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
                 StatusMessage = statusMessage,
             };
 
-            if (mediaMissing && transcriptMissing && translationMissing)
+            if (mediaMissing && transcriptMissing && translationMissing && ttsMissing)
             {
                 SessionSource = "Resumed session but all artifacts are missing.";
+            }
+            else if (ttsMissing && snapshot.Stage >= SessionWorkflowStage.TtsGenerated)
+            {
+                SessionSource = "Resumed session but TTS artifact is missing.";
             }
             else if (translationMissing && snapshot.Stage >= SessionWorkflowStage.Translated)
             {
@@ -120,11 +139,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
             }
             else
             {
-                SessionSource = snapshot.Stage >= SessionWorkflowStage.Translated
-                    ? "Resumed session with translation."
-                    : snapshot.Stage >= SessionWorkflowStage.Transcribed
-                        ? "Resumed session with transcript."
-                        : "Resumed the saved foundation session.";
+                SessionSource = snapshot.Stage >= SessionWorkflowStage.TtsGenerated
+                    ? "Resumed session with TTS."
+                    : snapshot.Stage >= SessionWorkflowStage.Translated
+                        ? "Resumed session with translation."
+                        : snapshot.Stage >= SessionWorkflowStage.Transcribed
+                            ? "Resumed session with transcript."
+                            : "Resumed the saved foundation session.";
             }
         }
 
@@ -257,6 +278,55 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject
         };
 
         _log.Info($"Translation complete: {result.Segments.Count} segments, {sourceLanguage} -> {targetLanguage}");
+        SaveCurrentSession();
+    }
+
+    public async Task GenerateTtsAsync(string voice = "en-US-AriaNeural")
+    {
+        if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
+        {
+            throw new InvalidOperationException("No translation available. Please translate first.");
+        }
+
+        if (!File.Exists(CurrentSession.TranslationPath))
+        {
+            throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
+        }
+
+        _ttsService ??= new TtsService(_log);
+
+        var sessionDir = GetSessionDirectory();
+        var ttsDir = Path.Combine(sessionDir, "tts");
+        Directory.CreateDirectory(ttsDir);
+
+        var fileName = Path.GetFileNameWithoutExtension(CurrentSession.TranslationPath);
+        var ttsPath = Path.Combine(ttsDir, $"{fileName}_{voice}.mp3");
+
+        _log.Info($"Starting TTS generation: {CurrentSession.TranslationPath} -> {ttsPath}");
+
+        var result = await _ttsService.GenerateTtsAsync(
+            CurrentSession.TranslationPath,
+            ttsPath,
+            voice);
+
+        if (!result.Success)
+        {
+            var errorMsg = result.ErrorMessage ?? "Unknown TTS error";
+            _log.Error($"TTS failed: {errorMsg}", new Exception(errorMsg));
+            throw new InvalidOperationException($"TTS failed: {errorMsg}");
+        }
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        CurrentSession = CurrentSession with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            TtsPath = ttsPath,
+            TtsVoice = voice,
+            TtsGeneratedAtUtc = nowUtc,
+            StatusMessage = $"TTS generated ({voice}). Dubbing complete.",
+        };
+
+        _log.Info($"TTS complete: {ttsPath}, size: {result.FileSizeBytes} bytes");
         SaveCurrentSession();
     }
 

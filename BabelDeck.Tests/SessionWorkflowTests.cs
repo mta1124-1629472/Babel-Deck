@@ -273,6 +273,99 @@ public class SessionWorkflowTests : IDisposable
         Assert.Contains("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task GenerateTts_ProducesAudio()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_tts.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+
+        Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
+        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
+
+        await coordinator.GenerateTtsAsync();
+
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
+        Assert.NotNull(coordinator.CurrentSession.TtsPath);
+        Assert.NotNull(coordinator.CurrentSession.TtsVoice);
+        Assert.True(File.Exists(coordinator.CurrentSession.TtsPath), 
+            $"TTS audio should exist at: {coordinator.CurrentSession.TtsPath}");
+        
+        var fileInfo = new FileInfo(coordinator.CurrentSession.TtsPath);
+        Assert.True(fileInfo.Length > 0, "TTS audio should have non-zero size");
+    }
+
+    [Fact]
+    public async Task GenerateTts_ThenReopen_ReusesAudio()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_tts_reopen.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
+
+        var ttsPath = coordinator.CurrentSession.TtsPath;
+        var sessionId = coordinator.CurrentSession.SessionId;
+
+        Assert.NotNull(ttsPath);
+        Assert.True(File.Exists(ttsPath));
+
+        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        Assert.Equal(sessionId, coordinator.CurrentSession.SessionId);
+        Assert.Equal(SessionWorkflowStage.TtsGenerated, coordinator.CurrentSession.Stage);
+        Assert.NotNull(coordinator.CurrentSession.TtsPath);
+        Assert.True(File.Exists(coordinator.CurrentSession.TtsPath),
+            "After reopen, TTS artifact should still exist");
+        Assert.DoesNotContain("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReopenWithMissingTts_SurfacesDegradedState()
+    {
+        var stateFilePath = Path.Combine(_testStateDir, "session_missing_tts.json");
+        _lastStateFilePath = stateFilePath;
+
+        var log = new AppLog(GetTestLogPath());
+        var store = new SessionSnapshotStore(stateFilePath, log);
+
+        var coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        coordinator.LoadMedia(_testMediaPath);
+        await coordinator.TranscribeMediaAsync();
+        await coordinator.TranslateTranscriptAsync("en", "es");
+        await coordinator.GenerateTtsAsync();
+
+        var ttsPath = coordinator.CurrentSession.TtsPath;
+        Assert.NotNull(ttsPath);
+
+        File.Delete(ttsPath);
+
+        coordinator = new SessionWorkflowCoordinator(store, log);
+        coordinator.Initialize();
+
+        Assert.Contains("missing", coordinator.CurrentSession.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_testStateDir))
