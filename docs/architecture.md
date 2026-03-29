@@ -106,6 +106,24 @@ The AI/inference boundary should make it possible to:
 - persist stage outputs as reusable artifacts
 - swap implementation details later without rewriting the product workflow
 
+### Python inference hosting and deployment posture
+
+Python-backed inference should remain behind a clear service or process boundary.
+
+That boundary should allow multiple hosting modes over time, including:
+- native local execution
+- WSL-hosted execution
+- containerized execution
+- NVIDIA-managed serving paths where they fit
+
+The desktop app should not assume one hosting mode too early. The product should first prove a narrow working inference path, then expand into more isolated or accelerated deployment models as local/offline support becomes real.
+
+This means:
+- request/response contracts across the app/inference boundary should stay explicit
+- model/runtime assumptions should be documented as they are discovered
+- model downloads and runtime assets should stay separate from application source code
+- deployment isolation is a future-compatible goal, not an early mandatory requirement
+
 ### 5. Artifact Storage
 
 The app should treat generated artifacts as first-class outputs.

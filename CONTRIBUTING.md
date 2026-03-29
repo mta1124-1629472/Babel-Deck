@@ -124,6 +124,16 @@ Before adding a new service, coordinator, factory, interface, or subsystem, ask:
 
 If the abstraction mainly serves imagined future needs, do not add it yet.
 
+### Python and inference environment hygiene
+
+When touching Python-backed inference work:
+
+- keep the desktop app and inference runtime separated by an explicit contract
+- document Torch, CUDA, driver, WSL, and runtime assumptions when adding or changing them
+- avoid baking WSL-only assumptions into the main app unless the current milestone explicitly requires them
+- treat containers and NVIDIA-managed serving as optional deployment paths until the local workflow has been proven
+- keep model downloads, runtime assets, and application source concerns separate
+
 ### Historical preservation
 
 Do not delete prior working code or experiments without preserving them somewhere recoverable.

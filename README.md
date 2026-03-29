@@ -29,6 +29,8 @@ A feature is not done because it compiles or because a UI surface exists.
 
 A feature is done when the current milestone gate has been actually demonstrated with build, tests, and a short smoke result.
 
+Python-backed inference is expected to stay deployable through multiple hosting modes over time, including native local execution, WSL, and more isolated/containerized paths, but those are not early prerequisites for proving the core workflow.
+
 ## Current priority
 
 Protect the center of mass:
