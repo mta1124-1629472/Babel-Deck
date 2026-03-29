@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Babel.Deck.Models;
 
@@ -18,7 +19,9 @@ public sealed record WorkflowSessionSnapshot(
     DateTimeOffset? TranslatedAtUtc = null,
     string? TtsPath = null,
     string? TtsVoice = null,
-    DateTimeOffset? TtsGeneratedAtUtc = null)
+    DateTimeOffset? TtsGeneratedAtUtc = null,
+    string? TtsSegmentsPath = null,
+    Dictionary<string, string>? TtsSegmentAudioPaths = null)
 {
     public static WorkflowSessionSnapshot CreateNew(DateTimeOffset nowUtc)
     {
