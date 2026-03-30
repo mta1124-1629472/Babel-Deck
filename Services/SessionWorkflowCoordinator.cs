@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
+using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Babel.Player.Services;
@@ -14,6 +14,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 {
     private readonly SessionSnapshotStore _store;
     private readonly AppLog _log;
+    private readonly PerSessionSnapshotStore _perSessionStore;
+    private readonly RecentSessionsStore _recentStore;
     private TranscriptionService? _transcriptionService;
     private TranslationService? _translationService;
     private TtsService? _ttsService;
@@ -44,16 +46,42 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     [ObservableProperty]
     private PlaybackState _playbackState;
 
-    public SessionWorkflowCoordinator(SessionSnapshotStore store, AppLog log, IMediaTransport? segmentPlayer = null, IMediaTransport? sourcePlayer = null)
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRecentSessions))]
+    private IReadOnlyList<RecentSessionEntry> _recentSessions = [];
+
+    [ObservableProperty]
+    private BootstrapDiagnostics _bootstrapDiagnostics = new(false, null, false, null);
+
+    public bool HasRecentSessions => RecentSessions.Count > 0;
+
+    public AppSettings CurrentSettings { get; private set; }
+
+    public SessionWorkflowCoordinator(
+        SessionSnapshotStore store,
+        AppLog log,
+        AppSettings settings,
+        PerSessionSnapshotStore perSessionStore,
+        RecentSessionsStore recentStore,
+        IMediaTransport? segmentPlayer = null,
+        IMediaTransport? sourcePlayer = null)
     {
         _store = store;
         _log = log;
+        _perSessionStore = perSessionStore;
+        _recentStore = recentStore;
+        CurrentSettings = settings;
         _injectedSegmentPlayer = segmentPlayer;
         _injectedSourcePlayer = sourcePlayer;
-        
+
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) => StopTtsPlayback();
         _segmentErrorHandler = (_, _) => StopTtsPlayback();
+    }
+
+    public void UpdateSettings(AppSettings settings)
+    {
+        CurrentSettings = settings;
     }
 
     private IMediaTransport GetOrCreateSegmentPlayer()
@@ -145,8 +173,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void Dispose()
     {
-        PruneNonActiveMediaArtifacts();
-
         // Unsubscribe from events only if we previously subscribed
         if (_subscribedToPlayerEvents && _segmentPlayer is not null)
         {
@@ -173,6 +199,20 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void Initialize()
     {
+        // Run dependency probes upfront so the UI can warn before the pipeline is attempted.
+        BootstrapDiagnostics = BootstrapDiagnostics.Run();
+        if (!BootstrapDiagnostics.AllDependenciesAvailable)
+            _log.Warning($"Bootstrap: {BootstrapDiagnostics.DiagnosticSummary}");
+        else
+            _log.Info("Bootstrap: all dependencies available.");
+
+        // Seed in-memory cache from per-session snapshot files so cross-restart media switching works.
+        foreach (var snapshot in _perSessionStore.LoadAll())
+        {
+            if (!string.IsNullOrEmpty(snapshot.SourceMediaPath))
+                _mediaSnapshotCache[MediaKey(snapshot.SourceMediaPath)] = snapshot;
+        }
+
         var nowUtc = DateTimeOffset.UtcNow;
         var loadResult = _store.Load();
 
@@ -206,6 +246,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                 StatusMessage = statusMessage,
             };
 
+            // Primary current-session.json is authoritative — overwrite per-session cache entry.
+            if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
+                _mediaSnapshotCache[MediaKey(CurrentSession.SourceMediaPath)] = CurrentSession;
+
             SessionSource = validated.Stage != snapshot.Stage
                 ? $"Resumed session (stage downgraded from {snapshot.Stage} to {validated.Stage}: missing artifacts)."
                 : validated.Stage >= SessionWorkflowStage.TtsGenerated
@@ -218,6 +262,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
 
         PersistenceStatus = loadResult.StatusMessage;
+        RecentSessions = _recentStore.Load();
         _log.Info(SessionSource);
         SaveCurrentSession();
     }
@@ -229,9 +274,19 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         var nowUtc = DateTimeOffset.UtcNow;
 
-        // Stash current snapshot before switching
+        // Stash current snapshot before switching — persist to disk so it survives restart.
         if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
+        {
             _mediaSnapshotCache[MediaKey(CurrentSession.SourceMediaPath)] = CurrentSession;
+            _perSessionStore.Save(CurrentSession);
+            _recentStore.Upsert(new RecentSessionEntry(
+                CurrentSession.SessionId,
+                CurrentSession.SourceMediaPath,
+                Path.GetFileName(CurrentSession.SourceMediaPath),
+                CurrentSession.Stage,
+                CurrentSession.LastUpdatedAtUtc));
+            RecentSessions = _recentStore.Load();
+        }
 
         // Ingest (always copy — session dir is shared, overwrite is fine)
         var sessionDir = GetSessionDirectory();
@@ -392,7 +447,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task TranslateTranscriptAsync(string targetLanguage = "en", string? sourceLanguage = null)
+    public async Task TranslateTranscriptAsync(string? targetLanguage = null, string? sourceLanguage = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranscriptPath))
         {
@@ -404,6 +459,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new FileNotFoundException($"Transcript file not found: {CurrentSession.TranscriptPath}");
         }
 
+        var lang = targetLanguage ?? CurrentSettings.TargetLanguage;
         var src = sourceLanguage ?? CurrentSession.SourceLanguage ?? "auto";
 
         _translationService ??= new TranslationService(_log);
@@ -413,15 +469,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         Directory.CreateDirectory(translationDir);
 
         var fileName = Path.GetFileNameWithoutExtension(CurrentSession.TranscriptPath);
-        var translationPath = Path.Combine(translationDir, $"{fileName}_{targetLanguage}.json");
+        var translationPath = Path.Combine(translationDir, $"{fileName}_{lang}.json");
 
-        _log.Info($"Starting translation: {CurrentSession.TranscriptPath} ({src} -> {targetLanguage})");
+        _log.Info($"Starting translation: {CurrentSession.TranscriptPath} ({src} -> {lang})");
 
         var result = await _translationService.TranslateAsync(
             CurrentSession.TranscriptPath,
             translationPath,
             src,
-            targetLanguage);
+            lang);
 
         if (!result.Success)
         {
@@ -436,16 +492,16 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             Stage = SessionWorkflowStage.Translated,
             TranslationPath = translationPath,
             SourceLanguage = src,
-            TargetLanguage = targetLanguage,
+            TargetLanguage = lang,
             TranslatedAtUtc = nowUtc,
-            StatusMessage = $"Translated {result.Segments.Count} segments to {targetLanguage}. Ready for TTS/dubbing.",
+            StatusMessage = $"Translated {result.Segments.Count} segments to {lang}. Ready for TTS/dubbing.",
         };
 
-        _log.Info($"Translation complete: {result.Segments.Count} segments, {src} -> {targetLanguage}");
+        _log.Info($"Translation complete: {result.Segments.Count} segments, {src} -> {lang}");
         SaveCurrentSession();
     }
 
-    public async Task GenerateTtsAsync(string voice = "en-US-AriaNeural")
+    public async Task GenerateTtsAsync(string? voice = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
         {
@@ -457,6 +513,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             throw new FileNotFoundException($"Translation file not found: {CurrentSession.TranslationPath}");
         }
 
+        var v = voice ?? CurrentSettings.TtsVoice;
+
         _ttsService ??= new TtsService(_log);
 
         var sessionDir = GetSessionDirectory();
@@ -464,14 +522,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         Directory.CreateDirectory(ttsDir);
 
         var fileName = Path.GetFileNameWithoutExtension(CurrentSession.TranslationPath);
-        var ttsPath = Path.Combine(ttsDir, $"{fileName}_{voice}.mp3");
+        var ttsPath = Path.Combine(ttsDir, $"{fileName}_{v}.mp3");
 
         _log.Info($"Starting TTS generation: {CurrentSession.TranslationPath} -> {ttsPath}");
 
         var result = await _ttsService.GenerateTtsAsync(
             CurrentSession.TranslationPath,
             ttsPath,
-            voice);
+            v);
 
         if (!result.Success)
         {
@@ -514,7 +572,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
                 try
                 {
-                    var segResult = await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, voice);
+                    var segResult = await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, v);
 
                     if (segResult.Success && File.Exists(segmentAudioPath))
                     {
@@ -543,11 +601,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             Stage = SessionWorkflowStage.TtsGenerated,
             TtsPath = ttsPath,
-            TtsVoice = voice,
+            TtsVoice = v,
             TtsGeneratedAtUtc = nowUtc,
             TtsSegmentsPath = segmentsDir,
             TtsSegmentAudioPaths = segmentAudioPaths,
-            StatusMessage = $"TTS generated ({voice}). Dubbing complete.",
+            StatusMessage = $"TTS generated ({v}). Dubbing complete.",
         };
 
         SaveCurrentSession();
@@ -601,7 +659,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         var result = await _ttsService.GenerateSegmentTtsAsync(
             segmentText,
             segmentAudioPath,
-            CurrentSession.TtsVoice ?? "en-US-AriaNeural");
+            CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice);
 
         if (!result.Success)
         {
@@ -776,6 +834,57 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         return Path.Combine(appData, "BabelPlayer", "sessions", CurrentSession.SessionId.ToString());
     }
 
+    /// <summary>
+    /// Restores a previously-opened session by ID, stashing the current one first.
+    /// The caller is responsible for reloading the video transport after this returns.
+    /// </summary>
+    public void RestoreSession(Guid sessionId)
+    {
+        // Try in-memory cache first, then fall back to disk.
+        WorkflowSessionSnapshot? restored =
+            _mediaSnapshotCache.Values.FirstOrDefault(s => s.SessionId == sessionId)
+            ?? _perSessionStore.Load(sessionId);
+
+        if (restored is null)
+        {
+            _log.Warning($"RestoreSession: session {sessionId} not found in cache or on disk.");
+            return;
+        }
+
+        // Stash and persist the current session before switching.
+        if (!string.IsNullOrEmpty(CurrentSession.SourceMediaPath))
+        {
+            _mediaSnapshotCache[MediaKey(CurrentSession.SourceMediaPath)] = CurrentSession;
+            _perSessionStore.Save(CurrentSession);
+            _recentStore.Upsert(new RecentSessionEntry(
+                CurrentSession.SessionId,
+                CurrentSession.SourceMediaPath,
+                Path.GetFileName(CurrentSession.SourceMediaPath),
+                CurrentSession.Stage,
+                CurrentSession.LastUpdatedAtUtc));
+        }
+
+        var validated = ValidateArtifacts(restored);
+        var nowUtc = DateTimeOffset.UtcNow;
+        CurrentSession = validated with
+        {
+            LastUpdatedAtUtc = nowUtc,
+            StatusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
+                ? "Restored session with TTS. Ready for playback."
+                : validated.Stage >= SessionWorkflowStage.Translated
+                    ? "Restored session with translation. Ready for TTS/dubbing."
+                    : validated.Stage >= SessionWorkflowStage.Transcribed
+                        ? "Restored session with transcript. Ready for translation."
+                        : validated.Stage >= SessionWorkflowStage.MediaLoaded
+                            ? "Restored session with media. Ready for transcription."
+                            : "Restored foundation session.",
+        };
+
+        _log.Info($"Restored session {sessionId} (stage: {CurrentSession.Stage}).");
+        SaveCurrentSession();
+        RecentSessions = _recentStore.Load();
+    }
+
     public void SaveCurrentSession()
     {
         CurrentSession = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
@@ -784,34 +893,4 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _log.Info(PersistenceStatus);
     }
 
-    private void PruneNonActiveMediaArtifacts()
-    {
-        var activeKey = string.IsNullOrEmpty(CurrentSession.SourceMediaPath)
-            ? null : MediaKey(CurrentSession.SourceMediaPath);
-
-        foreach (var (key, snapshot) in _mediaSnapshotCache)
-        {
-            if (string.Equals(key, activeKey, StringComparison.OrdinalIgnoreCase)) continue;
-            TryDeleteFile(snapshot.TranscriptPath);
-            TryDeleteFile(snapshot.TranslationPath);
-            TryDeleteFile(snapshot.TtsPath);
-            if (snapshot.TtsSegmentAudioPaths != null)
-                foreach (var p in snapshot.TtsSegmentAudioPaths.Values)
-                    TryDeleteFile(p);
-            TryDeleteDirectory(snapshot.TtsSegmentsPath);
-        }
-        _mediaSnapshotCache.Clear();
-    }
-
-    private static void TryDeleteFile(string? path)
-    {
-        if (!string.IsNullOrEmpty(path) && File.Exists(path))
-            try { File.Delete(path); } catch { /* best-effort */ }
-    }
-
-    private static void TryDeleteDirectory(string? path)
-    {
-        if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
-            try { Directory.Delete(path, recursive: true); } catch { /* best-effort */ }
-    }
 }
