@@ -234,12 +234,14 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         {
             _preFullscreenSegmentPaneVisible = IsSegmentPaneVisible;
             IsSegmentPaneVisible = false;
+            NotifyControlsActivity();   // show controls briefly then start countdown
         }
         else
         {
             IsSegmentPaneVisible = _preFullscreenSegmentPaneVisible;
+            _controlsHideTimer.Stop();
+            IsControlsVisible = true;   // always visible outside fullscreen
         }
-        NotifyControlsActivity();
     }
 
     partial void OnIsSourcePausedChanged(bool value)
@@ -259,7 +261,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     {
         IsControlsVisible = true;
         _controlsHideTimer.Stop();
-        if (!IsSourcePaused)
+        // Only auto-hide in fullscreen; controls are always visible in windowed mode
+        if (!IsSourcePaused && IsFullscreen)
             _controlsHideTimer.Start();
     }
 
