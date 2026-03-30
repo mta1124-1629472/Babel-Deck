@@ -60,6 +60,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _isMuted;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
     private bool _isFullscreen;
 
     [ObservableProperty]
@@ -67,6 +68,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     private bool _isSegmentPaneVisible = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPullTabVisible))]
     private bool _isControlsVisible = true;
 
     [ObservableProperty]
@@ -107,6 +109,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         ["0.25x", "0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x"];
 
     public string SegmentPaneToggleLabel => IsSegmentPaneVisible ? "\u25C4" : "\u25BA";
+
+    // Visible always in windowed mode; follows controls auto-hide in fullscreen
+    public bool IsPullTabVisible => !IsFullscreen || IsControlsVisible;
 
     public string PlayPauseSourceLabel => IsSourcePaused ? "\u25B6\uFE0E" : "\u23F8\uFE0E";
 

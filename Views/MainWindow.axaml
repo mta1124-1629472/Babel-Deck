@@ -4,27 +4,21 @@
         xmlns:v="using:Babel.Player.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="650"
         x:Class="Babel.Player.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/babelplayer.ico"
         Title="Babel Player"
+        Width="1100" Height="650"
         MinWidth="900" MinHeight="500">
 
     <Grid RowDefinitions="Auto,*,Auto">
 
-        <!-- Top: Session info bar -->
+        <!-- Top: Session info bar (title + status only; media buttons live in controls row) -->
         <Border Grid.Row="0" Padding="12,8" Background="#20808080"
                 IsVisible="{Binding !Playback.IsFullscreen}">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Babel Player" VerticalAlignment="Center" />
-                    <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" VerticalAlignment="Center" />
-                    <Button Content="Run Pipeline"
-                            Command="{Binding Playback.RunPipelineCommand}"
-                            IsEnabled="{Binding !Playback.IsBusy}"
-                            VerticalAlignment="Center" />
-                </StackPanel>
+                <TextBlock Grid.Column="0" FontSize="18" FontWeight="SemiBold" Text="Babel Player" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Margin="16,0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                            Text="{Binding Coordinator.CurrentSession.StatusMessage}" />
                 <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.6"
@@ -33,11 +27,10 @@
         </Border>
 
         <!-- Middle: Main content area -->
-        <!-- Column 0 is Auto so it collapses to zero when the segment pane Border is hidden -->
+        <!-- Column 0 is Auto so it collapses when the segment pane Border is hidden -->
         <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
 
             <!-- Column 0: Segment list (collapsible) + pull tab (always visible) -->
-            <!-- Inner grid keeps the pull tab present even when the pane content is hidden -->
             <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto">
 
                 <!-- Pane content — collapses to zero width when IsSegmentPaneVisible=false -->
@@ -87,13 +80,15 @@
                     </Grid>
                 </Border>
 
-                <!-- Pull tab — always visible; arrow shows which direction the pane will move -->
-                <!-- ◄ when open (click collapses left), ► when closed (click expands right) -->
+                <!-- Pull tab — arrow shows which way the pane will move on click:
+                     ◄ = open (collapse left)   ► = closed (expand right)
+                     Hides with the playback controls in fullscreen mode. -->
                 <Button Grid.Column="1"
                         Content="{Binding Playback.SegmentPaneToggleLabel}"
                         Command="{Binding Playback.ToggleSegmentPaneCommand}"
+                        IsVisible="{Binding Playback.IsPullTabVisible}"
                         VerticalAlignment="Center"
-                        Padding="4,20"
+                        Padding="2,20"
                         BorderBrush="#40808080" BorderThickness="1,1,1,1"
                         ToolTip.Tip="Toggle segment panel" />
 
@@ -113,7 +108,7 @@
                     <Panel x:Name="VideoOverlayPanel" Background="Transparent" />
                 </Grid>
 
-                <!-- Scrub bar (auto-hides with controls) -->
+                <!-- Scrub bar (auto-hides in fullscreen; always visible in windowed mode) -->
                 <Border Grid.Row="1" Padding="8,4"
                         IsVisible="{Binding Playback.IsControlsVisible}">
                     <Grid ColumnDefinitions="Auto,*,Auto">
@@ -130,18 +125,17 @@
                     </Grid>
                 </Border>
 
-                <!-- Playback controls (auto-hides with scrub bar in fullscreen) -->
+                <!-- Playback controls (auto-hides in fullscreen; always visible in windowed mode) -->
                 <Border Grid.Row="2" Padding="8,4"
                         IsVisible="{Binding Playback.IsControlsVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                        <!-- Open Media + Run Pipeline: only shown in fullscreen (top bar hidden) -->
-                        <Button Content="Open Media" Click="OnOpenMediaClick"
-                                IsVisible="{Binding Playback.IsFullscreen}" />
+                        <!-- Open Media + Run Pipeline are here permanently so they're accessible
+                             in both windowed mode and fullscreen (where the top bar is hidden) -->
+                        <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" />
                         <Button Content="Run Pipeline"
                                 Command="{Binding Playback.RunPipelineCommand}"
-                                IsEnabled="{Binding !Playback.IsBusy}"
-                                IsVisible="{Binding Playback.IsFullscreen}" />
-                        <Separator IsVisible="{Binding Playback.IsFullscreen}" />
+                                IsEnabled="{Binding !Playback.IsBusy}" />
+                        <Separator />
                         <Button Content="&#x23EA;&#xFE0E;"
                                 Command="{Binding Playback.SkipBackwardCommand}"
                                 IsEnabled="{Binding Playback.HasSegments}" />
