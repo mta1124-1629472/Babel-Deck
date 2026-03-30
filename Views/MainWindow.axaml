@@ -95,79 +95,90 @@
             </Grid>
 
             <!-- Column 1: Video + controls -->
-            <Grid Grid.Column="1" x:Name="VideoAreaGrid" RowDefinitions="*,Auto,Auto,Auto">
+            <!-- Rows: video-with-overlay-controls (*) | status bar (Auto) -->
+            <Grid Grid.Column="1" x:Name="VideoAreaGrid" RowDefinitions="*,Auto">
 
-                <!-- Video surface — wrapped in a Grid so the transparent input-capture
-                     overlay can sit above the native HWND for PointerMoved events -->
+                <!-- Video surface + controls overlay in a single Grid row.
+                     Scrub bar and playback controls are layered on top of the video at the
+                     bottom edge so they never push the video upwards. -->
                 <Grid Grid.Row="0">
+                    <!-- Video surface -->
                     <Border Background="Black" Margin="4">
                         <v:MpvVideoView x:Name="VideoView" />
                     </Border>
+
                     <!-- Transparent overlay to capture PointerMoved events over the native
                          NativeControlHost (Win32 HWND does not bubble Avalonia input) -->
                     <Panel x:Name="VideoOverlayPanel" Background="Transparent" />
+
+                    <!-- Scrub bar + playback controls overlaid at the bottom of the video.
+                         Semi-transparent background keeps them readable over any content.
+                         Hidden after 3 s of mouse inactivity in fullscreen; always visible
+                         in windowed mode. -->
+                    <StackPanel VerticalAlignment="Bottom"
+                                IsVisible="{Binding Playback.IsControlsVisible}">
+
+                        <!-- Scrub bar -->
+                        <Border Padding="8,4" Background="#B0000000">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding Playback.SourcePositionFormatted}"
+                                           VerticalAlignment="Center" FontSize="11" Foreground="White" Width="36" />
+                                <Slider Grid.Column="1"
+                                        Minimum="0"
+                                        Maximum="{Binding Playback.SourceDurationMs}"
+                                        Value="{Binding Playback.SourcePositionMs, Mode=TwoWay}"
+                                        IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                        VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding Playback.SourceDurationFormatted}"
+                                           VerticalAlignment="Center" FontSize="11" Foreground="White" Width="36" TextAlignment="Right" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Playback controls -->
+                        <Border Padding="8,4" Background="#B0000000">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <!-- Open Media + Run Pipeline live here permanently so they are
+                                     accessible in both windowed mode and fullscreen -->
+                                <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" />
+                                <Button Content="Run Pipeline"
+                                        Command="{Binding Playback.RunPipelineCommand}"
+                                        IsEnabled="{Binding !Playback.IsBusy}" />
+                                <Separator />
+                                <Button Content="&#x23EA;&#xFE0E;"
+                                        Command="{Binding Playback.SkipBackwardCommand}"
+                                        IsEnabled="{Binding Playback.HasSegments}" />
+                                <Button Content="{Binding Playback.PlayPauseSourceLabel}"
+                                        Command="{Binding Playback.PlayPauseSourceCommand}"
+                                        IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
+                                <Button Content="&#x23E9;&#xFE0E;"
+                                        Command="{Binding Playback.SkipForwardCommand}"
+                                        IsEnabled="{Binding Playback.HasSegments}" />
+                                <Button Content="{Binding Playback.DubModeLabel}"
+                                        Command="{Binding Playback.ToggleDubModeCommand}"
+                                        IsEnabled="{Binding Playback.HasSegments}" />
+                                <Separator />
+                                <Button Content="{Binding Playback.VolumeIconLabel}"
+                                        Command="{Binding Playback.ToggleMuteCommand}"
+                                        IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
+                                <Slider Minimum="0" Maximum="1"
+                                        Value="{Binding Playback.SourceVolume, Mode=TwoWay}"
+                                        IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
+                                        Width="80" VerticalAlignment="Center" />
+                                <ComboBox ItemsSource="{Binding Playback.PlaybackRateOptions}"
+                                          SelectedItem="{Binding Playback.SelectedPlaybackRate, Mode=TwoWay}"
+                                          Width="70"
+                                          IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
+                                <Button Content="&#x26F6;"
+                                        Command="{Binding Playback.ToggleFullscreenCommand}"
+                                        IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
                 </Grid>
 
-                <!-- Scrub bar (auto-hides in fullscreen; always visible in windowed mode) -->
-                <Border Grid.Row="1" Padding="8,4"
-                        IsVisible="{Binding Playback.IsControlsVisible}">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <TextBlock Grid.Column="0" Text="{Binding Playback.SourcePositionFormatted}"
-                                   VerticalAlignment="Center" FontSize="11" Opacity="0.7" Width="36" />
-                        <Slider Grid.Column="1"
-                                Minimum="0"
-                                Maximum="{Binding Playback.SourceDurationMs}"
-                                Value="{Binding Playback.SourcePositionMs, Mode=TwoWay}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
-                                VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="2" Text="{Binding Playback.SourceDurationFormatted}"
-                                   VerticalAlignment="Center" FontSize="11" Opacity="0.7" Width="36" TextAlignment="Right" />
-                    </Grid>
-                </Border>
-
-                <!-- Playback controls (auto-hides in fullscreen; always visible in windowed mode) -->
-                <Border Grid.Row="2" Padding="8,4"
-                        IsVisible="{Binding Playback.IsControlsVisible}">
-                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                        <!-- Open Media + Run Pipeline are here permanently so they're accessible
-                             in both windowed mode and fullscreen (where the top bar is hidden) -->
-                        <Button x:Name="OpenMediaButton" Content="Open Media" Click="OnOpenMediaClick" />
-                        <Button Content="Run Pipeline"
-                                Command="{Binding Playback.RunPipelineCommand}"
-                                IsEnabled="{Binding !Playback.IsBusy}" />
-                        <Separator />
-                        <Button Content="&#x23EA;&#xFE0E;"
-                                Command="{Binding Playback.SkipBackwardCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}" />
-                        <Button Content="{Binding Playback.PlayPauseSourceLabel}"
-                                Command="{Binding Playback.PlayPauseSourceCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                        <Button Content="&#x23E9;&#xFE0E;"
-                                Command="{Binding Playback.SkipForwardCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}" />
-                        <Button Content="{Binding Playback.DubModeLabel}"
-                                Command="{Binding Playback.ToggleDubModeCommand}"
-                                IsEnabled="{Binding Playback.HasSegments}" />
-                        <Separator />
-                        <Button Content="{Binding Playback.VolumeIconLabel}"
-                                Command="{Binding Playback.ToggleMuteCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                        <Slider Minimum="0" Maximum="1"
-                                Value="{Binding Playback.SourceVolume, Mode=TwoWay}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}"
-                                Width="80" VerticalAlignment="Center" />
-                        <ComboBox ItemsSource="{Binding Playback.PlaybackRateOptions}"
-                                  SelectedItem="{Binding Playback.SelectedPlaybackRate, Mode=TwoWay}"
-                                  Width="70"
-                                  IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                        <Button Content="&#x26F6;"
-                                Command="{Binding Playback.ToggleFullscreenCommand}"
-                                IsEnabled="{Binding Playback.IsSourceMediaLoaded}" />
-                    </StackPanel>
-                </Border>
-
                 <!-- Status bar -->
-                <Border Grid.Row="3" Padding="8,4" Background="#10808080"
+                <Border Grid.Row="1" Padding="8,4" Background="#10808080"
                         IsVisible="{Binding !Playback.IsFullscreen}">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="{Binding Playback.StatusText}"
