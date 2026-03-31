@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -14,7 +15,8 @@ public sealed class TranslationService : PythonSubprocessServiceBase, ITranslati
         string transcriptJsonPath,
         string outputJsonPath,
         string sourceLanguage,
-        string targetLanguage)
+        string targetLanguage,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(transcriptJsonPath))
             throw new FileNotFoundException($"Transcript file not found: {transcriptJsonPath}");
@@ -73,7 +75,8 @@ print('Translation complete')
         var result = await RunPythonScriptAsync(
             script,
             $"\"{transcriptJsonPath}\" \"{outputJsonPath}\" \"{sourceLanguage}\" \"{targetLanguage}\"",
-            "translate");
+            "translate",
+            cancellationToken);
         ThrowIfFailed(result, "Translation");
 
         Log.Info($"Translation completed: {outputJsonPath}");
@@ -115,7 +118,8 @@ print('Translation complete')
         string translationJsonPath,
         string outputJsonPath,
         string sourceLanguage,
-        string targetLanguage)
+        string targetLanguage,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Source text cannot be empty", nameof(text));
@@ -164,7 +168,8 @@ print(f'Single segment translated: {seg_id}')
         var result = await RunPythonScriptAsync(
             script,
             $"\"{text}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{translationJsonPath}\" \"{segmentId}\"",
-            "translate_seg");
+            "translate_seg",
+            cancellationToken);
         ThrowIfFailed(result, "Single segment translation");
 
         Log.Info($"Single segment translation completed: {translationJsonPath}");

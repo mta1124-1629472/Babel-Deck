@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -117,7 +118,8 @@ print(f'Piper segment TTS generated: {output_path}')
     public async Task<TtsResult> GenerateTtsAsync(
         string translationJsonPath,
         string outputAudioPath,
-        string voice)
+        string voice,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(translationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {translationJsonPath}");
@@ -127,7 +129,8 @@ print(f'Piper segment TTS generated: {output_path}')
         var result = await RunPythonScriptAsync(
             PiperScript,
             $"\"{translationJsonPath}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
-            "piper");
+            "piper",
+            cancellationToken);
         ThrowIfFailed(result, "Piper TTS");
 
         if (!File.Exists(outputAudioPath))
@@ -140,7 +143,8 @@ print(f'Piper segment TTS generated: {output_path}')
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         string text,
         string outputAudioPath,
-        string voice)
+        string voice,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Segment text cannot be empty", nameof(text));
@@ -150,7 +154,8 @@ print(f'Piper segment TTS generated: {output_path}')
         var result = await RunPythonScriptAsync(
             PiperSegmentScript,
             $"\"{text}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
-            "piper_seg");
+            "piper_seg",
+            cancellationToken);
         ThrowIfFailed(result, "Piper segment TTS");
 
         if (!File.Exists(outputAudioPath))

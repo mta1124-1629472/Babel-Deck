@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -11,7 +12,8 @@ public sealed class TtsService : PythonSubprocessServiceBase, ITtsService
     public async Task<TtsResult> GenerateTtsAsync(
         string translationJsonPath,
         string outputAudioPath,
-        string voice = "en-US-AriaNeural")
+        string voice = "en-US-AriaNeural",
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(translationJsonPath))
             throw new FileNotFoundException($"Translation file not found: {translationJsonPath}");
@@ -59,7 +61,8 @@ asyncio.run(generate())
         var result = await RunPythonScriptAsync(
             script,
             $"\"{translationJsonPath}\" \"{outputAudioPath}\" \"{voice}\"",
-            "tts");
+            "tts",
+            cancellationToken);
         ThrowIfFailed(result, "TTS");
 
         if (!File.Exists(outputAudioPath))
@@ -78,7 +81,8 @@ asyncio.run(generate())
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         string text,
         string outputAudioPath,
-        string voice = "en-US-AriaNeural")
+        string voice = "en-US-AriaNeural",
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Segment text cannot be empty", nameof(text));
@@ -111,7 +115,8 @@ asyncio.run(generate())
         var result = await RunPythonScriptAsync(
             script,
             $"\"{text}\" \"{voice}\" \"{outputAudioPath}\"",
-            "tts_seg");
+            "tts_seg",
+            cancellationToken);
         ThrowIfFailed(result, "Segment TTS");
 
         if (!File.Exists(outputAudioPath))

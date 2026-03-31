@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -143,7 +144,8 @@ print(f'NLLB single segment translated: {seg_id}')
         string transcriptJsonPath,
         string outputJsonPath,
         string sourceLanguage,
-        string targetLanguage)
+        string targetLanguage,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(transcriptJsonPath))
             throw new FileNotFoundException($"Transcript file not found: {transcriptJsonPath}");
@@ -153,7 +155,8 @@ print(f'NLLB single segment translated: {seg_id}')
         var result = await RunPythonScriptAsync(
             NllbScript,
             $"\"{transcriptJsonPath}\" \"{outputJsonPath}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{_model}\"",
-            "nllb");
+            "nllb",
+            cancellationToken);
         ThrowIfFailed(result, "NLLB translation");
 
         Log.Info($"NLLB translation completed: {outputJsonPath}");
@@ -179,7 +182,8 @@ print(f'NLLB single segment translated: {seg_id}')
         string translationJsonPath,
         string outputJsonPath,
         string sourceLanguage,
-        string targetLanguage)
+        string targetLanguage,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Source text cannot be empty", nameof(text));
@@ -191,7 +195,8 @@ print(f'NLLB single segment translated: {seg_id}')
         var result = await RunPythonScriptAsync(
             NllbSegmentScript,
             $"\"{text}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{translationJsonPath}\" \"{segmentId}\" \"{_model}\"",
-            "nllb_seg");
+            "nllb_seg",
+            cancellationToken);
         ThrowIfFailed(result, "NLLB segment translation");
 
         Log.Info($"NLLB single segment translation completed: {segmentId}");
