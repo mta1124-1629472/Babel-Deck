@@ -129,7 +129,7 @@ print(f'Piper segment TTS generated: {output_path}')
         var result = await RunPythonScriptAsync(
             PiperScript,
             $"\"{translationJsonPath}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
-            "piper",
+            "piper_tts",
             cancellationToken);
         ThrowIfFailed(result, "Piper TTS");
 
@@ -154,7 +154,7 @@ print(f'Piper segment TTS generated: {output_path}')
         var result = await RunPythonScriptAsync(
             PiperSegmentScript,
             $"\"{text}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
-            "piper_seg",
+            "piper_tts_seg",
             cancellationToken);
         ThrowIfFailed(result, "Piper segment TTS");
 
