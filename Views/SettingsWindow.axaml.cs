@@ -1,44 +1,31 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Markup.Xaml;
+using Avalonia.Interactivity;
 using Babel.Player.ViewModels;
 
-namespace Babel.Player.Views
+namespace Babel.Player.Views;
+
+public partial class SettingsWindow : Window
 {
-    public partial class SettingsWindow : Window
+    public SettingsWindow()
     {
-        public SettingsWindow()
-        {
-            InitializeComponent();
-        }
+        InitializeComponent();
+    }
 
-        private void InitializeComponent()
-        {
-            AvaloniaXamlLoader.Load(this);
-        }
+    private void OnCancelClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is SettingsViewModel vm)
+            vm.CancelCommand.Execute(null);
+    }
 
-        private void OnCancelClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (DataContext is SettingsViewModel vm)
-            {
-                vm.CancelCommand.Execute(null);
-            }
-        }
+    private void OnApplyClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is SettingsViewModel vm)
+            vm.ApplyCommand.Execute(null);
+    }
 
-        private void OnApplyClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (DataContext is SettingsViewModel vm)
-            {
-                vm.ApplyCommand.Execute(null);
-            }
-        }
-
-        private void OnOKClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (DataContext is SettingsViewModel vm)
-            {
-                vm.OKCommand.Execute(null);
-            }
-        }
+    private void OnOKClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is SettingsViewModel vm)
+            vm.OKCommand.Execute(null);
     }
 }

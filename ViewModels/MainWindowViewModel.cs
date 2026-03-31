@@ -27,10 +27,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void OpenSettings()
     {
-        var settingsWindow = new Views.SettingsWindow
-        {
-            DataContext = new SettingsViewModel(_settingsService, Coordinator, null!)
-        };
+        var settingsWindow = new Views.SettingsWindow();
+        settingsWindow.DataContext = new SettingsViewModel(_settingsService, Coordinator, settingsWindow);
         settingsWindow.Show();
     }
 

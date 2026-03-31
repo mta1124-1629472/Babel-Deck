@@ -139,10 +139,11 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         var (coordinator, store, log, caseDir) =
             await OpenCaseFromTemplateAsync("transcribed", nameof(ReopenWithMissingTranscript_SurfacesDegradedState));
 
-        var transcriptPath = coordinator.CurrentSession.TranscriptPath;
-        Assert.NotNull(transcriptPath);
+        Assert.NotNull(coordinator.CurrentSession.TranscriptPath);
 
-        File.Delete(transcriptPath);
+        // Patch the snapshot to reference a non-existent file rather than deleting
+        // the real AppData artifact — deleting it would corrupt the shared template.
+        store.Save(coordinator.CurrentSession with { TranscriptPath = Path.Combine(caseDir, "nonexistent.json") });
 
         coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
@@ -176,10 +177,11 @@ public sealed class SessionWorkflowTests : IAsyncLifetime
         var (coordinator, store, log, caseDir) =
             await OpenCaseFromTemplateAsync("translated", nameof(ReopenWithMissingTranslation_SurfacesDegradedState));
 
-        var translationPath = coordinator.CurrentSession.TranslationPath;
-        Assert.NotNull(translationPath);
+        Assert.NotNull(coordinator.CurrentSession.TranslationPath);
 
-        File.Delete(translationPath);
+        // Patch the snapshot to reference a non-existent file rather than deleting
+        // the real AppData artifact — deleting it would corrupt the shared template.
+        store.Save(coordinator.CurrentSession with { TranslationPath = Path.Combine(caseDir, "nonexistent.json") });
 
         coordinator = CreateCoordinator(store, log, caseDir);
         coordinator.Initialize();
