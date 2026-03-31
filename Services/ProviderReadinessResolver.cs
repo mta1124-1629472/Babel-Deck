@@ -49,7 +49,7 @@ public static class ProviderReadinessResolver
         var message = ex.Message;
         return message.Contains("API key for") || 
                message.Contains("would also be required") ||
-               message.Contains("not implemented yet") && message.Contains("API key");
+               (message.Contains("not implemented yet") && message.Contains("API key"));
     }
 
     public static ProviderReadiness ResolveTranslation(string provider, string model, ApiKeyStore? keys)
