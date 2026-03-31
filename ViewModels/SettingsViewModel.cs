@@ -25,8 +25,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _ownerWindow = ownerWindow;
 
         // Load current settings
-        SelectedVoice = _settingsService.LoadOrDefault().TtsVoice;
-        
+        var current = _settingsService.LoadOrDefault();
+        SelectedVoice = current.TtsVoice;
+        SelectedTheme = current.Theme;
+        MaxRecentSessions = current.MaxRecentSessions;
+        AutoSaveEnabled = current.AutoSaveEnabled;
+
         // Theme options
         ThemeOptions = new[] { "Light", "Dark", "System" };
         
@@ -94,13 +98,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private void Apply()
     {
-        // Update settings service
-        var settings = _settingsService.LoadOrDefault();
-        settings.TtsVoice = SelectedVoice;
-        
+        var settings = new AppSettings
+        {
+            TtsVoice = SelectedVoice,
+            Theme = SelectedTheme,
+            MaxRecentSessions = MaxRecentSessions,
+            AutoSaveEnabled = AutoSaveEnabled,
+            // Preserve target language — not yet exposed in the dialog
+            TargetLanguage = _settingsService.LoadOrDefault().TargetLanguage,
+        };
         _settingsService.Save(settings);
-        
-        // Notify coordinator of settings change
         _coordinator.UpdateSettings(settings);
     }
 

@@ -67,6 +67,7 @@
             </TabItem>
 
             <!-- Hotkeys Tab -->
+            <!-- Hotkeys: display-only defaults; customisation not yet implemented -->
             <TabItem Header="Hotkeys">
                 <Grid Margin="20">
                     <Grid.RowDefinitions>
@@ -74,34 +75,38 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
+                    <TextBlock Grid.Row="0" Opacity="0.5" FontStyle="Italic" Margin="0,0,0,12"
+                               Text="Hotkey customisation is not yet available. Shown values are the current defaults." />
+
                     <!-- Play/Pause -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="20">
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20">
                         <TextBlock Text="Play/Pause:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding PlayPauseHotkey}"
-                                 Width="100"/>
+                        <TextBox Text="{Binding PlayPauseHotkey}" IsReadOnly="True"
+                                 Width="100" Opacity="0.6"/>
                     </StackPanel>
 
                     <!-- Toggle Segment Panel -->
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20">
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="20">
                         <TextBlock Text="Toggle Segment Panel:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding ToggleSegmentPanelHotkey}"
-                                 Width="100"/>
+                        <TextBox Text="{Binding ToggleSegmentPanelHotkey}" IsReadOnly="True"
+                                 Width="100" Opacity="0.6"/>
                     </StackPanel>
 
                     <!-- Toggle Dub Mode -->
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="20">
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
                         <TextBlock Text="Toggle Dub Mode:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding ToggleDubModeHotkey}"
-                                 Width="100"/>
+                        <TextBox Text="{Binding ToggleDubModeHotkey}" IsReadOnly="True"
+                                 Width="100" Opacity="0.6"/>
                     </StackPanel>
 
                     <!-- Toggle Fullscreen -->
-                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="20">
+                    <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="20">
                         <TextBlock Text="Toggle Fullscreen:" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding ToggleFullscreenHotkey}"
-                                 Width="100"/>
+                        <TextBox Text="{Binding ToggleFullscreenHotkey}" IsReadOnly="True"
+                                 Width="100" Opacity="0.6"/>
                     </StackPanel>
                 </Grid>
             </TabItem>

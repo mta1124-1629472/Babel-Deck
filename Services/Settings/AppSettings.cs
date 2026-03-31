@@ -10,4 +10,13 @@ public sealed class AppSettings
 
     /// <summary>BCP-47 language code for the translation target.</summary>
     public string TargetLanguage { get; set; } = "en";
+
+    /// <summary>UI theme: "Light", "Dark", or "System".</summary>
+    public string Theme { get; set; } = "System";
+
+    /// <summary>Maximum entries kept in the recent-sessions list (1–20).</summary>
+    public int MaxRecentSessions { get; set; } = 10;
+
+    /// <summary>Whether to auto-save the session snapshot on app exit.</summary>
+    public bool AutoSaveEnabled { get; set; } = true;
 }

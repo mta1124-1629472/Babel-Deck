@@ -288,15 +288,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             RecentSessions = _recentStore.Load();
         }
 
-        // Ingest (always copy — session dir is shared, overwrite is fine)
-        var sessionDir = GetSessionDirectory();
-        var mediaDir = Path.Combine(sessionDir, "media");
-        Directory.CreateDirectory(mediaDir);
-        var fileName = Path.GetFileName(sourceMediaPath);
-        var ingestedPath = Path.Combine(mediaDir, fileName);
-        File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
-        _log.Info($"Copied media to session artifact: {ingestedPath}");
-
         var newKey = MediaKey(sourceMediaPath);
         var switchingMedia = !string.IsNullOrEmpty(CurrentSession.SourceMediaPath)
             && !string.Equals(MediaKey(CurrentSession.SourceMediaPath), newKey,
@@ -304,8 +295,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         if (switchingMedia && _mediaSnapshotCache.TryGetValue(newKey, out var cached))
         {
-            // Returning to a previously processed media — restore and validate
+            // Returning to a previously processed media — restore, validate, then copy into
+            // that session's existing directory.
             var validated = ValidateArtifacts(cached);
+
+            var sessionDir = SessionDirectoryFor(validated.SessionId);
+            var mediaDir = Path.Combine(sessionDir, "media");
+            Directory.CreateDirectory(mediaDir);
+            var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(sourceMediaPath));
+            File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
+            _log.Info($"Copied media to session artifact: {ingestedPath}");
+
             CurrentSession = validated with
             {
                 IngestedMediaPath = ingestedPath,
@@ -323,23 +323,37 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
         else
         {
+            // New uncached media — assign a fresh session ID so each media file gets its own
+            // identity in the MRU list and per-session store. Re-use the current session ID
+            // only when loading the first media (no prior source) so the coordinator's initial
+            // session is promoted rather than orphaned.
+            var newSessionId = switchingMedia ? Guid.NewGuid() : CurrentSession.SessionId;
+
+            var sessionDir = SessionDirectoryFor(newSessionId);
+            var mediaDir = Path.Combine(sessionDir, "media");
+            Directory.CreateDirectory(mediaDir);
+            var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(sourceMediaPath));
+            File.Copy(sourceMediaPath, ingestedPath, overwrite: true);
+            _log.Info($"Copied media to session artifact: {ingestedPath}");
+
             CurrentSession = CurrentSession with
             {
+                SessionId = newSessionId,
                 Stage = SessionWorkflowStage.MediaLoaded,
                 SourceMediaPath = sourceMediaPath,
                 IngestedMediaPath = ingestedPath,
                 MediaLoadedAtUtc = nowUtc,
-                TranscriptPath = switchingMedia ? null : CurrentSession.TranscriptPath,
-                SourceLanguage = switchingMedia ? null : CurrentSession.SourceLanguage,
-                TranscribedAtUtc = switchingMedia ? null : CurrentSession.TranscribedAtUtc,
-                TranslationPath = switchingMedia ? null : CurrentSession.TranslationPath,
-                TargetLanguage = switchingMedia ? null : CurrentSession.TargetLanguage,
-                TranslatedAtUtc = switchingMedia ? null : CurrentSession.TranslatedAtUtc,
-                TtsPath = switchingMedia ? null : CurrentSession.TtsPath,
-                TtsVoice = switchingMedia ? null : CurrentSession.TtsVoice,
-                TtsGeneratedAtUtc = switchingMedia ? null : CurrentSession.TtsGeneratedAtUtc,
-                TtsSegmentsPath = switchingMedia ? null : CurrentSession.TtsSegmentsPath,
-                TtsSegmentAudioPaths = switchingMedia ? null : CurrentSession.TtsSegmentAudioPaths,
+                TranscriptPath = null,
+                SourceLanguage = null,
+                TranscribedAtUtc = null,
+                TranslationPath = null,
+                TargetLanguage = null,
+                TranslatedAtUtc = null,
+                TtsPath = null,
+                TtsVoice = null,
+                TtsGeneratedAtUtc = null,
+                TtsSegmentsPath = null,
+                TtsSegmentAudioPaths = null,
                 StatusMessage = "Media loaded. Ready for transcription.",
             };
         }
@@ -828,10 +842,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             ? FormattableString.Invariant($"segment_{start:0.0}")
             : FormattableString.Invariant($"segment_{start}");
 
-    private string GetSessionDirectory()
+    private string GetSessionDirectory() => SessionDirectoryFor(CurrentSession.SessionId);
+
+    private static string SessionDirectoryFor(Guid sessionId)
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(appData, "BabelPlayer", "sessions", CurrentSession.SessionId.ToString());
+        return Path.Combine(appData, "BabelPlayer", "sessions", sessionId.ToString());
     }
 
     /// <summary>
