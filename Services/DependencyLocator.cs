@@ -57,7 +57,13 @@ public static class DependencyLocator
                 using var proc = Process.Start(psi);
                 if (proc != null)
                 {
-                    proc.WaitForExit(ProbeTimeoutMs);
+                if (proc != null)
+                {
+                    if (proc.WaitForExit(ProbeTimeoutMs) && proc.ExitCode == 0)
+                        return path;
+                    else
+                        try { proc.Kill(); } catch { /* best-effort cleanup */ }
+                }
                     if (proc.ExitCode == 0)
                         return path;
                 }
