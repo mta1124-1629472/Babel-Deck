@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace Babel.Player.Services;
 
@@ -15,57 +15,18 @@ public sealed class TranscriptionService
     public TranscriptionService(AppLog log)
     {
         _log = log;
-        _pythonPath = FindPythonPath();
+        _pythonPath = DependencyLocator.FindPython()
+            ?? throw new InvalidOperationException(
+                "Python not found. Expected bundled python next to the app or python on PATH.");
     }
-
-private static string FindPythonPath()
-{
-    var appDir = AppContext.BaseDirectory;
-
-    var possiblePaths = new[]
-    {
-        Path.Combine(appDir, "python.exe"),
-        Path.Combine(appDir, "python", "python.exe"),
-        "python",
-        "python3",
-    };
-
-    foreach (var path in possiblePaths)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = path,
-                Arguments = "--version",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc != null)
-            {
-                proc.WaitForExit(5000);
-                if (proc.ExitCode == 0)
-                    return path;
-            }
-        }
-        catch
-        {
-        }
-    }
-
-    throw new InvalidOperationException(
-        "Python not found. Expected bundled python next to the app or python on PATH.");
-}
 
     private async Task<string> ExtractAudioAsync(string videoPath)
     {
         var audioPath = Path.Combine(Path.GetTempPath(), $"audio_{Guid.NewGuid():N}.wav");
 
-        var ffmpegPath = FindFfmpegPath();
+        var ffmpegPath = DependencyLocator.FindFfmpeg()
+            ?? throw new InvalidOperationException(
+                "ffmpeg not found. Expected bundled ffmpeg.exe next to the app or ffmpeg on PATH.");
         var psi = new ProcessStartInfo
         {
             FileName = ffmpegPath,
@@ -94,48 +55,8 @@ private static string FindPythonPath()
         return audioPath;
     }
 
-private static string FindFfmpegPath()
-{
-    var appDir = AppContext.BaseDirectory;
-
-    var possiblePaths = new[]
-    {
-        Path.Combine(appDir, "ffmpeg.exe"),
-        Path.Combine(appDir, "tools", "ffmpeg.exe"),
-        "ffmpeg",
-    };
-
-    foreach (var path in possiblePaths)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = path,
-                Arguments = "-version",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc != null)
-            {
-                proc.WaitForExit(5000);
-                if (proc.ExitCode == 0)
-                    return path;
-            }
-        }
-        catch
-        {
-        }
-    }
-
-    throw new InvalidOperationException(
-        "ffmpeg not found. Expected bundled ffmpeg.exe next to the app or ffmpeg on PATH.");
-}   
-    public async Task<TranscriptionResult> TranscribeAsync(string audioPath, string outputJsonPath)
+    public async Task<TranscriptionResult> TranscribeAsync(
+        string audioPath, string outputJsonPath, string model = "base")
     {
         if (!File.Exists(audioPath))
         {
@@ -154,28 +75,29 @@ private static string FindFfmpegPath()
             throw new InvalidOperationException($"Unsupported audio format: {extension}. Supported formats: wav, mp3, flac, ogg, mp4, avi, mkv, mov");
         }
 
-        var script = @"
+        // model has already been validated against the whitelist by ProviderCapability before this call
+        var script = $@"
 import sys
 import json
 from faster_whisper import WhisperModel
 
-model_name = 'base'
+model_name = '{model}'
 model = WhisperModel(model_name, device='cpu', compute_type='int8')
 
 segments, info = model.transcribe(sys.argv[1])
 
-result = {
+result = {{
     'language': info.language,
     'language_probability': info.language_probability,
     'segments': []
-}
+}}
 
 for seg in segments:
-    result['segments'].append({
+    result['segments'].append({{
         'start': seg.start,
         'end': seg.end,
         'text': seg.text
-    })
+    }})
 
 with open(sys.argv[2], 'w', encoding='utf-8') as f:
     json.dump(result, f, ensure_ascii=False, indent=2)

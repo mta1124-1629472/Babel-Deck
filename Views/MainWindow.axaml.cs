@@ -4,8 +4,10 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Babel.Player.Models;
 using Babel.Player.Services;
 using Babel.Player.ViewModels;
+using Babel.Player.Services.Credentials;
 
 namespace Babel.Player.Views;
 
@@ -83,14 +85,7 @@ public partial class MainWindow : Window
                 {
                     _embeddedTransport = embedded;
                     embedded.AttachToWindow(hwnd);
-
-                    // Load prior session media (paused) so it's ready for playback
-                    var ingestedPath = vm.Coordinator.CurrentSession.IngestedMediaPath;
-                    if (!string.IsNullOrEmpty(ingestedPath) && System.IO.File.Exists(ingestedPath))
-                    {
-                        embedded.Load(ingestedPath);
-                        vm.Playback.ReapplySubtitlesIfActive();
-                    }
+                    LoadMediaIntoPlayer();
                 }
             }
             catch (Exception ex)
@@ -117,27 +112,66 @@ public partial class MainWindow : Window
         var path = files[0].TryGetLocalPath();
         if (string.IsNullOrEmpty(path)) return;
 
-        if (DataContext is MainWindowViewModel vm)
-        {
-            try
-            {
-                vm.Coordinator.LoadMedia(path);
+        if (DataContext is not MainWindowViewModel vm) return;
 
-                if (_embeddedTransport is not null)
-                {
-                    var ingestedPath = vm.Coordinator.CurrentSession.IngestedMediaPath;
-                    if (!string.IsNullOrEmpty(ingestedPath) && System.IO.File.Exists(ingestedPath))
-                    {
-                        _embeddedTransport.Load(ingestedPath);
-                        _embeddedTransport.Play();
-                        vm.Playback.ReapplySubtitlesIfActive();
-                    }
-                }
-            }
-            catch (Exception ex)
+        try
+        {
+            vm.Coordinator.LoadMedia(path);
+
+            if (_embeddedTransport is not null)
             {
-                vm.Playback.StatusText = $"Failed to open: {ex.Message}";
+                LoadMediaIntoPlayer();
+                _embeddedTransport.Play();
             }
+        }
+        catch (Exception ex)
+        {
+            vm.Playback.StatusText = $"Failed to open: {ex.Message}";
+        }
+    }
+
+    public void OnApiKeysClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+        var store = vm.Coordinator.KeyStore;
+        if (store is null) return;
+        var dialog = new ApiKeysDialog { DataContext = new ApiKeysViewModel(store) };
+        _ = dialog.ShowDialog(this);
+    }
+
+    public void OnSettingsClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+        var (service, current) = vm.GetSettingsContext();
+        var settingsVm = new SettingsViewModel(service, vm.Coordinator, this);
+        var win = new SettingsWindow { DataContext = settingsVm };
+        _ = win.ShowDialog(this);
+    }
+
+    public void OnRecentSessionSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox cb && cb.SelectedItem is RecentSessionEntry entry
+            && DataContext is MainWindowViewModel vm)
+        {
+            vm.Coordinator.RestoreSession(entry.SessionId);
+            cb.SelectedItem = null;   // act as a menu, not a persistent selection
+            LoadMediaIntoPlayer();
+        }
+    }
+
+    /// <summary>
+    /// Loads the current session's ingested media into the embedded transport (paused)
+    /// and re-applies any active subtitle track (mpv clears tracks on file load).
+    /// Called after Open Media, video handle ready, and RestoreSession.
+    /// </summary>
+    private void LoadMediaIntoPlayer()
+    {
+        if (DataContext is not MainWindowViewModel vm || _embeddedTransport is null) return;
+        var ingestedPath = vm.Coordinator.CurrentSession.IngestedMediaPath;
+        if (!string.IsNullOrEmpty(ingestedPath) && System.IO.File.Exists(ingestedPath))
+        {
+            _embeddedTransport.Load(ingestedPath);
+            vm.Playback.ReapplySubtitlesIfActive();
         }
     }
 }
