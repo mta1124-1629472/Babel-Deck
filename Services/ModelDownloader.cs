@@ -170,6 +170,13 @@ except Exception as e:
                 _log.Info($"Piper voice {voiceName} downloaded successfully.");
                 return true;
             }
+            if (!onnxOk && File.Exists(onnxPath)) File.Delete(onnxPath);
+            if (!jsonOk && File.Exists(jsonPath)) File.Delete(jsonPath);
+            if (onnxOk && jsonOk)
+            {
+                _log.Info($"Piper voice {voiceName} downloaded successfully.");
+                return true;
+            }
             return false;
         }
         catch (OperationCanceledException)
