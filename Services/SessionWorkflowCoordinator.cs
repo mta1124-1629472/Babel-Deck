@@ -541,11 +541,24 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         _log.Info($"Starting translation: {CurrentSession.TranscriptPath} ({src} -> {lang})");
 
-        var result = await _translationService.TranslateAsync(
-            CurrentSession.TranscriptPath,
-            translationPath,
-            src,
-            lang);
+        TranslationResult result;
+        if (CurrentSettings.TranslationProvider == "nllb-200")
+        {
+            result = await _translationService.TranslateWithNllbAsync(
+                CurrentSession.TranscriptPath,
+                translationPath,
+                src,
+                lang,
+                CurrentSettings.TranslationModel);
+        }
+        else
+        {
+            result = await _translationService.TranslateAsync(
+                CurrentSession.TranscriptPath,
+                translationPath,
+                src,
+                lang);
+        }
 
         if (!result.Success)
         {
@@ -599,10 +612,22 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         _log.Info($"Starting TTS generation: {CurrentSession.TranslationPath} -> {ttsPath}");
 
-        var result = await _ttsService.GenerateTtsAsync(
-            CurrentSession.TranslationPath,
-            ttsPath,
-            v);
+        TtsResult result;
+        if (CurrentSettings.TtsProvider == "piper")
+        {
+            result = await _ttsService.GeneratePiperTtsAsync(
+                CurrentSession.TranslationPath,
+                ttsPath,
+                v,
+                CurrentSettings.PiperModelDir);
+        }
+        else
+        {
+            result = await _ttsService.GenerateTtsAsync(
+                CurrentSession.TranslationPath,
+                ttsPath,
+                v);
+        }
 
         if (!result.Success)
         {
@@ -645,7 +670,9 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
                 try
                 {
-                    var segResult = await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, v);
+                    var segResult = CurrentSettings.TtsProvider == "piper"
+                        ? await _ttsService.GenerateSegmentPiperTtsAsync(text, segmentAudioPath, v, CurrentSettings.PiperModelDir)
+                        : await _ttsService.GenerateSegmentTtsAsync(text, segmentAudioPath, v);
 
                     if (segResult.Success && File.Exists(segmentAudioPath))
                     {
@@ -730,8 +757,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText.Substring(0, Math.Min(30, segmentText.Length))}...");
 
         var regenVoice = CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
-        var result = await _ttsService.GenerateSegmentTtsAsync(
-            segmentText, segmentAudioPath, regenVoice);
+        TtsResult result;
+        if (CurrentSettings.TtsProvider == "piper")
+        {
+            result = await _ttsService.GenerateSegmentPiperTtsAsync(
+                segmentText, segmentAudioPath, regenVoice, CurrentSettings.PiperModelDir);
+        }
+        else
+        {
+            result = await _ttsService.GenerateSegmentTtsAsync(
+                segmentText, segmentAudioPath, regenVoice);
+        }
 
         if (!result.Success)
         {
@@ -798,13 +834,28 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         _log.Info($"Regenerating translation for segment {segmentId}: {sourceText.Substring(0, Math.Min(30, sourceText.Length))}...");
 
-        var result = await _translationService.TranslateSingleSegmentAsync(
-            sourceText,
-            segmentId,
-            CurrentSession.TranslationPath,
-            CurrentSession.TranslationPath,
-            sourceLanguage,
-            targetLanguage);
+        TranslationResult result;
+        if (CurrentSettings.TranslationProvider == "nllb-200")
+        {
+            result = await _translationService.TranslateSingleSegmentWithNllbAsync(
+                sourceText,
+                segmentId,
+                CurrentSession.TranslationPath,
+                CurrentSession.TranslationPath,
+                sourceLanguage,
+                targetLanguage,
+                CurrentSettings.TranslationModel);
+        }
+        else
+        {
+            result = await _translationService.TranslateSingleSegmentAsync(
+                sourceText,
+                segmentId,
+                CurrentSession.TranslationPath,
+                CurrentSession.TranslationPath,
+                sourceLanguage,
+                targetLanguage);
+        }
 
         if (!result.Success)
         {
