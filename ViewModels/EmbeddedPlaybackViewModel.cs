@@ -100,7 +100,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(AvailableTranscriptionModels))]
     [NotifyPropertyChangedFor(nameof(SelectedTranscriptionModel))]
     [NotifyPropertyChangedFor(nameof(TranscriptionKeyStatus))]
-    private string _transcriptionProvider = "faster-whisper";
+    private string _transcriptionProvider = ProviderNames.FasterWhisper;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedTranscriptionModel))]
@@ -111,7 +111,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(AvailableTranslationModels))]
     [NotifyPropertyChangedFor(nameof(SelectedTranslationModel))]
     [NotifyPropertyChangedFor(nameof(TranslationKeyStatus))]
-    private string _translationProvider = "google-translate-free";
+    private string _translationProvider = ProviderNames.GoogleTranslateFree;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedTranslationModel))]
@@ -122,7 +122,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(AvailableTtsOptions))]
     [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
-    private string _ttsProvider = "edge-tts";
+    private string _ttsProvider = ProviderNames.EdgeTts;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
@@ -205,18 +205,21 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     public IReadOnlyList<ModelOptionViewModel> AvailableTranscriptionModels =>
         [.. ProviderOptions.GetTranscriptionModels(TranscriptionProvider)
-            .Select(m => new ModelOptionViewModel(m, 
-                TranscriptionProvider == "faster-whisper" ? ProviderReadinessResolver.IsFasterWhisperDownloaded(m) : null))];
+            .Select(m => new ModelOptionViewModel(m,
+                TranscriptionProvider == ProviderNames.FasterWhisper
+                    ? ProviderReadinessResolver.IsFasterWhisperDownloaded(m) : null))];
 
     public IReadOnlyList<ModelOptionViewModel> AvailableTranslationModels =>
         [.. ProviderOptions.GetTranslationModels(TranslationProvider)
-            .Select(m => new ModelOptionViewModel(m, 
-                TranslationProvider == "nllb-200" ? ProviderReadinessResolver.IsNllbDownloaded(m) : null))];
+            .Select(m => new ModelOptionViewModel(m,
+                TranslationProvider == ProviderNames.Nllb200
+                    ? ProviderReadinessResolver.IsNllbDownloaded(m) : null))];
 
     public IReadOnlyList<ModelOptionViewModel> AvailableTtsOptions =>
         [.. ProviderOptions.GetTtsOptions(TtsProvider)
-            .Select(m => new ModelOptionViewModel(m, 
-                TtsProvider == "piper" ? ProviderReadinessResolver.IsPiperVoiceDownloaded(m, _coordinator.CurrentSettings.PiperModelDir) : null))];
+            .Select(m => new ModelOptionViewModel(m,
+                TtsProvider == ProviderNames.Piper
+                    ? ProviderReadinessResolver.IsPiperVoiceDownloaded(m, _coordinator.CurrentSettings.PiperModelDir) : null))];
 
     /// <summary>The currently selected transcription model as an object — used for SelectedItem binding to avoid blank box on collection swap.</summary>
     public ModelOptionViewModel? SelectedTranscriptionModel
