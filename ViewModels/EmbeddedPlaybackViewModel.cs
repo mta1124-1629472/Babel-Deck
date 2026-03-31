@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -39,14 +40,6 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isBusy;
-
-    [ObservableProperty]
-    private bool _isShowingPipelineRestartConfirm;
-
-    [ObservableProperty]
-    private string _pipelineRestartMessage = string.Empty;
-
-    private SessionWorkflowStage _pendingResetStage = SessionWorkflowStage.MediaLoaded;
 
     [ObservableProperty]
     private bool _isSourceMediaLoaded;
@@ -105,28 +98,34 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     // ── Provider / model selection (backed by AppSettings) ────────────────────
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvailableTranscriptionModels))]
+    [NotifyPropertyChangedFor(nameof(SelectedTranscriptionModel))]
     [NotifyPropertyChangedFor(nameof(TranscriptionKeyStatus))]
     private string _transcriptionProvider = "faster-whisper";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedTranscriptionModel))]
     [NotifyPropertyChangedFor(nameof(TranscriptionKeyStatus))]
     private string _transcriptionModel = "base";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvailableTranslationModels))]
+    [NotifyPropertyChangedFor(nameof(SelectedTranslationModel))]
     [NotifyPropertyChangedFor(nameof(TranslationKeyStatus))]
     private string _translationProvider = "google-translate-free";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedTranslationModel))]
     [NotifyPropertyChangedFor(nameof(TranslationKeyStatus))]
     private string _translationModel = "default";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvailableTtsOptions))]
+    [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
     private string _ttsProvider = "edge-tts";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedTtsOption))]
     [NotifyPropertyChangedFor(nameof(TtsKeyStatus))]
     private string _ttsModelOrVoice = "en-US-AriaNeural";
 
@@ -200,18 +199,52 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public string VoiceModelLabel => _coordinator.CurrentSession.TtsVoice ?? _coordinator.CurrentSettings.TtsVoice;
 
     // ── Provider / model option lists ──────────────────────────────────────────
-    public IReadOnlyList<string> TranscriptionProviders  => ProviderOptions.TranscriptionProviders;
-    public IReadOnlyList<string> TranslationProviders    => ProviderOptions.TranslationProviders;
-    public IReadOnlyList<string> TtsProviders            => ProviderOptions.TtsProviders;
+    public static IReadOnlyList<string> TranscriptionProviders  => ProviderOptions.TranscriptionProviders;
+    public static IReadOnlyList<string> TranslationProviders    => ProviderOptions.TranslationProviders;
+    public static IReadOnlyList<string> TtsProviders            => ProviderOptions.TtsProviders;
 
-    public IReadOnlyList<string> AvailableTranscriptionModels =>
-        ProviderOptions.GetTranscriptionModels(TranscriptionProvider);
+    public IReadOnlyList<ModelOptionViewModel> AvailableTranscriptionModels =>
+        [.. ProviderOptions.GetTranscriptionModels(TranscriptionProvider)
+            .Select(m => new ModelOptionViewModel(m, 
+                TranscriptionProvider == "faster-whisper" ? ProviderReadinessResolver.IsFasterWhisperDownloaded(m) : null))];
 
-    public IReadOnlyList<string> AvailableTranslationModels =>
-        ProviderOptions.GetTranslationModels(TranslationProvider);
+    public IReadOnlyList<ModelOptionViewModel> AvailableTranslationModels =>
+        [.. ProviderOptions.GetTranslationModels(TranslationProvider)
+            .Select(m => new ModelOptionViewModel(m, 
+                TranslationProvider == "nllb-200" ? ProviderReadinessResolver.IsNllbDownloaded(m) : null))];
 
-    public IReadOnlyList<string> AvailableTtsOptions =>
-        ProviderOptions.GetTtsOptions(TtsProvider);
+    public IReadOnlyList<ModelOptionViewModel> AvailableTtsOptions =>
+        [.. ProviderOptions.GetTtsOptions(TtsProvider)
+            .Select(m => new ModelOptionViewModel(m, 
+                TtsProvider == "piper" ? ProviderReadinessResolver.IsPiperVoiceDownloaded(m, _coordinator.CurrentSettings.PiperModelDir) : null))];
+
+    /// <summary>The currently selected transcription model as an object — used for SelectedItem binding to avoid blank box on collection swap.</summary>
+    public ModelOptionViewModel? SelectedTranscriptionModel
+    {
+        get => AvailableTranscriptionModels.FirstOrDefault(m => m.ModelId == TranscriptionModel);
+        set { if (value != null) TranscriptionModel = value.ModelId; }
+    }
+
+    /// <summary>The currently selected translation model as an object — used for SelectedItem binding.</summary>
+    public ModelOptionViewModel? SelectedTranslationModel
+    {
+        get => AvailableTranslationModels.FirstOrDefault(m => m.ModelId == TranslationModel);
+        set { if (value != null) TranslationModel = value.ModelId; }
+    }
+
+    /// <summary>The currently selected TTS voice/model as an object — used for SelectedItem binding.</summary>
+    public ModelOptionViewModel? SelectedTtsOption
+    {
+        get => AvailableTtsOptions.FirstOrDefault(m => m.ModelId == TtsModelOrVoice);
+        set { if (value != null) TtsModelOrVoice = value.ModelId; }
+    }
+
+    // ── Pipeline Progress ──────────────────────────────────────────────────────
+    [ObservableProperty]
+    private double _pipelineProgressPercent;
+
+    [ObservableProperty]
+    private bool _isPipelineProgressVisible;
 
     // ── API key status for UI lock indicators ─────────────────────────────────
     public string TranscriptionKeyStatus => ReadinessToStatusText(
@@ -223,7 +256,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
     public string TtsKeyStatus => ReadinessToStatusText(
         ProviderReadinessResolver.ResolveTts(TtsProvider, TtsModelOrVoice, _coordinator.CurrentSettings.PiperModelDir, _apiKeyStore));
 
-    private string ReadinessToStatusText(ProviderReadiness readiness) => readiness switch
+    private static string ReadinessToStatusText(ProviderReadiness readiness) => readiness switch
     {
         ProviderReadiness.RequiresDownload => "⬇️ Download required (will run automatically)",
         ProviderReadiness.RequiresApiKey   => "🔒 API key required — click API Keys to add",
@@ -350,6 +383,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnTranscriptionProviderChanged(string value)
     {
+        if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranscriptionProvider = value;
         // Reset model to first valid option for new provider
         var models = ProviderOptions.GetTranscriptionModels(value);
@@ -359,12 +393,14 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnTranscriptionModelChanged(string value)
     {
+        if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranscriptionModel = value;
         NotifySettingsSave();
     }
 
     partial void OnTranslationProviderChanged(string value)
     {
+        if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranslationProvider = value;
         var models = ProviderOptions.GetTranslationModels(value);
         TranslationModel = models.Count > 0 ? models[0] : "default";
@@ -373,12 +409,14 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnTranslationModelChanged(string value)
     {
+        if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TranslationModel = value;
         NotifySettingsSave();
     }
 
     partial void OnTtsProviderChanged(string value)
     {
+        if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TtsProvider = value;
         var options = ProviderOptions.GetTtsOptions(value);
         TtsModelOrVoice = options.Count > 0 ? options[0] : "default";
@@ -387,6 +425,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
 
     partial void OnTtsModelOrVoiceChanged(string value)
     {
+        if (string.IsNullOrEmpty(value)) return;
         _coordinator.CurrentSettings.TtsVoice = value;
         NotifySettingsSave();
     }
@@ -714,51 +753,88 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         StatusText = "Playback stopped.";
     }
 
+    private CancellationTokenSource? _pipelineCts;
+
+    [RelayCommand]
+    private void CancelPipeline()
+    {
+        if (_pipelineCts != null)
+        {
+            _pipelineCts.Cancel();
+            StatusText = "Canceling pipeline...";
+            IsPipelineProgressVisible = false;
+        }
+    }
+
     [RelayCommand]
     private async Task RunPipelineAsync()
     {
         var diag = _coordinator.BootstrapDiagnostics;
         if (!diag.AllDependenciesAvailable)
         {
-            StatusText = $"Cannot run pipeline: {diag.DiagnosticSummary}";
+            StatusText = $"⚠ {diag.DiagnosticSummary}";
             return;
         }
 
+        // Smart wipe: determine minimum reset point based on what settings changed,
+        // then reset and fall through into the run path.
         if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
         {
             var cs = _coordinator.CurrentSession;
             var s = _coordinator.CurrentSettings;
 
-            bool wipeTranscription = cs.TranscriptionProvider != s.TranscriptionProvider || cs.TranscriptionModel != s.TranscriptionModel;
-            bool wipeTranslation = wipeTranscription || cs.TranslationProvider != s.TranslationProvider || cs.TranslationModel != s.TranslationModel || cs.TargetLanguage != s.TargetLanguage;
-            bool wipeTts = wipeTranslation || cs.TtsProvider != s.TtsProvider || cs.TtsVoice != s.TtsVoice;
+            bool wipeTranscription = cs.TranscriptionProvider != s.TranscriptionProvider
+                || cs.TranscriptionModel != s.TranscriptionModel;
+            bool wipeTranslation = wipeTranscription
+                || cs.TranslationProvider != s.TranslationProvider
+                || cs.TranslationModel != s.TranslationModel
+                || cs.TargetLanguage != s.TargetLanguage;
+            bool wipeTts = wipeTranslation
+                || cs.TtsProvider != s.TtsProvider
+                || cs.TtsVoice != s.TtsVoice;
 
-            if (!wipeTts)
-            {
-                wipeTts = true;
-            }
+            if (IsSubtitleModeOn) ToggleSubtitles();
+            if (IsDubModeOn) ToggleDubMode();
 
             if (wipeTranscription)
             {
-                PipelineRestartMessage = "Transcription settings changed. This will clear existing transcription, translation, and TTS generation, allowing the pipeline to start over.";
-                _pendingResetStage = SessionWorkflowStage.MediaLoaded;
+                StatusText = "Transcription settings changed — restarting from scratch…";
+                _coordinator.ResetPipelineToMediaLoaded();
+                Segments.Clear();
+                HasSegments = false;
             }
             else if (wipeTranslation)
             {
-                var src = cs.SourceLanguage ?? "auto";
-                var dst = s.TargetLanguage ?? "en";
-                PipelineRestartMessage = $"Translation settings changed. This will clear existing translation and TTS generation, and rerun translation from {src} to {dst}.";
-                _pendingResetStage = SessionWorkflowStage.Transcribed;
+                StatusText = "Translation settings changed — re-running translation…";
+                _coordinator.ResetPipelineToTranscribed();
+                Segments.Clear();
+                HasSegments = false;
+                await RefreshSegmentsAsync();
             }
             else if (wipeTts)
             {
-                PipelineRestartMessage = "TTS settings changed. This will clear existing TTS generation, and rerun audio generation based on your existing translation.";
-                _pendingResetStage = SessionWorkflowStage.Translated;
+                StatusText = "TTS settings changed — re-generating audio…";
+                _coordinator.ResetPipelineToTranslated();
             }
-
-            IsShowingPipelineRestartConfirm = true;
-            return;
+            else
+            {
+                // Nothing changed — re-run everything from scratch
+                StatusText = "Re-running full pipeline…";
+                _coordinator.ResetPipelineToMediaLoaded();
+                Segments.Clear();
+                HasSegments = false;
+            }
         }
+
+        _pipelineCts?.Cancel();
+        _pipelineCts = new CancellationTokenSource();
+        var ct = _pipelineCts.Token;
+
+        var progress = new Progress<double>(p =>
+        {
+            PipelineProgressPercent = p;
+            IsPipelineProgressVisible = p > 0;
+        });
 
         try
         {
@@ -771,7 +847,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             {
                 StatusText = "Transcribing audio…";
                 System.Diagnostics.Debug.WriteLine("[Pipeline] Running transcription…");
-                await _coordinator.TranscribeMediaAsync();
+                await _coordinator.TranscribeMediaAsync(ct, progress);
                 System.Diagnostics.Debug.WriteLine($"[Pipeline] Transcription done. Language: {_coordinator.CurrentSession.SourceLanguage}");
                 StatusText = "Transcription complete. Loading segments…";
                 await RefreshSegmentsAsync();
@@ -788,7 +864,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             {
                 StatusText = $"Translating ({_coordinator.CurrentSession.SourceLanguage} → en)…";
                 System.Diagnostics.Debug.WriteLine("[Pipeline] Running translation…");
-                await _coordinator.TranslateTranscriptAsync();
+                await _coordinator.TranslateTranscriptAsync(ct, progress);
                 System.Diagnostics.Debug.WriteLine("[Pipeline] Translation done.");
                 StatusText = "Translation complete. Loading segments…";
                 await RefreshSegmentsAsync();
@@ -805,7 +881,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             {
                 StatusText = "Generating dubbed audio…";
                 System.Diagnostics.Debug.WriteLine("[Pipeline] Running TTS…");
-                await _coordinator.GenerateTtsAsync();
+                await _coordinator.GenerateTtsAsync(ct, progress);
                 System.Diagnostics.Debug.WriteLine("[Pipeline] TTS done.");
             }
             else
@@ -817,6 +893,11 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             await RefreshSegmentsAsync();
             System.Diagnostics.Debug.WriteLine($"[Pipeline] Complete. {Segments.Count} segments loaded.");
         }
+        catch (OperationCanceledException)
+        {
+            System.Diagnostics.Debug.WriteLine("[Pipeline] Cancelled by user.");
+            StatusText = "Pipeline cancelled.";
+        }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Pipeline] Failed: {ex}");
@@ -825,6 +906,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
+            IsPipelineProgressVisible = false;
+            _pipelineCts?.Dispose();
+            _pipelineCts = null;
         }
     }
 
@@ -848,43 +932,5 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         {
             IsBusy = false;
         }
-    }
-
-    [RelayCommand]
-    private async Task ConfirmPipelineRestartAsync()
-    {
-        IsShowingPipelineRestartConfirm = false;
-
-        if (IsSubtitleModeOn) ToggleSubtitles();
-        if (IsDubModeOn) ToggleDubMode();
-
-        if (_pendingResetStage == SessionWorkflowStage.MediaLoaded)
-        {
-            _coordinator.ResetPipelineToMediaLoaded();
-            Segments.Clear();
-            HasSegments = false;
-        }
-        else if (_pendingResetStage == SessionWorkflowStage.Transcribed)
-        {
-            _coordinator.ResetPipelineToTranscribed();
-            // Retain segments up to translation, but clear translated texts if bound directly to segment UI,
-            // though clearing the segments entirely and forcing a reload after translation is safer
-            Segments.Clear();
-            HasSegments = false;
-            await RefreshSegmentsAsync();
-        }
-        else if (_pendingResetStage == SessionWorkflowStage.Translated)
-        {
-            _coordinator.ResetPipelineToTranslated();
-            // Retain segments, they have translation
-        }
-
-        await RunPipelineAsync();
-    }
-
-    [RelayCommand]
-    private void CancelPipelineRestart()
-    {
-        IsShowingPipelineRestartConfirm = false;
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
@@ -478,7 +479,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task TranscribeMediaAsync()
+    public async Task TranscribeMediaAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.IngestedMediaPath))
         {
@@ -505,7 +506,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             _log.Info($"Model {CurrentSettings.TranscriptionModel} requires download. Starting download...");
             var downloader = new ModelDownloader(_log);
-            if (!await downloader.DownloadFasterWhisperAsync(CurrentSettings.TranscriptionModel))
+            if (!await downloader.DownloadFasterWhisperAsync(CurrentSettings.TranscriptionModel, progress, cancellationToken))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranscriptionModel}'.");
         }
 
@@ -586,7 +587,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task TranslateTranscriptAsync(string? targetLanguage = null, string? sourceLanguage = null)
+    public async Task TranslateTranscriptAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null, string? targetLanguage = null, string? sourceLanguage = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranscriptPath))
         {
@@ -616,7 +617,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         {
             _log.Info($"Model {CurrentSettings.TranslationModel} requires download. Starting download...");
             var downloader = new ModelDownloader(_log);
-            if (!await downloader.DownloadNllbAsync(CurrentSettings.TranslationModel))
+            if (!await downloader.DownloadNllbAsync(CurrentSettings.TranslationModel, progress, cancellationToken))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranslationModel}'.");
         }
 
@@ -661,7 +662,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
-    public async Task GenerateTtsAsync(string? voice = null)
+    public async Task GenerateTtsAsync(CancellationToken cancellationToken = default, IProgress<double>? progress = null, string? voice = null)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
         {
@@ -689,10 +690,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         if (readiness == ProviderReadiness.RequiresDownload)
         {
-            _log.Info($"Piper voice {v} requires download. Starting download...");
+            _log.Info($"Voice {CurrentSettings.TtsVoice} requires download. Starting download...");
             var downloader = new ModelDownloader(_log);
-            if (!await downloader.DownloadPiperVoiceAsync(v, CurrentSettings.PiperModelDir))
-                throw new InvalidOperationException($"Failed to download piper voice '{v}'.");
+            if (!await downloader.DownloadPiperVoiceAsync(CurrentSettings.TtsVoice, CurrentSettings.PiperModelDir, progress, cancellationToken))
+                throw new InvalidOperationException($"Failed to download voice '{CurrentSettings.TtsVoice}'.");
         }
 
         _ttsService ??= CreateTtsService();

@@ -55,10 +55,20 @@
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Model" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.AvailableTranscriptionModels}"
-                                          SelectedItem="{Binding Playback.TranscriptionModel, Mode=TwoWay}"
+                                          SelectedItem="{Binding Playback.SelectedTranscriptionModel, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="#1E1E2C" Foreground="#C0C0D0"
-                                          BorderBrush="#2A2A3A" />
+                                          BorderBrush="#2A2A3A">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding ModelId}"/>
+                                                <TextBlock Text="⬇ Needs Download" Foreground="#C0A060" IsVisible="{Binding IsDownloadVisible, FallbackValue=False}" FontSize="10" VerticalAlignment="Center"/>
+                                                <TextBlock Text="✓ Ready" Foreground="#60C0A0" IsVisible="{Binding IsReadyVisible, FallbackValue=False}" FontSize="10" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
 
                             <TextBlock Text="{Binding Playback.TranscriptionKeyStatus}"
@@ -84,10 +94,20 @@
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Model" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.AvailableTranslationModels}"
-                                          SelectedItem="{Binding Playback.TranslationModel, Mode=TwoWay}"
+                                          SelectedItem="{Binding Playback.SelectedTranslationModel, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="#1E1E2C" Foreground="#C0C0D0"
-                                          BorderBrush="#2A2A3A" />
+                                          BorderBrush="#2A2A3A">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding ModelId}"/>
+                                                <TextBlock Text="⬇ Needs Download" Foreground="#C0A060" IsVisible="{Binding IsDownloadVisible, FallbackValue=False}" FontSize="10" VerticalAlignment="Center"/>
+                                                <TextBlock Text="✓ Ready" Foreground="#60C0A0" IsVisible="{Binding IsReadyVisible, FallbackValue=False}" FontSize="10" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
 
                             <TextBlock Text="{Binding Playback.TranslationKeyStatus}"
@@ -113,10 +133,20 @@
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Voice / Model" FontSize="12" Foreground="#808090" />
                                 <ComboBox ItemsSource="{Binding Playback.AvailableTtsOptions}"
-                                          SelectedItem="{Binding Playback.TtsModelOrVoice, Mode=TwoWay}"
+                                          SelectedItem="{Binding Playback.SelectedTtsOption, Mode=TwoWay}"
                                           HorizontalAlignment="Stretch" FontSize="12"
                                           Background="#1E1E2C" Foreground="#C0C0D0"
-                                          BorderBrush="#2A2A3A" />
+                                          BorderBrush="#2A2A3A">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding ModelId}"/>
+                                                <TextBlock Text="⬇ Needs Download" Foreground="#C0A060" IsVisible="{Binding IsDownloadVisible, FallbackValue=False}" FontSize="10" VerticalAlignment="Center"/>
+                                                <TextBlock Text="✓ Ready" Foreground="#60C0A0" IsVisible="{Binding IsReadyVisible, FallbackValue=False}" FontSize="10" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
 
                             <TextBlock Text="{Binding Playback.TtsKeyStatus}"
@@ -284,6 +314,27 @@
                                 </Style>
                             </Button.Styles>
                         </Button>
+
+                        <Button HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Padding="0,10"
+                                FontSize="13" FontWeight="SemiBold"
+                                Background="#D32F2F" Foreground="White"
+                                CornerRadius="6"
+                                Command="{Binding Playback.CancelPipelineCommand}"
+                                IsVisible="{Binding Playback.IsBusy}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="⏹" VerticalAlignment="Center" />
+                                <TextBlock Text="Cancel Pipeline" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        
+                        <ProgressBar Minimum="0" Maximum="1" 
+                                     Value="{Binding Playback.PipelineProgressPercent}"
+                                     IsVisible="{Binding Playback.IsPipelineProgressVisible}"
+                                     Height="4" Foreground="#7C3AED" Background="#2A2A3A"
+                                     HorizontalAlignment="Stretch" Margin="0,4"/>
 
                         <TextBlock FontSize="11" Foreground="#3A3A50"
                                    HorizontalAlignment="Center"
@@ -564,49 +615,6 @@
                 </ListBox>
 
             </Grid>
-        </Border>
-
-        <!-- ═══════════════════════════════════════════════════
-             MODALS & OVERLAYS
-             ═══════════════════════════════════════════════════ -->
-        <Border Grid.ColumnSpan="3"
-                Background="#C0000000"
-                IsVisible="{Binding Playback.IsShowingPipelineRestartConfirm}">
-            <Border Background="#1C1C2C" CornerRadius="8" 
-                    HorizontalAlignment="Center" VerticalAlignment="Center" 
-                    Padding="24,20" BorderBrush="#3A3A4A" BorderThickness="1">
-                <StackPanel Spacing="16">
-                    <TextBlock Text="Are you sure you'd like to start over?" 
-                               FontSize="16" FontWeight="SemiBold" Foreground="#F0F0F8"/>
-                    
-                    <TextBlock Text="{Binding Playback.PipelineRestartMessage}" 
-                               Foreground="#A0A0B0" TextWrapping="Wrap" MaxWidth="320" FontSize="13" LineHeight="20" />
-                    
-                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right" Margin="0,8,0,0">
-                        <Button Content="Cancel" 
-                                Command="{Binding Playback.CancelPipelineRestartCommand}" 
-                                Background="Transparent" Foreground="#C0C0D0" 
-                                Padding="12,6" CornerRadius="4">
-                            <Button.Styles>
-                                <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                    <Setter Property="Background" Value="#2A2A3A" />
-                                </Style>
-                            </Button.Styles>
-                        </Button>
-                        
-                        <Button Content="Yes, start over" 
-                                Command="{Binding Playback.ConfirmPipelineRestartCommand}" 
-                                Background="#E53E3E" Foreground="White" FontWeight="Medium"
-                                Padding="16,6" CornerRadius="4">
-                            <Button.Styles>
-                                <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                    <Setter Property="Background" Value="#DC2626" />
-                                </Style>
-                            </Button.Styles>
-                        </Button>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
         </Border>
 
     </Grid>

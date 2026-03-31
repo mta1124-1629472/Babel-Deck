@@ -100,7 +100,7 @@ public static class ProviderReadinessResolver
         return ProviderReadiness.Ready;
     }
 
-    private static bool IsFasterWhisperDownloaded(string model)
+    public static bool IsFasterWhisperDownloaded(string model)
     {
         string hfCache = GetHuggingFaceCacheDir();
         string modelPath = Path.Combine(hfCache, $"models--Systran--faster-whisper-{model}");
@@ -128,7 +128,7 @@ public static class ProviderReadinessResolver
         }
     }
 
-    private static bool IsNllbDownloaded(string model)
+    public static bool IsNllbDownloaded(string model)
     {
         string hfCache = GetHuggingFaceCacheDir();
         string modelPath = Path.Combine(hfCache, $"models--facebook--{model}");
@@ -156,7 +156,7 @@ public static class ProviderReadinessResolver
         }
     }
 
-    private static bool IsPiperVoiceDownloaded(string voice, string? piperDir)
+    public static bool IsPiperVoiceDownloaded(string voice, string? piperDir)
     {
         if (string.IsNullOrEmpty(piperDir) || !Directory.Exists(piperDir)) return false;
         string onnxPath = Path.Combine(piperDir, $"{voice}.onnx");

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -16,19 +17,19 @@ public sealed class ModelDownloader
         _log = log;
     }
 
-    public async Task<bool> DownloadFasterWhisperAsync(string model)
+    public async Task<bool> DownloadFasterWhisperAsync(string model, IProgress<double>? progress = null, CancellationToken token = default)
     {
         string repoId = $"Systran/faster-whisper-{model}";
-        return await DownloadHuggingFaceModelAsync(repoId);
+        return await DownloadHuggingFaceModelAsync(repoId, progress, token);
     }
 
-    public async Task<bool> DownloadNllbAsync(string model)
+    public async Task<bool> DownloadNllbAsync(string model, IProgress<double>? progress = null, CancellationToken token = default)
     {
         string repoId = $"facebook/{model}";
-        return await DownloadHuggingFaceModelAsync(repoId);
+        return await DownloadHuggingFaceModelAsync(repoId, progress, token);
     }
 
-    private async Task<bool> DownloadHuggingFaceModelAsync(string repoId)
+    private async Task<bool> DownloadHuggingFaceModelAsync(string repoId, IProgress<double>? progress = null, CancellationToken token = default)
     {
         string? pythonPath = DependencyLocator.FindPython();
         if (pythonPath == null)
@@ -73,12 +74,40 @@ except Exception as e:
             if (proc == null) return false;
 
             _log.Info($"Started model download for {repoId}. This may take a few minutes...");
-            await proc.WaitForExitAsync();
             
-            string stderr = await proc.StandardError.ReadToEndAsync();
+            var errorReaderTask = Task.Run(async () =>
+            {
+                var regex = new System.Text.RegularExpressions.Regex(@"(\d+)%");
+                while (true)
+                {
+                    string? line = await proc.StandardError.ReadLineAsync();
+                    if (line == null) break;
+                    
+                    if (progress != null)
+                    {
+                        var match = regex.Match(line);
+                        if (match.Success && double.TryParse(match.Groups[1].Value, out double pct))
+                        {
+                            progress.Report(pct / 100.0);
+                        }
+                    }
+                }
+            }, token);
+
+            try
+            {
+                await proc.WaitForExitAsync(token);
+                await errorReaderTask;
+            }
+            catch (OperationCanceledException)
+            {
+                proc.Kill();
+                throw;
+            }
+            
             if (proc.ExitCode != 0)
             {
-                 _log.Error($"Download failed for {repoId}: {stderr}", new Exception(stderr));
+                 _log.Error($"Download failed for {repoId}", new Exception("Python downloader exited with non-zero exit code."));
                  return false;
             }
             
@@ -96,7 +125,7 @@ except Exception as e:
         }
     }
 
-    public async Task<bool> DownloadPiperVoiceAsync(string voiceName, string? piperDir)
+    public async Task<bool> DownloadPiperVoiceAsync(string voiceName, string? piperDir, IProgress<double>? progress = null, CancellationToken token = default)
     {
         if (string.IsNullOrEmpty(piperDir))
         {
@@ -129,8 +158,12 @@ except Exception as e:
 
         try
         {
-            bool onnxOk = await DownloadFileAsync($"{baseUrl}.onnx", onnxPath);
-            bool jsonOk = await DownloadFileAsync($"{baseUrl}.onnx.json", jsonPath);
+            // Report fake progress to show something since piper downloads two files. 0 to 90% for onnx, 90 to 100% for json.
+            var onnxProgress = new Progress<double>(p => progress?.Report(p * 0.90));
+            var jsonProgress = new Progress<double>(p => progress?.Report(0.90 + p * 0.10));
+
+            bool onnxOk = await DownloadFileAsync($"{baseUrl}.onnx", onnxPath, onnxProgress, token);
+            bool jsonOk = await DownloadFileAsync($"{baseUrl}.onnx.json", jsonPath, jsonProgress, token);
 
             if (onnxOk && jsonOk)
             {
@@ -138,6 +171,12 @@ except Exception as e:
                 return true;
             }
             return false;
+        }
+        catch (OperationCanceledException)
+        {
+             if (File.Exists(onnxPath)) File.Delete(onnxPath);
+             if (File.Exists(jsonPath)) File.Delete(jsonPath);
+             throw;
         }
         catch (Exception ex)
         {
@@ -149,22 +188,42 @@ except Exception as e:
         }
     }
 
-    private async Task<bool> DownloadFileAsync(string url, string destinationPath)
+    private async Task<bool> DownloadFileAsync(string url, string destinationPath, IProgress<double>? progress = null, CancellationToken token = default)
     {
         string tmpPath = destinationPath + ".tmp";
         try
         {
-            using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
             response.EnsureSuccessStatusCode();
 
+            var totalBytes = response.Content.Headers.ContentLength;
+
             using var fs = new FileStream(tmpPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
-            using var stream = await response.Content.ReadAsStreamAsync();
-            await stream.CopyToAsync(fs);
+            using var stream = await response.Content.ReadAsStreamAsync(token);
+
+            var buffer = new byte[8192];
+            long totalRead = 0;
+            int bytesRead;
+
+            while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
+            {
+                await fs.WriteAsync(buffer, 0, bytesRead, token);
+                totalRead += bytesRead;
+                if (totalBytes.HasValue)
+                {
+                    progress?.Report((double)totalRead / totalBytes.Value);
+                }
+            }
             fs.Close();
 
             if (File.Exists(destinationPath)) File.Delete(destinationPath);
             File.Move(tmpPath, destinationPath);
             return true;
+        }
+        catch (OperationCanceledException)
+        {
+            if (File.Exists(tmpPath)) File.Delete(tmpPath);
+            throw;
         }
         catch (Exception ex)
         {
