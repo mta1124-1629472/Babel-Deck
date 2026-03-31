@@ -167,7 +167,7 @@ public static class ProviderReadinessResolver
     private static string GetHuggingFaceCacheDir()
     {
         string? envCache = Environment.GetEnvironmentVariable("HF_HOME");
-        string? envCache = Environment.GetEnvironmentVariable("HF_HUB_CACHE");
+        if (!string.IsNullOrEmpty(envCache)) return Path.Combine(envCache, "hub");
         if (!string.IsNullOrEmpty(envCache)) return envCache;
         string? hfHome = Environment.GetEnvironmentVariable("HF_HOME");
         if (!string.IsNullOrEmpty(hfHome)) return Path.Combine(hfHome, "hub");
