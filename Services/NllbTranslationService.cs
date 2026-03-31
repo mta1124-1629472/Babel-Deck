@@ -129,14 +129,12 @@ print(f'NLLB single segment translated: {seg_id}')
             {
                 FileName               = _pythonPath,
                 Arguments              = $"\"{scriptPath}\" \"{transcriptJsonPath}\" \"{outputJsonPath}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{_model}\"",
-                RedirectStandardOutput = true,
                 RedirectStandardError  = true,
                 UseShellExecute        = false,
                 CreateNoWindow         = true,
             };
 
             using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start NLLB translation process.");
-            var stdout = await proc.StandardOutput.ReadToEndAsync();
             var stderr = await proc.StandardError.ReadToEndAsync();
             proc.WaitForExit();
 
@@ -192,14 +190,12 @@ print(f'NLLB single segment translated: {seg_id}')
             {
                 FileName               = _pythonPath,
                 Arguments              = $"\"{scriptPath}\" \"{text}\" \"{sourceLanguage}\" \"{targetLanguage}\" \"{translationJsonPath}\" \"{segmentId}\" \"{_model}\"",
-                RedirectStandardOutput = true,
                 RedirectStandardError  = true,
                 UseShellExecute        = false,
                 CreateNoWindow         = true,
             };
 
             using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start NLLB segment translation process.");
-            var stdout = await proc.StandardOutput.ReadToEndAsync();
             var stderr = await proc.StandardError.ReadToEndAsync();
             proc.WaitForExit();
 

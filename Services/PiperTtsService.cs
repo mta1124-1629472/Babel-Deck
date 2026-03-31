@@ -126,14 +126,12 @@ print(f'Piper segment TTS generated: {output_path}')
             {
                 FileName               = _pythonPath,
                 Arguments              = $"\"{scriptPath}\" \"{translationJsonPath}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
-                RedirectStandardOutput = true,
                 RedirectStandardError  = true,
                 UseShellExecute        = false,
                 CreateNoWindow         = true,
             };
 
             using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start Piper TTS process.");
-            var stdout = await proc.StandardOutput.ReadToEndAsync();
             var stderr = await proc.StandardError.ReadToEndAsync();
             proc.WaitForExit();
 
@@ -174,14 +172,12 @@ print(f'Piper segment TTS generated: {output_path}')
             {
                 FileName               = _pythonPath,
                 Arguments              = $"\"{scriptPath}\" \"{text}\" \"{outputAudioPath}\" \"{voice}\" \"{_modelDir}\"",
-                RedirectStandardOutput = true,
                 RedirectStandardError  = true,
                 UseShellExecute        = false,
                 CreateNoWindow         = true,
             };
 
             using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start Piper segment TTS process.");
-            var stdout = await proc.StandardOutput.ReadToEndAsync();
             var stderr = await proc.StandardError.ReadToEndAsync();
             proc.WaitForExit();
 
