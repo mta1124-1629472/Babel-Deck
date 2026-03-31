@@ -98,17 +98,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private void Apply()
     {
-        var settings = new AppSettings
-        {
-            TtsVoice = SelectedVoice,
-            Theme = SelectedTheme,
-            MaxRecentSessions = MaxRecentSessions,
-            AutoSaveEnabled = AutoSaveEnabled,
-            // Preserve target language — not yet exposed in the dialog
-            TargetLanguage = _settingsService.LoadOrDefault().TargetLanguage,
-        };
-        _settingsService.Save(settings);
-        _coordinator.UpdateSettings(settings);
+        var current = _settingsService.LoadOrDefault();
+        
+        current.TtsVoice = SelectedVoice;
+        current.Theme = SelectedTheme;
+        current.MaxRecentSessions = MaxRecentSessions;
+        current.AutoSaveEnabled = AutoSaveEnabled;
+
+        _settingsService.Save(current);
+        _coordinator.UpdateSettings(current);
     }
 
     [RelayCommand]

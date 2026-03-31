@@ -472,13 +472,27 @@
                 <!-- Header -->
                 <Border Grid.Row="0" Padding="14,11"
                         BorderBrush="#252530" BorderThickness="0,0,0,1">
-                    <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
                         <TextBlock Grid.Column="0" Text="Segments" FontSize="14"
                                    FontWeight="SemiBold" Foreground="#F0F0F8"
                                    VerticalAlignment="Center" />
                         <TextBlock Grid.Column="1" FontSize="11" Foreground="#4A4A60"
-                                   VerticalAlignment="Center"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"
                                    Text="{Binding Playback.Segments.Count, StringFormat='{}{0} Items'}" />
+                        
+                        <!-- REFRESH BUTTON -->
+                        <Button Grid.Column="2" 
+                                Command="{Binding Playback.RefreshSegmentsCommand}"
+                                Background="Transparent" Padding="6,2"
+                                Foreground="#A0A0B0" ToolTip.Tip="Refresh segments data">
+                            <TextBlock Text="↻" FontSize="16" />
+                            <Button.Styles>
+                                <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                    <Setter Property="Background" Value="#2A2A3A" />
+                                    <Setter Property="Foreground" Value="#F0F0F8" />
+                                </Style>
+                            </Button.Styles>
+                        </Button>
                     </Grid>
                 </Border>
 
@@ -550,6 +564,49 @@
                 </ListBox>
 
             </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════
+             MODALS & OVERLAYS
+             ═══════════════════════════════════════════════════ -->
+        <Border Grid.ColumnSpan="3"
+                Background="#C0000000"
+                IsVisible="{Binding Playback.IsShowingPipelineRestartConfirm}">
+            <Border Background="#1C1C2C" CornerRadius="8" 
+                    HorizontalAlignment="Center" VerticalAlignment="Center" 
+                    Padding="24,20" BorderBrush="#3A3A4A" BorderThickness="1">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="Are you sure you'd like to start over?" 
+                               FontSize="16" FontWeight="SemiBold" Foreground="#F0F0F8"/>
+                    
+                    <TextBlock Text="{Binding Playback.PipelineRestartMessage}" 
+                               Foreground="#A0A0B0" TextWrapping="Wrap" MaxWidth="320" FontSize="13" LineHeight="20" />
+                    
+                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Content="Cancel" 
+                                Command="{Binding Playback.CancelPipelineRestartCommand}" 
+                                Background="Transparent" Foreground="#C0C0D0" 
+                                Padding="12,6" CornerRadius="4">
+                            <Button.Styles>
+                                <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                    <Setter Property="Background" Value="#2A2A3A" />
+                                </Style>
+                            </Button.Styles>
+                        </Button>
+                        
+                        <Button Content="Yes, start over" 
+                                Command="{Binding Playback.ConfirmPipelineRestartCommand}" 
+                                Background="#E53E3E" Foreground="White" FontWeight="Medium"
+                                Padding="16,6" CornerRadius="4">
+                            <Button.Styles>
+                                <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                    <Setter Property="Background" Value="#DC2626" />
+                                </Style>
+                            </Button.Styles>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </Border>
 
     </Grid>
