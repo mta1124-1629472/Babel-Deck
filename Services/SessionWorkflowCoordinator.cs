@@ -22,14 +22,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranslationService? _translationService;
     private ITtsService? _ttsService;
 
-    private readonly IMediaTransport? _injectedSegmentPlayer;
-    private IMediaTransport? _segmentPlayer;
-    private bool _subscribedToPlayerEvents;
-    private readonly EventHandler? _segmentEndedHandler;
-    private readonly EventHandler<Exception>? _segmentErrorHandler;
-
-    private IMediaTransport? _sourceMediaPlayer;
-    private readonly IMediaTransport? _injectedSourcePlayer;
+    private readonly IMediaTransportManager _transportManager;
+    private bool _subscribedToSegmentEvents;
+    private readonly EventHandler _segmentEndedHandler;
+    private readonly EventHandler<Exception> _segmentErrorHandler;
     private readonly Dictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -86,12 +82,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         _recentStore = recentStore;
         CurrentSettings = settings;
         KeyStore = keyStore;
-        _injectedSegmentPlayer = segmentPlayer;
-        _injectedSourcePlayer = sourcePlayer;
+        _transportManager = new MediaTransportManager(segmentPlayer, sourcePlayer);
 
         // Create event handler delegates once for proper unsubscription
         _segmentEndedHandler = (_, _) => StopTtsPlayback();
-        _segmentErrorHandler = (_, _) => StopTtsPlayback();
+        _segmentErrorHandler = (_, ex) => StopTtsPlayback();
     }
 
     public void UpdateSettings(AppSettings settings)
@@ -129,18 +124,17 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     private IMediaTransport GetOrCreateSegmentPlayer()
     {
-        if (_segmentPlayer is not null) return _segmentPlayer;
-        _segmentPlayer = _injectedSegmentPlayer ?? new LibMpvHeadlessTransport(suppressAudio: false);
-        
-        // Subscribe to events only once and track subscription state
-        if (!_subscribedToPlayerEvents)
+        var player = _transportManager.GetOrCreateSegmentPlayer();
+
+        // Subscribe to segment lifecycle events exactly once.
+        if (!_subscribedToSegmentEvents)
         {
-            _segmentPlayer.Ended += _segmentEndedHandler;
-            _segmentPlayer.ErrorOccurred += _segmentErrorHandler;
-            _subscribedToPlayerEvents = true;
+            player.Ended        += _segmentEndedHandler;
+            player.ErrorOccurred += _segmentErrorHandler;
+            _subscribedToSegmentEvents = true;
         }
-        
-        return _segmentPlayer;
+
+        return player;
     }
 
     public async Task PlayTtsForSegmentAsync(string segmentId)
@@ -166,7 +160,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void StopTtsPlayback()
     {
-        _segmentPlayer?.Pause();
+        _transportManager.GetOrCreateSegmentPlayer().Pause();
         ActiveTtsSegmentId = null;
         PlaybackState = PlaybackState.Idle;
     }
@@ -202,38 +196,26 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public void StopSourceMedia()
     {
-        _sourceMediaPlayer?.Pause();
+        _transportManager.SourceMediaPlayer?.Pause();
     }
 
-    public IMediaTransport GetOrCreateSourcePlayer()
-    {
-        if (_sourceMediaPlayer is not null) return _sourceMediaPlayer;
-        _sourceMediaPlayer = _injectedSourcePlayer ?? new LibMpvEmbeddedTransport();
-        return _sourceMediaPlayer;
-    }
+    public IMediaTransport GetOrCreateSourcePlayer() =>
+        _transportManager.GetOrCreateSourcePlayer();
 
-    public IMediaTransport? SourceMediaPlayer => _sourceMediaPlayer;
+    public IMediaTransport? SourceMediaPlayer => _transportManager.SourceMediaPlayer;
 
     public void Dispose()
     {
-        // Unsubscribe from events only if we previously subscribed
-        if (_subscribedToPlayerEvents && _segmentPlayer is not null)
+        // Unsubscribe segment events before disposing the transport manager.
+        if (_subscribedToSegmentEvents)
         {
-            _segmentPlayer.Ended -= _segmentEndedHandler;
-            _segmentPlayer.ErrorOccurred -= _segmentErrorHandler;
-            _subscribedToPlayerEvents = false;
+            var segmentPlayer = _transportManager.GetOrCreateSegmentPlayer();
+            segmentPlayer.Ended         -= _segmentEndedHandler;
+            segmentPlayer.ErrorOccurred -= _segmentErrorHandler;
+            _subscribedToSegmentEvents = false;
         }
 
-        // Only dispose if we created the player; injected players are owned by the caller.
-        if (_injectedSegmentPlayer is null)
-        {
-            _segmentPlayer?.Dispose();
-        }
-
-        if (_injectedSourcePlayer is null)
-        {
-            _sourceMediaPlayer?.Dispose();
-        }
+        _transportManager.Dispose();
     }
 
     public string StateFilePath => _store.StateFilePath;

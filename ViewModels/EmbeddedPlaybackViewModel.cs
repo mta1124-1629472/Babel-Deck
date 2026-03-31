@@ -779,53 +779,38 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             return;
         }
 
-        // Smart wipe: determine minimum reset point based on what settings changed,
-        // then reset and fall through into the run path.
+        // Smart wipe: coordinator determines which stages are invalidated by settings changes;
+        // ViewModel applies the UI side-effects (clearing segments, disabling active modes).
         if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
         {
-            var cs = _coordinator.CurrentSession;
-            var s = _coordinator.CurrentSettings;
-
-            bool wipeTranscription = cs.TranscriptionProvider != s.TranscriptionProvider
-                || cs.TranscriptionModel != s.TranscriptionModel;
-            bool wipeTranslation = wipeTranscription
-                || cs.TranslationProvider != s.TranslationProvider
-                || cs.TranslationModel != s.TranslationModel
-                || cs.TargetLanguage != s.TargetLanguage;
-            bool wipeTts = wipeTranslation
-                || cs.TtsProvider != s.TtsProvider
-                || cs.TtsVoice != s.TtsVoice;
-
             if (IsSubtitleModeOn) ToggleSubtitles();
             if (IsDubModeOn) ToggleDubMode();
 
-            if (wipeTranscription)
+            switch (_coordinator.CheckSettingsInvalidation())
             {
-                StatusText = "Transcription settings changed — restarting from scratch…";
-                _coordinator.ResetPipelineToMediaLoaded();
-                Segments.Clear();
-                HasSegments = false;
-            }
-            else if (wipeTranslation)
-            {
-                StatusText = "Translation settings changed — re-running translation…";
-                _coordinator.ResetPipelineToTranscribed();
-                Segments.Clear();
-                HasSegments = false;
-                await RefreshSegmentsAsync();
-            }
-            else if (wipeTts)
-            {
-                StatusText = "TTS settings changed — re-generating audio…";
-                _coordinator.ResetPipelineToTranslated();
-            }
-            else
-            {
-                // Nothing changed — re-run everything from scratch
-                StatusText = "Re-running full pipeline…";
-                _coordinator.ResetPipelineToMediaLoaded();
-                Segments.Clear();
-                HasSegments = false;
+                case PipelineInvalidation.Transcription:
+                    StatusText = "Transcription settings changed — restarting from scratch…";
+                    _coordinator.ResetPipelineToMediaLoaded();
+                    Segments.Clear();
+                    HasSegments = false;
+                    break;
+                case PipelineInvalidation.Translation:
+                    StatusText = "Translation settings changed — re-running translation…";
+                    _coordinator.ResetPipelineToTranscribed();
+                    Segments.Clear();
+                    HasSegments = false;
+                    await RefreshSegmentsAsync();
+                    break;
+                case PipelineInvalidation.Tts:
+                    StatusText = "TTS settings changed — re-generating audio…";
+                    _coordinator.ResetPipelineToTranslated();
+                    break;
+                case PipelineInvalidation.None:
+                    StatusText = "Re-running full pipeline…";
+                    _coordinator.ResetPipelineToMediaLoaded();
+                    Segments.Clear();
+                    HasSegments = false;
+                    break;
             }
         }
 
@@ -842,68 +827,18 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         try
         {
             IsBusy = true;
-            var stage = _coordinator.CurrentSession.Stage;
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] Starting. Current stage: {stage}, SourceLanguage: {_coordinator.CurrentSession.SourceLanguage ?? "(null)"}");
-
-            if (stage < SessionWorkflowStage.Transcribed
-                || _coordinator.CurrentSession.SourceLanguage is null or "unknown")
-            {
-                StatusText = "Transcribing audio…";
-                System.Diagnostics.Debug.WriteLine("[Pipeline] Running transcription…");
-                await _coordinator.TranscribeMediaAsync(ct, progress);
-                System.Diagnostics.Debug.WriteLine($"[Pipeline] Transcription done. Language: {_coordinator.CurrentSession.SourceLanguage}");
-                StatusText = "Transcription complete. Loading segments…";
-                await RefreshSegmentsAsync();
-                System.Diagnostics.Debug.WriteLine($"[Pipeline] Segments loaded after transcription: {Segments.Count}");
-                StatusText = $"Transcribed {Segments.Count} segments. Ready for translation.";
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("[Pipeline] Skipping transcription (already done).");
-            }
-
-            stage = _coordinator.CurrentSession.Stage;
-            if (stage < SessionWorkflowStage.Translated)
-            {
-                StatusText = $"Translating ({_coordinator.CurrentSession.SourceLanguage} → en)…";
-                System.Diagnostics.Debug.WriteLine("[Pipeline] Running translation…");
-                await _coordinator.TranslateTranscriptAsync(ct, progress);
-                System.Diagnostics.Debug.WriteLine("[Pipeline] Translation done.");
-                StatusText = "Translation complete. Loading segments…";
-                await RefreshSegmentsAsync();
-                System.Diagnostics.Debug.WriteLine($"[Pipeline] Segments loaded after translation: {Segments.Count}");
-                StatusText = $"Translated {Segments.Count} segments. Ready for TTS.";
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("[Pipeline] Skipping translation (already done).");
-            }
-
-            stage = _coordinator.CurrentSession.Stage;
-            if (stage < SessionWorkflowStage.TtsGenerated)
-            {
-                StatusText = "Generating dubbed audio…";
-                System.Diagnostics.Debug.WriteLine("[Pipeline] Running TTS…");
-                await _coordinator.GenerateTtsAsync(ct, progress);
-                System.Diagnostics.Debug.WriteLine("[Pipeline] TTS done.");
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("[Pipeline] Skipping TTS (already done).");
-            }
-
+            StatusText = "Running pipeline…";
+            await _coordinator.AdvancePipelineAsync(ct, progress);
             StatusText = "Loading segments…";
             await RefreshSegmentsAsync();
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] Complete. {Segments.Count} segments loaded.");
+            StatusText = _coordinator.CurrentSession.StatusMessage;
         }
         catch (OperationCanceledException)
         {
-            System.Diagnostics.Debug.WriteLine("[Pipeline] Cancelled by user.");
             StatusText = "Pipeline cancelled.";
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Pipeline] Failed: {ex}");
             StatusText = $"Pipeline failed: {ex.Message}";
         }
         finally
