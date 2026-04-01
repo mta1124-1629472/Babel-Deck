@@ -58,7 +58,7 @@ dotnet test
 
 Code-level evidence:
 
-- `LibMpvEmbeddedTransport` constructor applies `SetOption("hwdec", options.Hwdec)` and
+- `LibMpvEmbeddedTransport` constructor applies `SetOption("hwdec", options.HwdecMode)` and
   `SetOption("gpu-api", options.GpuApi)` before the `mpv_initialize()` call, matching the
   libmpv requirement that these options be set at init time.
 - `MediaTransportManager` holds a single `VideoPlaybackOptions` instance and passes it on
