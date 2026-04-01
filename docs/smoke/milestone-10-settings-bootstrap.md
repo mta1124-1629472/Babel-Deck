@@ -66,8 +66,9 @@ Code-level evidence:
   settings are always applied before the first `mpv_initialize()` call.
 - `SettingsViewModel.Apply()` writes all three video settings to `AppSettings` and then
   calls through the coordinator so the settings service persists them to disk immediately.
-- `HardwareEncoderHelper.Resolve(HardwareSnapshot)` returns the first available hardware
-  encoder or falls back to `libx264`; method is defined but has no active call site.
+- `HardwareEncoderHelper.ResolveEncoder(AppSettings settings, HardwareSnapshot hw)` returns
+  the first available hardware encoder or falls back to `libx264`; method is defined but
+  has no active call site.
 
 ## Notes
 
