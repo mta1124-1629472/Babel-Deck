@@ -31,7 +31,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
     [
         new ProviderDescriptor(
             ProviderNames.GoogleTranslateFree,
-            "Google Translate (Free)",
+            "Google Translate (Free — unreliable, web scraper)",
             false,
             null,
             ["default"]),

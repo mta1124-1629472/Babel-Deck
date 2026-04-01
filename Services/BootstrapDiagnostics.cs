@@ -10,7 +10,9 @@ public sealed record BootstrapDiagnostics(
     bool PythonAvailable,
     string? PythonPath,
     bool FfmpegAvailable,
-    string? FfmpegPath)
+    string? FfmpegPath,
+    bool PiperAvailable,
+    string? PiperPath)
 {
     public bool AllDependenciesAvailable => PythonAvailable && FfmpegAvailable;
 
@@ -30,8 +32,10 @@ public sealed record BootstrapDiagnostics(
     {
         var pythonPath = DependencyLocator.FindPython();
         var ffmpegPath = DependencyLocator.FindFfmpeg();
+        var piperPath  = DependencyLocator.FindPiper();
         return new BootstrapDiagnostics(
             pythonPath is not null, pythonPath,
-            ffmpegPath is not null, ffmpegPath);
+            ffmpegPath is not null, ffmpegPath,
+            piperPath  is not null, piperPath);
     }
 }

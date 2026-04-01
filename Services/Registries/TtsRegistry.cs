@@ -86,6 +86,10 @@ public sealed class TtsRegistry : ITtsRegistry
                 RequiresModelDownload: true,
                 ModelDownloadDescription: $"Download Piper voice {modelOrVoice}");
 
+        if (providerId == ProviderNames.Piper && DependencyLocator.FindPiper() is null)
+            return new ProviderReadiness(false,
+                "Piper CLI not found on PATH. Install from https://github.com/rhasspy/piper/releases.");
+
         if (providerId == ProviderNames.ContainerizedService
             && string.IsNullOrWhiteSpace(settings.ContainerizedServiceUrl))
             return new ProviderReadiness(false, "No containerized service URL configured in Settings.");
