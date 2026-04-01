@@ -14,6 +14,12 @@ public sealed record BootstrapDiagnostics(
     bool PiperAvailable,
     string? PiperPath)
 {
+    /// <summary>
+    /// True only when all hard-required runtime dependencies are present.
+    /// <c>PiperAvailable</c> is intentionally excluded — Piper is an optional provider
+    /// dependency, not a startup requirement. It is checked at the readiness gate when
+    /// the Piper TTS provider is selected.
+    /// </summary>
     public bool AllDependenciesAvailable => PythonAvailable && FfmpegAvailable;
 
     public string DiagnosticSummary => AllDependenciesAvailable
