@@ -25,6 +25,8 @@ When preparing any benchmark run plan for Babel Player, prepend an Environment S
 - Allowed `<precision>` values:
   - `fp32` — default CPU full-precision
   - `fp16` — GPU half-precision
+  - `fp8` — 8-bit float (GPU, e.g. NVIDIA H100/Ada)
+  - `fp4` — 4-bit float (GPU, newest hardware only)
   - `int8` — quantized (CPU or GPU)
 - Example: `fp16_8c16t_32g`
 4. If any required field is unknown, keep the field and set value to `unknown`; do not omit.
