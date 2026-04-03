@@ -6,7 +6,7 @@ It takes a source file through:
 
 `source media -> timed transcript -> translated dialogue -> spoken dubbed output -> in-context preview and refinement`
 
-![Babel Player preview](/D:/Dev/Babel-Player/Assets/preview.png)
+![Babel Player preview](Assets/preview.png)
 
 ## Install
 
