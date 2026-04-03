@@ -105,19 +105,19 @@ python -m py_compile inference/main.py
 
 ## Project Layout
 
-- [App.axaml.cs](/D:/Dev/Babel-Player/App.axaml.cs) owns startup and composition
-- [SessionWorkflowCoordinator.cs](/D:/Dev/Babel-Player/Services/SessionWorkflowCoordinator.cs) owns workflow state and stage progression
-- [EmbeddedPlaybackViewModel.cs](/D:/Dev/Babel-Player/ViewModels/EmbeddedPlaybackViewModel.cs) owns playback and preview behavior
-- [Services](/D:/Dev/Babel-Player/Services) contains providers, persistence, transport, and host-management code
-- [docs/smoke](/D:/Dev/Babel-Player/docs/smoke) records manual verification notes
+- [App.axaml.cs](App.axaml.cs) owns startup and composition
+- [SessionWorkflowCoordinator.cs](Services/SessionWorkflowCoordinator.cs) owns workflow state and stage progression
+- [EmbeddedPlaybackViewModel.cs](ViewModels/EmbeddedPlaybackViewModel.cs) owns playback and preview behavior
+- [Services](Services) contains providers, persistence, transport, and host-management code
+- [docs/smoke](docs/smoke) records manual verification notes
 
 ## Contributing
 
 Read these before making changes:
 
-- [AGENTS.md](/D:/Dev/Babel-Player/AGENTS.md)
-- [PLAN.md](/D:/Dev/Babel-Player/PLAN.md)
-- [docs/containers.md](/D:/Dev/Babel-Player/docs/containers.md)
-- [CONTRIBUTING.md](/D:/Dev/Babel-Player/CONTRIBUTING.md)
+- [AGENTS.md](AGENTS.md)
+- [PLAN.md](PLAN.md)
+- [docs/containers.md](docs/containers.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
 
 The project is in active milestone hardening. Changes should preserve the working dubbing loop and keep readiness, hosting, and release behavior truthful.

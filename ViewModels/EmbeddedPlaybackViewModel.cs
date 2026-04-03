@@ -366,7 +366,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         ComputeProfile TtsRuntime,
         string TtsProvider,
         string TtsModelOrVoice,
-        string ContainerizedServiceUrl);
+        string GpuServiceUrl);
 
     private sealed record ProviderReadinessStatus(
         string TranscriptionStatus,
@@ -381,8 +381,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
         if (readiness.RequiresModelDownload)
             return "⬇ Download required (will run automatically)";
 
-        if (readiness.BlockingReason?.StartsWith(
-                "Containerized inference service is starting",
+        if (readiness.BlockingReason?.Contains(
+                // Message format produced by ContainerizedProviderReadiness.MapProbeResultToReadiness:
+                // "{hostLabel} is starting at {serviceUrl}..."
+                " is starting at ",
                 StringComparison.Ordinal) == true)
         {
             return $"⏳ {readiness.BlockingReason}";
@@ -427,7 +429,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
             $"selection=({snapshot.TranscriptionRuntime}/{snapshot.TranscriptionProvider}/{snapshot.TranscriptionModel}, " +
             $"{snapshot.TranslationRuntime}/{snapshot.TranslationProvider}/{snapshot.TranslationModel}, " +
             $"{snapshot.TtsRuntime}/{snapshot.TtsProvider}/{snapshot.TtsModelOrVoice}), " +
-            $"containerUrl={snapshot.ContainerizedServiceUrl}");
+            $"gpuServiceUrl={snapshot.GpuServiceUrl}");
 
         _ = RefreshProviderReadinessStatusesAsync(snapshot, version, cts.Token);
     }
@@ -450,7 +452,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase
                 && _coordinator.ContainerizedProbe is not null)
             {
                 _ = await _coordinator.ContainerizedProbe.WaitForProbeAsync(
-                    snapshot.ContainerizedServiceUrl,
+                    snapshot.GpuServiceUrl,
                     forceRefresh: false,
                     waitTimeout: TimeSpan.FromSeconds(30),
                     cancellationToken);

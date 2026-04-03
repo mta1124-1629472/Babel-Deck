@@ -29,20 +29,12 @@ app = FastAPI(
 # Global model instances (loaded once)
 whisper_model = None
 whisper_model_key = None
-xtts_model = None
 nllb_tokenizer = None
 nllb_model = None
 nllb_model_key = None
 
 HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
-
-# XTTS availability probe — None = not yet checked, True/False = result
-xtts_available: Optional[bool] = None
-xtts_error: Optional[str] = None
-
-# In-memory reference store: speaker_id -> {"audio_path": str, "transcript": str|None}
-xtts_reference_store: dict[str, dict] = {}
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -117,11 +109,6 @@ class TtsResponse(BaseModel):
     file_size_bytes: int
     error_message: Optional[str] = None
 
-class XttsReferenceResponse(BaseModel):
-    success: bool
-    reference_id: str
-    error_message: Optional[str] = None
-
 class HealthResponse(BaseModel):
     status: str
     timestamp: str
@@ -136,48 +123,6 @@ class CapabilitiesResponse(BaseModel):
     transcription: StageCapability
     translation: StageCapability
     tts: StageCapability
-
-# ============================================================================
-# XTTS helpers
-# ============================================================================
-
-def _probe_xtts_available() -> bool:
-    """Attempt to import TTS.api and cache the result. Never raises."""
-    global xtts_available, xtts_error
-    if xtts_available is not None:
-        return xtts_available
-    try:
-        from TTS.api import TTS  # noqa: F401
-        xtts_available = True
-        xtts_error = None
-        logger.info("XTTS-v2 (TTS.api) import probe: available")
-    except Exception as e:
-        xtts_available = False
-        xtts_error = str(e)
-        logger.warning(f"XTTS-v2 (TTS.api) import probe: unavailable — {e}")
-    return xtts_available
-
-
-def get_xtts_model():
-    """Lazy-load XTTS-v2. Raises on failure."""
-    global xtts_model, xtts_available, xtts_error
-    if xtts_model is not None:
-        return xtts_model
-    try:
-        from TTS.api import TTS
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"Loading XTTS-v2 model on device '{device}'")
-        xtts_model = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2").to(device)
-        xtts_available = True
-        xtts_error = None
-        logger.info("XTTS-v2 model loaded successfully")
-        return xtts_model
-    except Exception as e:
-        xtts_available = False
-        xtts_error = str(e)
-        logger.error(f"Failed to load XTTS-v2 model: {e}", exc_info=True)
-        raise
-
 
 def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
     """Convert WAV to MP3 via ffmpeg. Raises RuntimeError on failure."""
@@ -199,7 +144,6 @@ def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
 def get_stage_capabilities() -> CapabilitiesResponse:
     transcription_ready = HOST_DEVICE == "cuda"
     translation_ready = _probe_nllb_available()
-    xtts_ready = False
 
     return CapabilitiesResponse(
         transcription=StageCapability(
@@ -219,7 +163,9 @@ def get_stage_capabilities() -> CapabilitiesResponse:
             ),
         ),
         tts=StageCapability(
-            ready=xtts_ready,
+            # GPU TTS is intentionally gated in this host build. The field is kept in the
+            # API response so C# consumers can inspect it without breaking deserialization.
+            ready=False,
             detail="Local GPU TTS is not enabled in this host build.",
         ),
     )
