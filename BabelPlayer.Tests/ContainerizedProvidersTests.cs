@@ -502,8 +502,16 @@ public sealed class ContainerizedProvidersTests : IDisposable
         Assert.False(checking.IsReady);
         Assert.Contains("starting", checking.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
-        await Task.Delay(100);
-        var unavailable = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+        var unavailable = checking;
+        for (var i = 0; i < 40; i++)
+        {
+            await Task.Delay(50);
+            unavailable = ContainerizedProviderReadiness.CheckTranslation(settings, probe);
+            if (!string.IsNullOrWhiteSpace(unavailable.BlockingReason) &&
+                !unavailable.BlockingReason.Contains("starting", StringComparison.OrdinalIgnoreCase))
+                break;
+        }
+
         Assert.False(unavailable.IsReady);
         Assert.Contains("Start your local Docker GPU host", unavailable.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
