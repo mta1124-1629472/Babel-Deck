@@ -1207,7 +1207,8 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
             AppSettings settings,
             IProgress<double>? progress = null,
             CancellationToken ct = default,
-            ComputeProfile? profile = null) =>
+            ComputeProfile? profile = null,
+            ApiKeyStore? keyStore = null) =>
             Task.FromResult(true);
     }
 

@@ -532,7 +532,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     CurrentSettings,
                     progress,
                     cancellationToken,
-                    CurrentSettings.TranscriptionProfile))
+                    CurrentSettings.TranscriptionProfile,
+                    KeyStore))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranscriptionModel}'.");
         }
 
@@ -785,7 +786,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     CurrentSettings,
                     progress,
                     cancellationToken,
-                    CurrentSettings.TranslationProfile))
+                    CurrentSettings.TranslationProfile,
+                    KeyStore))
                 throw new InvalidOperationException($"Failed to download model '{CurrentSettings.TranslationModel}'.");
         }
 
@@ -869,7 +871,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                     CurrentSettings,
                     progress,
                     cancellationToken,
-                    CurrentSettings.TtsProfile))
+                    CurrentSettings.TtsProfile,
+                    KeyStore))
                 throw new InvalidOperationException($"Failed to download voice '{v}'.");
         }
 

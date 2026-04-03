@@ -16,7 +16,7 @@ public interface ITranscriptionRegistry
     ITranscriptionProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, ComputeProfile? profile = null);
     ProviderReadiness CheckReadiness(string providerId, string model, AppSettings settings, ApiKeyStore? keyStore, ComputeProfile? profile = null);
     Task<bool> EnsureModelAsync(string providerId, string model, AppSettings settings,
-                                 IProgress<double>? progress = null, CancellationToken ct = default, ComputeProfile? profile = null);
+                                 IProgress<double>? progress = null, CancellationToken ct = default, ComputeProfile? profile = null, ApiKeyStore? keyStore = null);
 }
 
 public sealed class TranscriptionRegistry : ITranscriptionRegistry
@@ -131,13 +131,13 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
     }
 
     public async Task<bool> EnsureModelAsync(string providerId, string model, AppSettings settings,
-                                              IProgress<double>? progress = null, CancellationToken ct = default, ComputeProfile? profile = null)
+                                              IProgress<double>? progress = null, CancellationToken ct = default, ComputeProfile? profile = null, ApiKeyStore? keyStore = null)
     {
         var resolvedProfile = ResolveProfile(providerId, settings, profile);
         var normalizedProviderId = ResolveProviderId(providerId, settings, resolvedProfile);
         var desc = GetAvailableProviders(resolvedProfile).FirstOrDefault(p => p.Id == normalizedProviderId);
         if (desc == null || !desc.IsImplemented) return false;
-        var provider = CreateProvider(normalizedProviderId, settings, null, resolvedProfile);
+        var provider = CreateProvider(normalizedProviderId, settings, keyStore, resolvedProfile);
         return await provider.EnsureReadyAsync(settings, progress, ct);
     }
 
