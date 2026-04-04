@@ -330,25 +330,44 @@ async def transcribe(
 # Translation
 # ============================================================================
 
+def normalize_nllb_model_id(model_name: str) -> str:
+    normalized = model_name.strip()
+    if not normalized:
+        raise ValueError("Model name must not be empty")
+
+    if "\\" in normalized or normalized.startswith("/") or normalized.endswith("/"):
+        raise ValueError(f"Invalid model name: {model_name}")
+
+    if "/" not in normalized:
+        normalized = f"facebook/{normalized}"
+
+    namespace, repo_name = normalized.split("/", 1)
+    if not namespace or not repo_name or "/" in repo_name:
+        raise ValueError(f"Invalid model name: {model_name}")
+
+    return normalized
+
+
 def load_nllb_model(model_name: str):
     global nllb_tokenizer, nllb_model, nllb_model_key
-    if nllb_model is None or nllb_model_key != model_name:
+    normalized_model_name = normalize_nllb_model_id(model_name)
+    if nllb_model is None or nllb_model_key != normalized_model_name:
         from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-        logger.info(f"Loading NLLB '{model_name}' on {HOST_DEVICE}")
-        nllb_tokenizer = AutoTokenizer.from_pretrained(model_name)
+        logger.info(f"Loading NLLB '{normalized_model_name}' on {HOST_DEVICE}")
+        nllb_tokenizer = AutoTokenizer.from_pretrained(normalized_model_name)
         # FIX: load with correct dtype directly to avoid float32 OOM on CUDA
         model_kwargs: dict = {}
         if HOST_DEVICE == "cuda":
             cuda_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
             model_kwargs["torch_dtype"] = cuda_dtype
             model_kwargs["device_map"] = "cuda"
-        nllb_model = AutoModelForSeq2SeqLM.from_pretrained(model_name, **model_kwargs)
+        nllb_model = AutoModelForSeq2SeqLM.from_pretrained(normalized_model_name, **model_kwargs)
         # FIX: set eval mode after loading to avoid tracking gradients at inference time
         nllb_model.eval()
         if HOST_DEVICE != "cuda":
             # device_map handles GPU placement above; only needed for CPU
             nllb_model = nllb_model.to(HOST_DEVICE)
-        nllb_model_key = model_name
+        nllb_model_key = normalized_model_name
         logger.info("NLLB loaded")
     return nllb_tokenizer, nllb_model
 
