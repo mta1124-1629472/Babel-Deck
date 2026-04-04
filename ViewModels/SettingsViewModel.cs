@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -34,7 +35,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         ModelsTab              = modelsTab;
         _containerizedManager  = containerizedManager ?? NullInferenceManager.Instance;
 
-        // Load current settings from coordinator (not disk, to avoid losing side-panel changes)
         var current = _coordinator.CurrentSettings;
         SelectedVoice          = current.TtsVoice;
         SelectedTheme          = current.Theme;
@@ -47,11 +47,24 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         TranscriptionCpuThreads = current.TranscriptionCpuThreads;
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
 
+        // Diarization
+        DiarizationProvider          = current.DiarizationProvider;
+        DiarizationHuggingFaceToken  = current.DiarizationHuggingFaceToken;
+        DiarizationMinSpeakers       = current.DiarizationMinSpeakers;
+        DiarizationMaxSpeakers       = current.DiarizationMaxSpeakers;
+
         // Theme options
         ThemeOptions = new[] { "Light", "Dark", "System" };
-        
+
         // TTS voice options
         TtsVoiceOptions = [.. TtsRegistry.EdgeTtsVoices];
+
+        // Diarization provider options: "" (disabled) + registered providers
+        DiarizationProviderOptions = new[] { "" }
+            .Concat(new DiarizationRegistry(new AppLog())
+                .GetAvailableProviders()
+                .Select(p => p.Id))
+            .ToArray();
 
         // Video hardware settings
         _videoHwdec          = current.VideoHwdec;
@@ -78,10 +91,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     // ── About ─────────────────────────────────────────────────────────────────
 
-    /// <summary>Version string read from the assembly at runtime (e.g. "Version 1.2.0").</summary>
     public string AppVersion   => $"Version {BuildInfo.Version}";
-
-    /// <summary>Build date string read from the assembly at runtime (e.g. "Build date: 2026-04-03").</summary>
     public string AppBuildDate => $"Build date: {BuildInfo.BuildDate}";
 
     // ── Backend restart ───────────────────────────────────────────────────────
@@ -105,14 +115,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         IsRestartingBackend = true;
         BackendStatusText   = "Restarting\u2026";
 
-        // Snapshot settings so the manager picks the right provider
         var settings = _coordinator.CurrentSettings;
 
         try
         {
             var result = await _containerizedManager
                 .EnsureStartedAsync(settings, ContainerizedStartupTrigger.Manual, ct)
-                .ConfigureAwait(true); // stay on UI thread after await
+                .ConfigureAwait(true);
 
             BackendStatusText = result == ContainerizedStartResult.AlreadyRunning
                 || result == ContainerizedStartResult.Started
@@ -185,6 +194,23 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     private int _transcriptionNumWorkers = 1;
+
+    // ── Diarization ───────────────────────────────────────────────────────────
+
+    /// <summary>Available diarization provider IDs for the UI dropdown. First entry is empty = disabled.</summary>
+    public string[] DiarizationProviderOptions { get; }
+
+    [ObservableProperty]
+    private string _diarizationProvider = "";
+
+    [ObservableProperty]
+    private string _diarizationHuggingFaceToken = "";
+
+    [ObservableProperty]
+    private int? _diarizationMinSpeakers;
+
+    [ObservableProperty]
+    private int? _diarizationMaxSpeakers;
 
     // ── Video hardware decode & encode ────────────────────────────────────────
 
@@ -261,7 +287,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private void Apply()
     {
         var settings = _coordinator.CurrentSettings;
-        
+
         settings.TtsVoice           = SelectedVoice ?? settings.TtsVoice;
         settings.Theme              = SelectedTheme ?? settings.Theme;
         settings.MaxRecentSessions  = MaxRecentSessions;
@@ -276,6 +302,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             : TranscriptionCpuComputeType;
         settings.TranscriptionCpuThreads = Math.Max(0, TranscriptionCpuThreads);
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
+
+        // Diarization
+        settings.DiarizationProvider         = DiarizationProvider ?? "";
+        settings.DiarizationHuggingFaceToken  = DiarizationHuggingFaceToken?.Trim() ?? "";
+        settings.DiarizationMinSpeakers       = DiarizationMinSpeakers is > 0 ? DiarizationMinSpeakers : null;
+        settings.DiarizationMaxSpeakers       = DiarizationMaxSpeakers is > 0 ? DiarizationMaxSpeakers : null;
+
         settings.VideoHwdec          = VideoHwdec;
         settings.VideoGpuApi         = VideoGpuApi;
         settings.VideoExportEncoder  = VideoExportEncoder;

@@ -42,6 +42,26 @@ public sealed class AppSettings
     /// <summary>Diarization provider identifier (e.g. "pyannote-local"). Empty string = diarization disabled.</summary>
     public string DiarizationProvider { get; set; } = "";
 
+    /// <summary>
+    /// HuggingFace access token used by the pyannote diarization provider to download
+    /// gated models (pyannote/speaker-diarization-3.1). Required when DiarizationProvider
+    /// is non-empty. Stored in app-settings.json — consider using the OS credential store
+    /// for production deployments.
+    /// </summary>
+    public string DiarizationHuggingFaceToken { get; set; } = "";
+
+    /// <summary>
+    /// Optional lower bound on the number of speakers passed to the diarization pipeline.
+    /// null = no constraint (let the model decide).
+    /// </summary>
+    public int? DiarizationMinSpeakers { get; set; } = null;
+
+    /// <summary>
+    /// Optional upper bound on the number of speakers passed to the diarization pipeline.
+    /// null = no constraint (let the model decide).
+    /// </summary>
+    public int? DiarizationMaxSpeakers { get; set; } = null;
+
     /// <summary>Translation provider identifier (e.g. "google-translate-free", "openai").</summary>
     public string TranslationProvider { get; set; } = ProviderNames.GoogleTranslateFree;
 
@@ -171,14 +191,14 @@ public sealed class AppSettings
 
     /// <summary>
     /// Enable NVIDIA RTX Video Super Resolution via the d3d11vpp filter.
-    /// Requires gpu-next backend, RTX GPU, driver ≥ 551.23, and
+    /// Requires gpu-next backend, RTX GPU, driver >= 551.23, and
     /// "RTX Video Enhancement" enabled in NVIDIA Control Panel.
     /// Takes effect on app restart.
     /// </summary>
     public bool VideoVsrEnabled { get; set; } = false;
 
     /// <summary>
-    /// RTX Video Super Resolution quality level (1 = Performance … 4 = Quality).
+    /// RTX Video Super Resolution quality level (1 = Performance ... 4 = Quality).
     /// Only used when VideoVsrEnabled is true.
     /// Takes effect on app restart.
     /// </summary>
@@ -225,7 +245,7 @@ public sealed class AppSettings
     /// <summary>UI theme: "Light", "Dark", or "System".</summary>
     public string Theme { get; set; } = "System";
 
-    /// <summary>Maximum entries kept in the recent-sessions list (1–20).</summary>
+    /// <summary>Maximum entries kept in the recent-sessions list (1-20).</summary>
     public int MaxRecentSessions { get; set; } = 10;
 
     /// <summary>Whether to auto-save the session snapshot on app exit.</summary>
