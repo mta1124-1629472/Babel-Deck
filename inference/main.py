@@ -623,18 +623,22 @@ def _resolve_reference_path_in_temp_dir(path_value: str) -> Optional[Path]:
         return None
 
 
-def _evict_reference(ref_id: str) -> None:
-    """Remove a reference from the registry and delete its backing file."""
+def _evict_reference(ref_id: str) -> bool:
+    """Remove a reference from the registry and delete its backing file.
+
+    Returns True if an entry was found and removed, False if no entry existed.
+    """
     entry = xtts_reference_registry.pop(ref_id, None)
-    if entry:
-        old_path = entry.get("path")
-        if old_path:
-            safe_path = _resolve_reference_path_in_temp_dir(old_path)
-            if safe_path is None:
-                logger.warning(
-                    f"Skipping deletion for reference file outside TEMP_DIR or with invalid path: {old_path}"
-                )
-                return
+    if entry is None:
+        return False
+    old_path = entry.get("path")
+    if old_path:
+        safe_path = _resolve_reference_path_in_temp_dir(old_path)
+        if safe_path is None:
+            logger.warning(
+                f"Skipping deletion for reference file outside TEMP_DIR or with invalid path: {old_path}"
+            )
+        else:
             try:
                 if safe_path.is_file() or not safe_path.exists():
                     safe_path.unlink(missing_ok=True)
@@ -642,6 +646,7 @@ def _evict_reference(ref_id: str) -> None:
                     logger.warning(f"Skipping deletion for non-file reference path: {safe_path}")
             except Exception as exc:
                 logger.warning(f"Could not delete reference file {safe_path}: {exc}")
+    return True
 
 
 @app.delete("/speakers/references/{ref_id}")
@@ -651,9 +656,8 @@ async def delete_speaker_reference(ref_id: str):
     The C# coordinator should call this when a dubbing session ends so that
     extracted reference WAVs do not accumulate in TEMP_DIR.
     """
-    if ref_id not in xtts_reference_registry:
+    if not _evict_reference(ref_id):
         raise HTTPException(status_code=404, detail=f"reference_id '{ref_id}' not found")
-    _evict_reference(ref_id)
     return {"success": True, "deleted": ref_id}
 
 
