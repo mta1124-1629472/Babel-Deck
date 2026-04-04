@@ -279,14 +279,26 @@ async def get_stage_capabilities():
 # Transcription
 # ============================================================================
 
-def load_whisper_model(model_name: str):
+def load_whisper_model(
+    model_name: str,
+    cpu_compute_type: str = "int8",
+    cpu_threads: int = 0,
+    num_workers: int = 1,
+):
     global whisper_model, whisper_model_key
-    if whisper_model is None or whisper_model_key != model_name:
+    effective_compute = EFFECTIVE_HOST_COMPUTE_TYPE if HOST_DEVICE == "cuda" else cpu_compute_type
+    cache_key = f"{model_name}:{effective_compute}:{cpu_threads}:{num_workers}"
+    if whisper_model is None or whisper_model_key != cache_key:
         from faster_whisper import WhisperModel
-        compute_type = "float16" if HOST_DEVICE == "cuda" else "int8"
-        logger.info(f"Loading Whisper '{model_name}' on {HOST_DEVICE} ({compute_type})")
-        whisper_model = WhisperModel(model_name, device=HOST_DEVICE, compute_type=compute_type)
-        whisper_model_key = model_name
+        logger.info(f"Loading Whisper '{model_name}' on {HOST_DEVICE} ({effective_compute})")
+        whisper_model = WhisperModel(
+            model_name,
+            device=HOST_DEVICE,
+            compute_type=effective_compute,
+            cpu_threads=cpu_threads,
+            num_workers=num_workers,
+        )
+        whisper_model_key = cache_key
         logger.info("Whisper loaded")
     return whisper_model
 
@@ -306,7 +318,7 @@ async def transcribe(
         temp_audio_path = TEMP_DIR / f"audio_{uuid4().hex}.wav"
         contents = await file.read()
         temp_audio_path.write_bytes(contents)
-        whisper = load_whisper_model(model)
+        whisper = load_whisper_model(model, cpu_compute_type=cpu_compute_type, cpu_threads=cpu_threads, num_workers=num_workers)
         segments_gen, info = whisper.transcribe(str(temp_audio_path), language=language or None)
         segments = [
             TranscriptSegmentResponse(start=s.start, end=s.end, text=s.text.strip())
@@ -382,8 +394,18 @@ async def translate(
     try:
         data = json.loads(transcript_json)
         segments = data.get("segments", [])
-        src_flores = FLORES.get(source_language, source_language)
-        tgt_flores = FLORES.get(target_language, target_language)
+        if source_language not in FLORES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source language '{source_language}' is not a supported NLLB language code.",
+            )
+        if target_language not in FLORES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Target language '{target_language}' is not a supported NLLB language code.",
+            )
+        src_flores = FLORES[source_language]
+        tgt_flores = FLORES[target_language]
         tokenizer, nllb = load_nllb_model(model)
         translated: list[TranslatedSegmentResponse] = []
         for seg in segments:
@@ -422,6 +444,15 @@ async def translate(
 def load_xtts_model(model_name: str = XTTS_MODEL_NAME):
     global xtts_model, xtts_model_key
     if xtts_model is None or xtts_model_key != model_name:
+        # Compatibility shim: TTS==0.22.0 references transformers.BeamSearchScorer which
+        # was moved in newer transformers versions. Patch before importing TTS.api.
+        try:
+            import transformers as _transformers
+            if not hasattr(_transformers, "BeamSearchScorer"):
+                from transformers.generation.beam_search import BeamSearchScorer as _bsc
+                _transformers.BeamSearchScorer = _bsc
+        except Exception:
+            pass
         from TTS.api import TTS
         logger.info(f"Loading XTTS '{model_name}'")
         xtts_model = TTS(model_name).to(HOST_DEVICE)
@@ -486,7 +517,8 @@ async def xtts_segment(
         if not ref_audio_path:
             raise HTTPException(status_code=400, detail="XTTS requires a reference audio file or valid reference_id.")
 
-        tts.tts_to_file(
+        await asyncio.to_thread(
+            tts.tts_to_file,
             text=text,
             speaker_wav=ref_audio_path,
             language=language or "en",
@@ -573,16 +605,18 @@ async def qwen_segment(
 
         lang = (language or "en").strip().lower()
 
-        result = tts.synthesise(
-            text=text,
-            reference_audio=ref_audio_path,
-            reference_text=reference_text or "",
-            language=lang,
-        )
+        def _synth_and_write() -> None:
+            import soundfile as sf
+            result = tts.synthesise(
+                text=text,
+                reference_audio=ref_audio_path,
+                reference_text=reference_text or "",
+                language=lang,
+            )
+            sample_rate, audio_data = result
+            sf.write(str(out_path), audio_data, sample_rate, subtype="PCM_16")
 
-        import soundfile as sf
-        sample_rate, audio_data = result
-        sf.write(str(out_path), audio_data, sample_rate, subtype="PCM_16")
+        await asyncio.to_thread(_synth_and_write)
 
         if temp_ref_path:
             background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
@@ -667,4 +701,8 @@ if __name__ == "__main__":
     if args.require_cuda and not torch.cuda.is_available():
         logger.error("--require-cuda specified but CUDA is not available")
         sys.exit(1)
+    if args.compute_type:
+        HOST_COMPUTE_TYPE = args.compute_type
+        EFFECTIVE_HOST_COMPUTE_TYPE = args.compute_type
+        logger.info(f"Compute type override from CLI: {args.compute_type}")
     uvicorn.run(app, host=args.host, port=args.port)
