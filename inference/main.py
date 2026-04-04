@@ -512,7 +512,10 @@ async def load_pyannote_pipeline_async(hf_token: str):
     if pyannote_pipeline is not None and pyannote_pipeline_key == hf_token:
         return pyannote_pipeline
 
-    async with _pyannote_load_lock:
+    # Acquire the lock lazily — _pyannote_load_lock starts as None and must be
+    # created from within an async context so it binds to the running event loop.
+    lock = await _get_pyannote_load_lock()
+    async with lock:
         # Re-check inside the lock in case another coroutine loaded while we waited
         if pyannote_pipeline is not None and pyannote_pipeline_key == hf_token:
             return pyannote_pipeline
@@ -677,8 +680,10 @@ async def extract_speaker_references(
       4. Extracts the clip via ffmpeg (frame-accurate seek).
       5. Registers it in the XTTS reference registry so subsequent TTS calls
          can pass `reference_id` instead of re-uploading the file.
-      6. Evicts any pre-existing registry entry for the same speaker_id so
-         temp files do not accumulate across repeated calls.
+      6. Evicts any pre-existing registry entry for the same speaker_id AND
+         session_id so temp files do not accumulate across repeated calls from
+         the same session, without invalidating references from other sessions
+         that happen to share the same diarization label (e.g. SPEAKER_00).
 
     Parameters
     ----------
@@ -690,6 +695,11 @@ async def extract_speaker_references(
     """
     if shutil.which("ffmpeg") is None:
         raise HTTPException(status_code=500, detail="ffmpeg not found on PATH — required for reference extraction")
+
+    # A unique ID for this extraction call. Stored on every registry entry so
+    # re-extractions from the same session only evict their own prior refs,
+    # never refs belonging to a concurrent session with the same speaker labels.
+    session_id = uuid4().hex
 
     temp_source_path: Optional[Path] = None
     try:
@@ -765,11 +775,12 @@ async def extract_speaker_references(
                     detail=f"ffmpeg extraction failed for speaker {speaker_id}: {proc.stderr[-200:]}",
                 )
 
-            # Evict any pre-existing reference for this speaker before registering
-            # the new one, so the old temp file is deleted and not orphaned.
+            # Evict only refs that belong to the same session AND speaker — never
+            # refs from other concurrent sessions that share the same speaker label.
             existing_ref_ids = [
                 rid for rid, entry in xtts_reference_registry.items()
                 if entry.get("speaker_id") == speaker_id
+                and entry.get("session_id") == session_id
             ]
             for old_ref_id in existing_ref_ids:
                 _evict_reference(old_ref_id)
@@ -777,6 +788,7 @@ async def extract_speaker_references(
             ref_id = f"{speaker_id}_{uuid4().hex}"
             xtts_reference_registry[ref_id] = {
                 "speaker_id": speaker_id,
+                "session_id": session_id,
                 "path": str(out_path),
                 "transcript": None,
             }
@@ -788,7 +800,7 @@ async def extract_speaker_references(
             ))
             logger.info(
                 f"Extracted {extract_duration:.2f}s reference for {speaker_id} "
-                f"-> ref_id={ref_id}"
+                f"-> ref_id={ref_id} session={session_id}"
             )
 
         background_tasks.add_task(lambda p=temp_source_path: p.unlink(missing_ok=True))
@@ -842,6 +854,7 @@ async def register_xtts_reference(
         ref_id = f"{speaker_id}_{uuid4().hex}"
         xtts_reference_registry[ref_id] = {
             "speaker_id": speaker_id,
+            "session_id": None,
             "path": str(temp_path),
             "transcript": transcript,
         }
