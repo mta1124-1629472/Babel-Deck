@@ -56,9 +56,15 @@ pyannote_pipeline_key: str | None = None
 _xtts_warmup_status: str | None = None
 _qwen_warmup_status: str | None = None
 # Pyannote is loaded lazily on first /diarize (requires HF token);
-# this lock prevents concurrent load races.
-_pyannote_load_lock = asyncio.Lock()
+# this lock prevents concurrent load races. It must be created from an
+# async context so it binds to the running event loop used by the app.
+_pyannote_load_lock: asyncio.Lock | None = None
 
+async def _get_pyannote_load_lock() -> asyncio.Lock:
+    global _pyannote_load_lock
+    if _pyannote_load_lock is None:
+        _pyannote_load_lock = asyncio.Lock()
+    return _pyannote_load_lock
 HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
 # Tracks effective compute type after per-stage validation and potential downgrades
