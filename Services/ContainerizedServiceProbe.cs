@@ -34,7 +34,7 @@ public sealed class ContainerizedServiceProbe
     private readonly AppLog _log;
     private readonly Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>> _probeFunc;
 
-    // Exposed for testing: controls the pause between successive probe retries
+    // Configurable for testing: controls the pause between successive probe retries
     // inside WaitForProbeAsync. Defaults to 250 ms in production.
     private readonly TimeSpan _waitRetryDelay;
 
