@@ -43,6 +43,10 @@ public sealed class ContainerizedServiceProbe
         Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>>? probeFunc = null,
         TimeSpan? retryDelay = null)
     {
+        if (retryDelay.HasValue && retryDelay.Value <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(retryDelay), retryDelay, "Retry delay must be greater than TimeSpan.Zero.");
+        }
         _log = log;
         _probeFunc = probeFunc ?? ContainerizedInferenceClient.CheckHealthAsync;
         _waitRetryDelay = retryDelay ?? DefaultWaitRetryDelay;
