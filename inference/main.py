@@ -612,16 +612,36 @@ async def diarize(
 # Per-speaker reference clip extraction
 # ============================================================================
 
+def _resolve_reference_path_in_temp_dir(path_value: str) -> Optional[Path]:
+    """Resolve a reference file path and ensure it stays within TEMP_DIR."""
+    try:
+        candidate = Path(path_value).resolve(strict=False)
+        temp_dir = Path(TEMP_DIR).resolve(strict=False)
+        candidate.relative_to(temp_dir)
+        return candidate
+    except Exception:
+        return None
+
+
 def _evict_reference(ref_id: str) -> None:
     """Remove a reference from the registry and delete its backing file."""
     entry = xtts_reference_registry.pop(ref_id, None)
     if entry:
         old_path = entry.get("path")
         if old_path:
+            safe_path = _resolve_reference_path_in_temp_dir(old_path)
+            if safe_path is None:
+                logger.warning(
+                    f"Skipping deletion for reference file outside TEMP_DIR or with invalid path: {old_path}"
+                )
+                return
             try:
-                Path(old_path).unlink(missing_ok=True)
+                if safe_path.is_file() or not safe_path.exists():
+                    safe_path.unlink(missing_ok=True)
+                else:
+                    logger.warning(f"Skipping deletion for non-file reference path: {safe_path}")
             except Exception as exc:
-                logger.warning(f"Could not delete reference file {old_path}: {exc}")
+                logger.warning(f"Could not delete reference file {safe_path}: {exc}")
 
 
 @app.delete("/speakers/references/{ref_id}")
