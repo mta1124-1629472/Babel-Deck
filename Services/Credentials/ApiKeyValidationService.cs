@@ -21,12 +21,15 @@ public sealed class ApiKeyValidationService
     private readonly Func<string, ElevenLabsApiClient> _elevenLabsClientFactory;
     private readonly Func<string, GoogleApiClient> _googleClientFactory;
 
-    // Reusable HttpClient for HF probes — no auth header baked in so each
+    // Shared fallback HttpClient for HF probes — no auth header baked in so each
     // call uses a new request with its own Authorization header.
-    private static readonly HttpClient _hfHttpClient = new()
+    private static readonly HttpClient _defaultHfHttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(15),
     };
+
+    // Instance field allows tests to inject a stub client via the constructor.
+    private readonly HttpClient _hfHttpClient;
 
     private const string HfWhoAmIUrl        = "https://huggingface.co/api/whoami-v2";
     private const string HfPyannoteRepoId   = "pyannote/speaker-diarization-3.1";
@@ -38,7 +41,8 @@ public sealed class ApiKeyValidationService
         Func<string, OpenAiApiClient>? openAiClientFactory = null,
         Func<string, DeepLApiClient>? deepLClientFactory = null,
         Func<string, ElevenLabsApiClient>? elevenLabsClientFactory = null,
-        Func<string, GoogleApiClient>? googleClientFactory = null)
+        Func<string, GoogleApiClient>? googleClientFactory = null,
+        HttpClient? hfHttpClient = null)
     {
         _transcriptionRegistry = transcriptionRegistry;
         _translationRegistry = translationRegistry;
@@ -47,6 +51,7 @@ public sealed class ApiKeyValidationService
         _deepLClientFactory = deepLClientFactory ?? (apiKey => new DeepLApiClient(apiKey));
         _elevenLabsClientFactory = elevenLabsClientFactory ?? (apiKey => new ElevenLabsApiClient(apiKey));
         _googleClientFactory = googleClientFactory ?? (apiKey => new GoogleApiClient(apiKey));
+        _hfHttpClient = hfHttpClient ?? _defaultHfHttpClient;
     }
 
     public string? GetAvailabilityMessage(string credentialKey)
@@ -105,7 +110,7 @@ public sealed class ApiKeyValidationService
     //   - Valid token but HF model terms not accepted
     //   - Valid token but token scope too narrow (e.g. write-only org token)
 
-    private static async Task<ApiKeyValidationResult> ValidateHuggingFaceAsync(
+    private async Task<ApiKeyValidationResult> ValidateHuggingFaceAsync(
         string token,
         CancellationToken cancellationToken)
     {
@@ -123,7 +128,12 @@ public sealed class ApiKeyValidationService
         HttpResponseMessage whoamiResp;
         try
         {
-            whoamiResp = await _hfHttpClient.SendAsync(whoamiReq, cancellationToken);
+            whoamiResp = await _hfHttpClient.SendAsync(
+                whoamiReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -151,7 +161,12 @@ public sealed class ApiKeyValidationService
         HttpResponseMessage repoResp;
         try
         {
-            repoResp = await _hfHttpClient.SendAsync(repoReq, cancellationToken);
+            repoResp = await _hfHttpClient.SendAsync(
+                repoReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
