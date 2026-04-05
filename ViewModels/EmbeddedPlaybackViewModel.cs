@@ -828,8 +828,23 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     {
         if (_isSynchronizingPipelineSettings) return;
 
-        var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-        _coordinator.SetDefaultTtsVoiceFallback(v);
+        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        var normalizedDisplayValue = normalized ?? string.Empty;
+
+        if (!string.Equals(value, normalizedDisplayValue, StringComparison.Ordinal))
+        {
+            _isSynchronizingPipelineSettings = true;
+            try
+            {
+            DefaultTtsVoiceFallback = normalizedDisplayValue;
+            }
+            finally
+            {
+            _isSynchronizingPipelineSettings = false;
+            }
+        }
+
+        _coordinator.SetDefaultTtsVoiceFallback(normalized);
     }
 
     private static int? NormalizeSpeakerCount(decimal? value)
