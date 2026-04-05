@@ -773,17 +773,20 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         if (!DiarizationProviderOptions.Contains(normalized, StringComparer.Ordinal))
             normalized = string.Empty;
 
-        if (!string.Equals(normalized, value, StringComparison.Ordinal))
+        var expectedAutoDetect = string.Equals(normalized, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
+
+        _isSynchronizingPipelineSettings = true;
+        try
         {
-            _isSynchronizingPipelineSettings = true;
-            try
-            {
+            if (!string.Equals(normalized, value, StringComparison.Ordinal))
                 DiarizationProvider = normalized;
-            }
-            finally
-            {
-                _isSynchronizingPipelineSettings = false;
-            }
+
+            if (IsAutoSpeakerDetectionEnabled != expectedAutoDetect)
+                IsAutoSpeakerDetectionEnabled = expectedAutoDetect;
+        }
+        finally
+        {
+            _isSynchronizingPipelineSettings = false;
         }
 
         _coordinator.CurrentSettings.DiarizationProvider = normalized;
