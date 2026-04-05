@@ -74,8 +74,54 @@ print(json.dumps(result))
 
     // ── IDiarizationProvider ──────────────────────────────────────────────────
 
+    private static string? TryGetHuggingFaceToken(ApiKeyStore? keyStore)
+    {
+        if (keyStore is null)
+            return null;
+
+        var keyStoreType = keyStore.GetType();
+        var credentialKey = CredentialKeys.HuggingFace;
+
+        foreach (var methodName in new[] { "TryGet", "TryGetApiKey", "TryGetKey", "Get", "GetApiKey", "GetKey" })
+        {
+            var methods = keyStoreType.GetMethods();
+            foreach (var method in methods)
+            {
+                if (!string.Equals(method.Name, methodName, StringComparison.Ordinal))
+                    continue;
+
+                var parameters = method.GetParameters();
+                if (parameters.Length == 2 &&
+                    parameters[0].ParameterType == credentialKey.GetType() &&
+                    parameters[1].IsOut &&
+                    parameters[1].ParameterType == typeof(string).MakeByRefType())
+                {
+                    var args = new object?[] { credentialKey, null };
+                    var success = method.Invoke(keyStore, args);
+                    if (success is bool found && found && args[1] is string token && !string.IsNullOrWhiteSpace(token))
+                        return token;
+                }
+
+                if (parameters.Length == 1 && parameters[0].ParameterType == credentialKey.GetType())
+                {
+                    var value = method.Invoke(keyStore, new object?[] { credentialKey }) as string;
+                    if (!string.IsNullOrWhiteSpace(value))
+                        return value;
+                }
+            }
+        }
+
+        return null;
+    }
+
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
+        var huggingFaceToken = TryGetHuggingFaceToken(keyStore);
+        if (string.IsNullOrWhiteSpace(huggingFaceToken))
+        {
+            return ProviderReadiness.NotReady(
+                "Pyannote diarization requires a HuggingFace token. Add a token under the HuggingFace credentials and ensure the required pyannote model access has been accepted.");
+        }
         return ProviderReadiness.Ready;
     }
 
