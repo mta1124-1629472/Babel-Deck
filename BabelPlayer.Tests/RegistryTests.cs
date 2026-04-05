@@ -569,13 +569,9 @@ public sealed class RegistryTests : IDisposable
     public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithNoToken_ReturnsNotReady()
     {
         var keyStore = new ApiKeyStore(_dir);
-
-        var readiness = _diarizationRegistry.CheckReadiness(
-            ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
-
+        var readiness = _diarizationRegistry.CheckReadiness(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
         Assert.False(readiness.IsReady);
-        Assert.NotNull(readiness.BlockingReason);
-        Assert.Contains("HuggingFace", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("HuggingFace token is required", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -591,8 +587,10 @@ public sealed class RegistryTests : IDisposable
             ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
 
         if (!readiness.IsReady)
+        {
             Assert.DoesNotContain("HuggingFace", readiness.BlockingReason ?? "",
                 StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact]
