@@ -293,6 +293,15 @@
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="#808090" VerticalAlignment="Center" />
                                     <NumericUpDown Grid.Row="0" Grid.Column="1"
                                                    Value="{Binding Playback.DiarizationMinSpeakers, Mode=TwoWay}"
+                                       IsVisible="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                            <!-- Speaker count constraints -->
+                            <StackPanel Spacing="5"
+                                        IsEnabled="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="#808090" VerticalAlignment="Center" />
+                                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                                   Value="{Binding Playback.DiarizationMinSpeakers, Mode=TwoWay}"
                                                    Minimum="1" Maximum="20"
                                                    Width="80"
                                                    ToolTip.Tip="Leave blank to let pyannote auto-detect" />
