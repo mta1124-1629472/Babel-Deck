@@ -125,7 +125,7 @@ public sealed partial class SessionWorkflowCoordinator
             var psi = new ProcessStartInfo
             {
                 FileName = ffmpegPath,
-                RedirectStandardOutput = true,
+                RedirectStandardOutput = false,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
