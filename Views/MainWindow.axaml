@@ -272,23 +272,23 @@
                             <!-- Provider selector -->
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Provider" FontSize="12" Foreground="#808090" />
-                                <ComboBox ItemsSource="{Binding Playback.DiarizationProviderOptions}"
-                                          SelectedItem="{Binding Playback.DiarizationProvider, Mode=TwoWay}"
-                                          HorizontalAlignment="Stretch" FontSize="12"
-                                          Background="#1E1E2C" Foreground="#C0C0D0"
-                                          BorderBrush="#2A2A3A"
-                                          ToolTip.Tip="Empty = diarization disabled" />
+                                <TextBox Text="{Binding Coordinator.CurrentSettings.DiarizationProvider, Mode=TwoWay}"
+                                         HorizontalAlignment="Stretch" FontSize="12"
+                                         Background="#1E1E2C" Foreground="#C0C0D0"
+                                         BorderBrush="#2A2A3A"
+                                         Watermark="e.g. pyannote"
+                                         ToolTip.Tip="Empty = diarization disabled" />
                             </StackPanel>
 
                             <!-- HF token hint — visible only when a provider requiring a token is selected -->
                             <TextBlock Text="HuggingFace token required — set it in 🔑 API Keys above."
                                        FontSize="11" Foreground="#C0803A"
                                        TextWrapping="Wrap"
-                                       IsVisible="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                       IsVisible="{Binding Coordinator.CurrentSettings.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
                             <!-- Speaker count constraints -->
                             <StackPanel Spacing="5"
-                                        IsEnabled="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                        IsEnabled="{Binding Coordinator.CurrentSettings.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="#808090" VerticalAlignment="Center" />
                                     <NumericUpDown Grid.Row="0" Grid.Column="1"
