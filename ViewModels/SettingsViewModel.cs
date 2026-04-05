@@ -61,7 +61,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         // Diarization provider options: "" (disabled) + registered providers
         DiarizationProviderOptions = new[] { "" }
-            .Concat(new DiarizationRegistry(new AppLog())
+            .Concat(new DiarizationRegistry(_coordinator.Log)
                 .GetAvailableProviders()
                 .Select(p => p.Id))
             .ToArray();
