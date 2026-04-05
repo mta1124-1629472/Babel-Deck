@@ -25,7 +25,12 @@ public sealed class PyannoteDiarizationProvider : PythonSubprocessServiceBase, I
     // Language consistent with the rest of the codebase — no inline literals
     private const string ScriptPrefix = "diarize";
 
-    public PyannoteDiarizationProvider(AppLog log) : base(log) { }
+    private readonly string? _huggingFaceToken;
+
+    public PyannoteDiarizationProvider(AppLog log, string? huggingFaceToken = null) : base(log)
+    {
+        _huggingFaceToken = huggingFaceToken;
+    }
 
     // ── Script ────────────────────────────────────────────────────────────────
 
@@ -102,7 +107,7 @@ print(json.dumps(result))
 
         var minArg   = request.MinSpeakers?.ToString() ?? "null";
         var maxArg   = request.MaxSpeakers?.ToString() ?? "null";
-        var tokenArg = request.HuggingFaceToken ?? "";
+        var tokenArg = _huggingFaceToken ?? "";
 
         Log.Info($"Starting diarization: {request.SourceAudioPath}");
 
