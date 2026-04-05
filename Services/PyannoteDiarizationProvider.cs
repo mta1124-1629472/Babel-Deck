@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
@@ -18,22 +19,24 @@ namespace Babel.Player.Services;
 /// The script outputs JSON: { "speaker_count": N, "segments": [{ "start": f, "end": f, "speaker": "SPEAKER_00" }] }
 ///
 /// Must have pyannote.audio installed: pip install pyannote.audio
-/// Requires HuggingFace model files accepted via the pyannote hub.
+/// Requires HuggingFace model files accepted via the pyannote hub and a valid HF token.
 /// </summary>
 public sealed class PyannoteDiarizationProvider : PythonSubprocessServiceBase, IDiarizationProvider
 {
     private const string ScriptPrefix = "diarize";
     private readonly ApiKeyStore? _keyStore;
 
-    public PyannoteDiarizationProvider(AppLog log, ApiKeyStore? keyStore = null) : base(log)
+    private readonly string? _huggingFaceToken;
+
+    public PyannoteDiarizationProvider(AppLog log, string? huggingFaceToken = null) : base(log)
     {
-        _keyStore = keyStore;
+        _huggingFaceToken = string.IsNullOrWhiteSpace(huggingFaceToken) ? null : huggingFaceToken.Trim();
     }
 
     // ── Script ────────────────────────────────────────────────────────────────
 
     private const string DiarizeScript = @"
-import sys, json
+import sys, os, json
 
 try:
     from pyannote.audio import Pipeline
@@ -44,7 +47,7 @@ except ImportError:
 audio_path   = sys.argv[1]
 min_speakers = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != 'null' else None
 max_speakers = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] != 'null' else None
-hf_token     = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] != '' else None
+hf_token     = os.environ.get('HF_TOKEN') or None
 
 pipeline = Pipeline.from_pretrained(
     'pyannote/speaker-diarization-3.1',
@@ -80,14 +83,48 @@ print(json.dumps(result))
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
-        var effectiveKeyStore = keyStore ?? _keyStore;
-        var huggingFaceToken = effectiveKeyStore?.GetKey(CredentialKeys.HuggingFace);
-        if (string.IsNullOrWhiteSpace(huggingFaceToken))
+        var store = keyStore ?? _keyStore;
+        var token = store.GetKey(CredentialKeys.HuggingFace);
+        if (string.IsNullOrWhiteSpace(token))
+            return new ProviderReadiness(false,
+                "HuggingFace token is required for pyannote diarization. " +
+                "Set it in Settings > API Keys > HuggingFace.");
+
+        // Fast import probe — verifies pyannote.audio is installed without loading any model.
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName              = PythonPath,
+                RedirectStandardError = true,
+                UseShellExecute       = false,
+                CreateNoWindow        = true,
+            };
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add("import pyannote.audio");
+            using var proc = Process.Start(psi);
+            if (proc == null)
+                return new ProviderReadiness(false,
+                    "Python probe failed. Ensure Python and pyannote.audio are installed.");
+
+            bool exited = proc.WaitForExit(5_000);
+            if (!exited)
+            {
+                proc.Kill();
+                return new ProviderReadiness(false,
+                    "Python probe timed out. Ensure Python and pyannote.audio are installed.");
+            }
+
+            if (proc.ExitCode != 0)
+                return new ProviderReadiness(false,
+                    "pyannote.audio is not installed. Run: pip install pyannote.audio");
+        }
+        catch
         {
             return new ProviderReadiness(false,
-                "Pyannote diarization requires a HuggingFace token. " +
-                "Add it under Settings \u2192 Credentials \u2192 HuggingFace and ensure the required pyannote model access has been accepted.");
+                "Python probe failed. Ensure Python and pyannote.audio are installed.");
         }
+
         return ProviderReadiness.Ready;
     }
 
@@ -106,9 +143,27 @@ print(json.dumps(result))
         if (!File.Exists(request.SourceAudioPath))
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
-        var minArg   = request.MinSpeakers?.ToString() ?? "null";
-        var maxArg   = request.MaxSpeakers?.ToString() ?? "null";
-        var tokenArg = _keyStore?.GetKey(CredentialKeys.HuggingFace) ?? string.Empty;
+        var minArg = request.MinSpeakers?.ToString() ?? "null";
+        var maxArg = request.MaxSpeakers?.ToString() ?? "null";
+        var hfToken = _keyStore.GetKey(CredentialKeys.HuggingFace);
+
+        if (string.IsNullOrWhiteSpace(hfToken))
+        {
+            const string msg = "HuggingFace token is not set. Configure it in Settings > API Keys > HuggingFace.";
+            Log.Error(msg, new InvalidOperationException(msg));
+            return new DiarizationResult(false, [], 0, msg);
+        }
+
+        // Resolve token: per-call override wins over constructor-injected value.
+        // Pass via environment variable — not argv — so the token is not visible
+        // in process listings.
+        var token = !string.IsNullOrWhiteSpace(request.HuggingFaceToken)
+            ? request.HuggingFaceToken!.Trim()
+            : _huggingFaceToken;
+
+        var envVars = string.IsNullOrWhiteSpace(token)
+            ? null
+            : new Dictionary<string, string> { ["HF_TOKEN"] = token };
 
         Log.Info($"Starting diarization: {request.SourceAudioPath}");
 
@@ -116,6 +171,7 @@ print(json.dumps(result))
             DiarizeScript,
             [request.SourceAudioPath, minArg, maxArg, tokenArg],
             ScriptPrefix,
+            environmentVariables: envVars,
             cancellationToken: ct);
 
         if (result.ExitCode != 0)

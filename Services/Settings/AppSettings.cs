@@ -43,23 +43,22 @@ public sealed class AppSettings
     public string DiarizationProvider { get; set; } = "";
 
     /// <summary>
-    /// HuggingFace access token used by the pyannote diarization provider to download
-    /// gated models (pyannote/speaker-diarization-3.1). Required when DiarizationProvider
-    /// is non-empty. This value must not be persisted to app-settings.json; use the
-    /// existing ApiKeyStore entry for CredentialKeys.HuggingFace instead.
+    /// HuggingFace user access token required to download the gated pyannote speaker
+    /// diarization model. Obtain one at https://huggingface.co/settings/tokens after
+    /// accepting the model terms at https://hf.co/pyannote/speaker-diarization-3.1.
+    /// Empty string = no token (will fail for gated models).
     /// </summary>
-    [JsonIgnore]
     public string DiarizationHuggingFaceToken { get; set; } = "";
 
     /// <summary>
-    /// Optional lower bound on the number of speakers passed to the diarization pipeline.
-    /// null = no constraint (let the model decide).
+    /// Optional lower bound on the number of speakers to detect.
+    /// null means no constraint (pyannote auto-detects).
     /// </summary>
     public int? DiarizationMinSpeakers { get; set; } = null;
 
     /// <summary>
-    /// Optional upper bound on the number of speakers passed to the diarization pipeline.
-    /// null = no constraint (let the model decide).
+    /// Optional upper bound on the number of speakers to detect.
+    /// null means no constraint (pyannote auto-detects).
     /// </summary>
     public int? DiarizationMaxSpeakers { get; set; } = null;
 

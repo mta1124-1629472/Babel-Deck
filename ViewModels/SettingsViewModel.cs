@@ -53,7 +53,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         // Diarization
         DiarizationProvider         = current.DiarizationProvider;
-        DiarizationHuggingFaceToken = _apiKeyStore?.GetKey(CredentialKeys.HuggingFace) ?? "";
+        DiarizationHuggingFaceToken = current.DiarizationHuggingFaceToken;
         DiarizationMinSpeakers      = current.DiarizationMinSpeakers;
         DiarizationMaxSpeakers      = current.DiarizationMaxSpeakers;
 
@@ -201,18 +201,25 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     // ── Diarization ───────────────────────────────────────────────────────────
 
-    /// <summary>Available diarization provider IDs for the UI dropdown. First entry is empty = disabled.</summary>
-    public string[] DiarizationProviderOptions { get; }
+    /// <summary>Available diarization provider identifiers shown in the UI combo box.</summary>
+    public string[] DiarizationProviderOptions { get; } =
+        ["", "pyannote-local"];
 
     [ObservableProperty]
     private string _diarizationProvider = "";
 
+    /// <summary>
+    /// HuggingFace access token for the gated pyannote speaker-diarization model.
+    /// Stored in app-settings.json. Users should treat this as a secret.
+    /// </summary>
     [ObservableProperty]
     private string _diarizationHuggingFaceToken = "";
 
+    /// <summary>Optional minimum number of speakers. null = auto.</summary>
     [ObservableProperty]
     private int? _diarizationMinSpeakers;
 
+    /// <summary>Optional maximum number of speakers. null = auto.</summary>
     [ObservableProperty]
     private int? _diarizationMaxSpeakers;
 
@@ -308,25 +315,11 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
 
         // Diarization
-        settings.DiarizationProvider = DiarizationProvider ?? "";
+        settings.DiarizationProvider         = DiarizationProvider ?? "";
+        settings.DiarizationHuggingFaceToken = DiarizationHuggingFaceToken?.Trim() ?? "";
+        settings.DiarizationMinSpeakers      = DiarizationMinSpeakers;
+        settings.DiarizationMaxSpeakers      = DiarizationMaxSpeakers;
 
-        var hfToken = DiarizationHuggingFaceToken?.Trim() ?? "";
-        // Passing an empty string to SetKey removes the stored credential, which is
-        // the intended behavior when the user clears the token field to revoke access.
-        if (_apiKeyStore is not null)
-            _apiKeyStore.SetKey(CredentialKeys.HuggingFace, hfToken);
-
-        int? diarizationMinSpeakers = DiarizationMinSpeakers is > 0 ? DiarizationMinSpeakers : null;
-        int? diarizationMaxSpeakers = DiarizationMaxSpeakers is > 0 ? DiarizationMaxSpeakers : null;
-
-        if (diarizationMinSpeakers.HasValue && diarizationMaxSpeakers.HasValue &&
-            diarizationMinSpeakers.Value > diarizationMaxSpeakers.Value)
-        {
-            (diarizationMinSpeakers, diarizationMaxSpeakers) = (diarizationMaxSpeakers, diarizationMinSpeakers);
-        }
-
-        settings.DiarizationMinSpeakers       = diarizationMinSpeakers;
-        settings.DiarizationMaxSpeakers       = diarizationMaxSpeakers;
         settings.VideoHwdec          = VideoHwdec;
         settings.VideoGpuApi         = VideoGpuApi;
         settings.VideoExportEncoder  = VideoExportEncoder;
