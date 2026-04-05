@@ -22,7 +22,7 @@ public sealed class ApiKeyValidationService
     private readonly Func<string, GoogleApiClient> _googleClientFactory;
 
     // Reusable HttpClient for HF probes — no auth header baked in so each
-    // call supplies its own token via a cloned request.
+    // call uses a new request with its own Authorization header.
     private static readonly HttpClient _hfHttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(15),
