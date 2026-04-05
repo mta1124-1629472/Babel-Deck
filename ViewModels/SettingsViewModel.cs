@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -18,6 +19,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 {
     private readonly SettingsService _settingsService;
     private readonly SessionWorkflowCoordinator _coordinator;
+    private readonly ApiKeyStore? _apiKeyStore;
     private readonly Window _ownerWindow;
     private readonly IContainerizedInferenceManager _containerizedManager;
     private CancellationTokenSource? _restartCts;
@@ -27,13 +29,15 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         SessionWorkflowCoordinator coordinator,
         Window ownerWindow,
         ModelsTabViewModel modelsTab,
-        IContainerizedInferenceManager? containerizedManager = null)
+        IContainerizedInferenceManager? containerizedManager = null,
+        ApiKeyStore? apiKeyStore = null)
     {
         _settingsService       = settingsService;
         _coordinator           = coordinator;
         _ownerWindow           = ownerWindow;
         ModelsTab              = modelsTab;
         _containerizedManager  = containerizedManager ?? NullInferenceManager.Instance;
+        _apiKeyStore           = apiKeyStore;
 
         var current = _coordinator.CurrentSettings;
         SelectedVoice          = current.TtsVoice;
@@ -48,10 +52,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         TranscriptionNumWorkers = current.TranscriptionNumWorkers;
 
         // Diarization
-        DiarizationProvider          = current.DiarizationProvider;
-        DiarizationHuggingFaceToken  = current.DiarizationHuggingFaceToken;
-        DiarizationMinSpeakers       = current.DiarizationMinSpeakers;
-        DiarizationMaxSpeakers       = current.DiarizationMaxSpeakers;
+        DiarizationProvider         = current.DiarizationProvider;
+        DiarizationHuggingFaceToken = _apiKeyStore?.GetKey(CredentialKeys.HuggingFace) ?? "";
+        DiarizationMinSpeakers      = current.DiarizationMinSpeakers;
+        DiarizationMaxSpeakers      = current.DiarizationMaxSpeakers;
 
         // Theme options
         ThemeOptions = new[] { "Light", "Dark", "System" };
@@ -304,8 +308,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.TranscriptionNumWorkers = Math.Max(1, TranscriptionNumWorkers);
 
         // Diarization
-        settings.DiarizationProvider         = DiarizationProvider ?? "";
-        settings.DiarizationHuggingFaceToken  = DiarizationHuggingFaceToken?.Trim() ?? "";
+        settings.DiarizationProvider = DiarizationProvider ?? "";
+
+        var hfToken = DiarizationHuggingFaceToken?.Trim() ?? "";
+        // Passing an empty string to SetKey removes the stored credential, which is
+        // the intended behavior when the user clears the token field to revoke access.
+        if (_apiKeyStore is not null)
+            _apiKeyStore.SetKey(CredentialKeys.HuggingFace, hfToken);
 
         int? diarizationMinSpeakers = DiarizationMinSpeakers is > 0 ? DiarizationMinSpeakers : null;
         int? diarizationMaxSpeakers = DiarizationMaxSpeakers is > 0 ? DiarizationMaxSpeakers : null;
