@@ -107,7 +107,9 @@ print(json.dumps(result))
 
         var minArg   = request.MinSpeakers?.ToString() ?? "null";
         var maxArg   = request.MaxSpeakers?.ToString() ?? "null";
-        var tokenArg = _huggingFaceToken ?? "";
+        var tokenArg = !string.IsNullOrWhiteSpace(request.HuggingFaceToken)
+            ? request.HuggingFaceToken
+            : (_huggingFaceToken ?? "");
 
         Log.Info($"Starting diarization: {request.SourceAudioPath}");
 
