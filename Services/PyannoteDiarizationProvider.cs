@@ -53,7 +53,7 @@ if hf_token is None:
           'Set it in Settings > API Keys > HuggingFace.', file=sys.stderr)
     sys.exit(1)
 
-pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=hf_token)
+pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', token=hf_token)
 
 kwargs = {}
 if min_speakers is not None:
