@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -18,6 +20,16 @@ public sealed class ApiKeyValidationService
     private readonly Func<string, DeepLApiClient> _deepLClientFactory;
     private readonly Func<string, ElevenLabsApiClient> _elevenLabsClientFactory;
     private readonly Func<string, GoogleApiClient> _googleClientFactory;
+
+    // Reusable HttpClient for HF probes — no auth header baked in so each
+    // call supplies its own token via a cloned request.
+    private static readonly HttpClient _hfHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(15),
+    };
+
+    private const string HfWhoAmIUrl        = "https://huggingface.co/api/whoami-v2";
+    private const string HfPyannoteRepoId   = "pyannote/speaker-diarization-3.1";
 
     public ApiKeyValidationService(
         ITranscriptionRegistry transcriptionRegistry,
@@ -63,9 +75,9 @@ public sealed class ApiKeyValidationService
         if (credentialKey == CredentialKeys.GoogleAi)
             return await ValidateGoogleAsync(apiKey.Trim(), cancellationToken);
 
-        // HuggingFace tokens can be format-validated offline (hf_... prefix).
+        // HuggingFace: strict two-step live validation.
         if (credentialKey == CredentialKeys.HuggingFace)
-            return ValidateHuggingFaceFormat(apiKey.Trim());
+            return await ValidateHuggingFaceAsync(apiKey.Trim(), cancellationToken);
 
         var implementedProviders = GetImplementedProviders(credentialKey);
         if (implementedProviders.Count == 0)
@@ -74,27 +86,98 @@ public sealed class ApiKeyValidationService
 
         return credentialKey switch
         {
-            CredentialKeys.OpenAi => await ValidateOpenAiAsync(apiKey.Trim(), implementedProviders, cancellationToken),
-            CredentialKeys.Deepl => await ValidateDeepLAsync(apiKey.Trim(), cancellationToken),
+            CredentialKeys.OpenAi     => await ValidateOpenAiAsync(apiKey.Trim(), implementedProviders, cancellationToken),
+            CredentialKeys.Deepl      => await ValidateDeepLAsync(apiKey.Trim(), cancellationToken),
             CredentialKeys.ElevenLabs => await ValidateElevenLabsAsync(apiKey.Trim(), cancellationToken),
             _ => ApiKeyValidationResult.Unavailable(
                 "Live validation is not implemented for this credential yet."),
         };
     }
 
-    private static ApiKeyValidationResult ValidateHuggingFaceFormat(string token)
+    // ── HuggingFace ───────────────────────────────────────────────────────────
+    //
+    // Strict two-step check:
+    //   1. whoami-v2  — token is live and not revoked
+    //   2. model repo probe — token has read access to the gated pyannote model
+    //
+    // Both must succeed to return Success. This catches:
+    //   - Expired / revoked tokens
+    //   - Valid token but HF model terms not accepted
+    //   - Valid token but token scope too narrow (e.g. write-only org token)
+
+    private static async Task<ApiKeyValidationResult> ValidateHuggingFaceAsync(
+        string token,
+        CancellationToken cancellationToken)
     {
-        // HuggingFace user access tokens start with "hf_" and are at least 30 characters.
-        // This is an offline format check only — it does not verify the token against the API.
+        // Fast format pre-check before making any network calls.
         if (!token.StartsWith("hf_", StringComparison.Ordinal) || token.Length < 30)
             return ApiKeyValidationResult.Failure(
-                "Token does not look like a valid HuggingFace user access token (expected \"hf_\" prefix, ≥30 characters). " +
+                "Token does not look like a valid HuggingFace user access token " +
+                "(expected \"hf_\" prefix, ≥30 characters). " +
                 "Get yours at https://huggingface.co/settings/tokens.");
 
+        // Step 1: verify the token is accepted by HF at all.
+        using var whoamiReq = new HttpRequestMessage(HttpMethod.Get, HfWhoAmIUrl);
+        whoamiReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage whoamiResp;
+        try
+        {
+            whoamiResp = await _hfHttpClient.SendAsync(whoamiReq, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return ApiKeyValidationResult.Failure($"HuggingFace whoami request failed: {ex.Message}");
+        }
+
+        using (whoamiResp)
+        {
+            if (whoamiResp.StatusCode == HttpStatusCode.Unauthorized)
+                return ApiKeyValidationResult.Failure(
+                    "HuggingFace rejected the token (401 Unauthorized). " +
+                    "Check that the token is correct and has not been revoked.");
+
+            if (!whoamiResp.IsSuccessStatusCode)
+                return ApiKeyValidationResult.Failure(
+                    $"HuggingFace whoami returned an unexpected status: " +
+                    $"{(int)whoamiResp.StatusCode} {whoamiResp.ReasonPhrase}.");
+        }
+
+        // Step 2: verify access to the specific gated pyannote model.
+        var repoMetaUrl = $"https://huggingface.co/api/models/{HfPyannoteRepoId}";
+        using var repoReq = new HttpRequestMessage(HttpMethod.Get, repoMetaUrl);
+        repoReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage repoResp;
+        try
+        {
+            repoResp = await _hfHttpClient.SendAsync(repoReq, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return ApiKeyValidationResult.Failure(
+                $"pyannote model probe request failed: {ex.Message}");
+        }
+
+        using (repoResp)
+        {
+            if (repoResp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                return ApiKeyValidationResult.Failure(
+                    "Token is valid but cannot access the required pyannote diarization model. " +
+                    "Accept the model license on HuggingFace and ensure the token has 'read' scope: " +
+                    $"https://huggingface.co/{HfPyannoteRepoId}");
+
+            if (!repoResp.IsSuccessStatusCode)
+                return ApiKeyValidationResult.Failure(
+                    $"pyannote model probe returned an unexpected status: " +
+                    $"{(int)repoResp.StatusCode} {repoResp.ReasonPhrase}.");
+        }
+
         return ApiKeyValidationResult.Success(
-            "Token format looks valid. Note: the pyannote/speaker-diarization model also requires " +
-            "accepting its gated-model license on HuggingFace before use.");
+            $"Token is valid and has read access to {HfPyannoteRepoId}. Ready for diarization.");
     }
+
+    // ── ElevenLabs ────────────────────────────────────────────────────────────
 
     private async Task<ApiKeyValidationResult> ValidateElevenLabsAsync(
         string apiKey,
@@ -124,6 +207,8 @@ public sealed class ApiKeyValidationService
         }
     }
 
+    // ── DeepL ─────────────────────────────────────────────────────────────────
+
     private async Task<ApiKeyValidationResult> ValidateDeepLAsync(
         string apiKey,
         CancellationToken cancellationToken)
@@ -149,6 +234,8 @@ public sealed class ApiKeyValidationService
             return ApiKeyValidationResult.Failure($"Validation failed: {ex.Message}");
         }
     }
+
+    // ── OpenAI ────────────────────────────────────────────────────────────────
 
     private async Task<ApiKeyValidationResult> ValidateOpenAiAsync(
         string apiKey,
@@ -191,26 +278,7 @@ public sealed class ApiKeyValidationService
         }
     }
 
-    private IReadOnlyList<ProviderDescriptor> GetImplementedProviders(string credentialKey)
-    {
-        return
-        [
-            .. _transcriptionRegistry.GetAvailableProviders().Where(MatchesCredentialKey),
-            .. _translationRegistry.GetAvailableProviders().Where(MatchesCredentialKey),
-            .. _ttsRegistry.GetAvailableProviders().Where(MatchesCredentialKey),
-        ];
-
-        bool MatchesCredentialKey(ProviderDescriptor provider) =>
-            provider.IsImplemented
-            && provider.RequiresApiKey
-            && string.Equals(provider.CredentialKey, credentialKey, StringComparison.Ordinal);
-    }
-
-    // Credentials that have a dedicated live probe independent of any fully
-    // implemented provider. Add entries here when validation is wired but the
-    // full provider implementation is still pending.
-    private static bool HasDirectValidationProbe(string credentialKey) =>
-        credentialKey is CredentialKeys.GoogleAi or CredentialKeys.HuggingFace;
+    // ── Google ────────────────────────────────────────────────────────────────
 
     private async Task<ApiKeyValidationResult> ValidateGoogleAsync(
         string apiKey,
@@ -242,6 +310,29 @@ public sealed class ApiKeyValidationService
             return ApiKeyValidationResult.Failure($"Validation failed: {ex.Message}");
         }
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private IReadOnlyList<ProviderDescriptor> GetImplementedProviders(string credentialKey)
+    {
+        return
+        [
+            .. _transcriptionRegistry.GetAvailableProviders().Where(MatchesCredentialKey),
+            .. _translationRegistry.GetAvailableProviders().Where(MatchesCredentialKey),
+            .. _ttsRegistry.GetAvailableProviders().Where(MatchesCredentialKey),
+        ];
+
+        bool MatchesCredentialKey(ProviderDescriptor provider) =>
+            provider.IsImplemented
+            && provider.RequiresApiKey
+            && string.Equals(provider.CredentialKey, credentialKey, StringComparison.Ordinal);
+    }
+
+    // Credentials that have a dedicated live probe independent of any fully
+    // implemented provider. Add entries here when validation is wired but the
+    // full provider implementation is still pending.
+    private static bool HasDirectValidationProbe(string credentialKey) =>
+        credentialKey is CredentialKeys.GoogleAi or CredentialKeys.HuggingFace;
 }
 
 public sealed record ApiKeyValidationResult(
