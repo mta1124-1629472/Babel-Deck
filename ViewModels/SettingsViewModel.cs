@@ -306,9 +306,18 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         // Diarization
         settings.DiarizationProvider         = DiarizationProvider ?? "";
         settings.DiarizationHuggingFaceToken  = DiarizationHuggingFaceToken?.Trim() ?? "";
-        settings.DiarizationMinSpeakers       = DiarizationMinSpeakers is > 0 ? DiarizationMinSpeakers : null;
-        settings.DiarizationMaxSpeakers       = DiarizationMaxSpeakers is > 0 ? DiarizationMaxSpeakers : null;
 
+        int? diarizationMinSpeakers = DiarizationMinSpeakers is > 0 ? DiarizationMinSpeakers : null;
+        int? diarizationMaxSpeakers = DiarizationMaxSpeakers is > 0 ? DiarizationMaxSpeakers : null;
+
+        if (diarizationMinSpeakers.HasValue && diarizationMaxSpeakers.HasValue &&
+            diarizationMinSpeakers.Value > diarizationMaxSpeakers.Value)
+        {
+            (diarizationMinSpeakers, diarizationMaxSpeakers) = (diarizationMaxSpeakers, diarizationMinSpeakers);
+        }
+
+        settings.DiarizationMinSpeakers       = diarizationMinSpeakers;
+        settings.DiarizationMaxSpeakers       = diarizationMaxSpeakers;
         settings.VideoHwdec          = VideoHwdec;
         settings.VideoGpuApi         = VideoGpuApi;
         settings.VideoExportEncoder  = VideoExportEncoder;
