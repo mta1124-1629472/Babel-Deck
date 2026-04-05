@@ -62,10 +62,24 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
         {
             ProviderNames.PyannoteLocal => new PyannoteDiarizationProvider(
                 _log,
-                keyStore?.GetKey(CredentialKeys.HuggingFace) is { Length: > 0 } k ? k : settings.DiarizationHuggingFaceToken),
+                ResolveHuggingFaceToken(keyStore, settings)),
             _ => throw new PipelineProviderException(
                 $"Diarization provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")
         };
+    }
+
+    /// <summary>
+    /// Resolves the HuggingFace token: keyStore value takes precedence over the settings
+    /// fallback. Whitespace-only values are treated as absent.
+    /// </summary>
+    private static string? ResolveHuggingFaceToken(ApiKeyStore? keyStore, AppSettings settings)
+    {
+        var storeToken = keyStore?.GetKey(CredentialKeys.HuggingFace)?.Trim();
+        if (!string.IsNullOrWhiteSpace(storeToken))
+            return storeToken;
+
+        var settingsToken = settings.DiarizationHuggingFaceToken?.Trim();
+        return string.IsNullOrWhiteSpace(settingsToken) ? null : settingsToken;
     }
 }
