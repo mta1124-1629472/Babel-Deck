@@ -308,7 +308,6 @@
                             <!-- Multi-speaker toggle and auto-detection -->
                             <CheckBox Content="Enable multi-speaker routing"
                                       IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
-                                      IsEnabled="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                       Foreground="#C0C0D0" />
 
                             <CheckBox Content="Auto speaker detection"
