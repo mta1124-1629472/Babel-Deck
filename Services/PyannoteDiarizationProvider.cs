@@ -5,7 +5,7 @@ public class PyannoteDiarizationProvider : BaseClass
 
     public PyannoteDiarizationProvider(AppLog log, ApiKeyStore? keyStore = null, string? huggingFaceToken = null) : base(log) { _keyStore = keyStore; _huggingFaceToken = string.IsNullOrWhiteSpace(huggingFaceToken) ? null : huggingFaceToken.Trim(); }
 
-    public async Task DiarizeAsync()
+    public async Task<DiarizationResult> DiarizeAsync()
     {
         ... other code ...
         var hfToken = _keyStore?.GetKey(CredentialKeys.HuggingFace);
