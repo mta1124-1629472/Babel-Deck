@@ -24,6 +24,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     private readonly Func<IReadOnlyList<string>, string, CancellationToken, Task> _combineAudioFunc;
 
     private string? _autoExtractedReferencePath;
+    private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
     private bool _disposed;
 
     public QwenContainerTtsProvider(
@@ -61,13 +62,16 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         var language = ResolveLanguage(request.Language);
         var model = ResolveModel(request.VoiceName);
 
+        var refId = await EnsureReferenceRegisteredAsync(
+            referenceAudioPath, request.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault, cancellationToken);
+
         var result = await _client.QwenSegmentAsync(
             request.Text,
             model,
             language,
-            referenceAudioPath,
-            request.ReferenceTranscriptText,
-            cancellationToken);
+            referenceId: refId,
+            referenceText: request.ReferenceTranscriptText,
+            cancellationToken: cancellationToken);
 
         if (!result.Success)
             throw new InvalidOperationException($"Qwen3-TTS failed: {result.ErrorMessage}");
@@ -117,6 +121,9 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
                     throw new InvalidOperationException(
                         $"Qwen3-TTS requires a reference clip for speaker '{seg.SpeakerId ?? "default"}'.");
 
+                var refId = await EnsureReferenceRegisteredAsync(
+                    referenceAudioPath, seg.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault, cancellationToken);
+
                 _log.Info(
                     $"[QwenContainerTts] Combined synth segment start " +
                     $"(segment={seg.Id ?? segmentIndex.ToString()}, model={resolvedModel}, " +
@@ -126,9 +133,9 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
                     seg.TranslatedText!,
                     resolvedModel,
                     language,
-                    referenceAudioPath,
-                    seg.Text,   // source transcript as reference text hint
-                    cancellationToken);
+                    referenceId: refId,
+                    referenceText: seg.Text,
+                    cancellationToken: cancellationToken);
 
                 if (!result.Success)
                     throw new InvalidOperationException($"Qwen3-TTS combined synthesis failed: {result.ErrorMessage}");
@@ -178,6 +185,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     public async Task ResetSessionAsync()
     {
         _log.Info("[QwenContainerTts] Resetting session state");
+        _referenceIdCache.Clear();
         if (!string.IsNullOrWhiteSpace(_autoExtractedReferencePath))
         {
             await _extractor.DeleteAsync();
@@ -197,6 +205,20 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    private async Task<string?> EnsureReferenceRegisteredAsync(
+        string referenceAudioPath,
+        string speakerId,
+        CancellationToken ct)
+    {
+        if (_referenceIdCache.TryGetValue(referenceAudioPath, out var cached))
+            return cached;
+
+        var refId = await _client.RegisterQwenReferenceAsync(speakerId, referenceAudioPath, ct);
+        _referenceIdCache[referenceAudioPath] = refId;
+        _log.Info($"[QwenContainerTts] Registered reference for speaker '{speakerId}': {refId}");
+        return refId;
+    }
 
     private async Task<string?> EnsureAutoExtractedReferenceAsync(string sourceVideoPath, CancellationToken ct)
     {
