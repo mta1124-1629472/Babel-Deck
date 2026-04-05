@@ -248,7 +248,7 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
             return referencePath;
         }
 
-        return request.SpeakerReferenceAudioPaths.TryGetValue(XttsReferenceKeys.SingleSpeakerDefault, out var defaultReferencePath)
+        return request.SpeakerReferenceAudioPaths.TryGetValue(QwenReferenceKeys.SingleSpeakerDefault, out var defaultReferencePath)
                && !string.IsNullOrWhiteSpace(defaultReferencePath)
             ? defaultReferencePath
             : null;
