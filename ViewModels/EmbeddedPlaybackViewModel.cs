@@ -181,6 +181,18 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _isMultiSpeakerEnabled;
 
+    public IReadOnlyList<string> DiarizationProviderOptions { get; } =
+        [string.Empty, ProviderNames.PyannoteLocal];
+
+    [ObservableProperty]
+    private string _diarizationProvider = string.Empty;
+
+    [ObservableProperty]
+    private decimal? _diarizationMinSpeakers;
+
+    [ObservableProperty]
+    private decimal? _diarizationMaxSpeakers;
+
     private bool _isAutoSpeakerDetectionEnabled;
 
     private string _autoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
@@ -667,9 +679,61 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     {
         if (_isSynchronizingPipelineSettings) return;
 
-        _coordinator.CurrentSettings.DiarizationProvider = value ? ProviderNames.PyannoteLocal : string.Empty;
+        DiarizationProvider = value ? ProviderNames.PyannoteLocal : string.Empty;
+    }
+
+    partial void OnDiarizationProviderChanged(string value)
+    {
+        if (_isSynchronizingPipelineSettings) return;
+
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim();
+
+        if (!DiarizationProviderOptions.Contains(normalized, StringComparer.Ordinal))
+            normalized = string.Empty;
+
+        if (!string.Equals(normalized, value, StringComparison.Ordinal))
+        {
+            _isSynchronizingPipelineSettings = true;
+            try
+            {
+                DiarizationProvider = normalized;
+            }
+            finally
+            {
+                _isSynchronizingPipelineSettings = false;
+            }
+        }
+
+        _coordinator.CurrentSettings.DiarizationProvider = normalized;
         _coordinator.NotifySettingsModified();
         RefreshAutoSpeakerDetectionStatus();
+    }
+
+    partial void OnDiarizationMinSpeakersChanged(decimal? value)
+    {
+        if (_isSynchronizingPipelineSettings) return;
+
+        _coordinator.CurrentSettings.DiarizationMinSpeakers = NormalizeSpeakerCount(value);
+        _coordinator.NotifySettingsModified();
+    }
+
+    partial void OnDiarizationMaxSpeakersChanged(decimal? value)
+    {
+        if (_isSynchronizingPipelineSettings) return;
+
+        _coordinator.CurrentSettings.DiarizationMaxSpeakers = NormalizeSpeakerCount(value);
+        _coordinator.NotifySettingsModified();
+    }
+
+    private static int? NormalizeSpeakerCount(decimal? value)
+    {
+        if (!value.HasValue)
+            return null;
+
+        var rounded = (int)Math.Round(value.Value, MidpointRounding.AwayFromZero);
+        return Math.Clamp(rounded, 1, 20);
     }
 
     private async Task SeekAndPlayAsync(WorkflowSegmentState segment)
@@ -910,6 +974,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 ?? _availableTtsOptions.FirstOrDefault();
 
             IsMultiSpeakerEnabled = _coordinator.CurrentSession.MultiSpeakerEnabled;
+            DiarizationProvider = _coordinator.CurrentSettings.DiarizationProvider;
+            DiarizationMinSpeakers = _coordinator.CurrentSettings.DiarizationMinSpeakers;
+            DiarizationMaxSpeakers = _coordinator.CurrentSettings.DiarizationMaxSpeakers;
             IsAutoSpeakerDetectionEnabled =
                 string.Equals(_coordinator.CurrentSettings.DiarizationProvider, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
 
