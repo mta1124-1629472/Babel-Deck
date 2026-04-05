@@ -182,8 +182,88 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private bool _isMultiSpeakerEnabled;
 
     public IReadOnlyList<string> DiarizationProviderOptions { get; } =
-        [string.Empty, ProviderNames.PyannoteLocal];
+        BuildDiarizationProviderOptions();
 
+    private static IReadOnlyList<string> BuildDiarizationProviderOptions()
+    {
+        var options = new List<string> { string.Empty };
+
+        foreach (var providerName in GetRegisteredDiarizationProviderNames())
+        {
+            if (!string.IsNullOrWhiteSpace(providerName) &&
+                !options.Contains(providerName, StringComparer.Ordinal))
+            {
+                options.Add(providerName);
+            }
+        }
+
+        if (!options.Contains(ProviderNames.PyannoteLocal, StringComparer.Ordinal))
+        {
+            options.Add(ProviderNames.PyannoteLocal);
+        }
+
+        return options;
+    }
+
+    private static IEnumerable<string> GetRegisteredDiarizationProviderNames()
+    {
+        var registryType = typeof(DiarizationRegistry);
+        object? registryInstance = registryType
+            .GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)?
+            .GetValue(null);
+
+        foreach (var memberName in new[] { "ProviderNames", "AvailableProviderNames", "Providers" })
+        {
+            foreach (var providerName in ReadProviderNames(registryType, registryInstance, memberName))
+            {
+                yield return providerName;
+            }
+        }
+    }
+
+    private static IEnumerable<string> ReadProviderNames(
+        Type registryType,
+        object? registryInstance,
+        string memberName)
+    {
+        var bindingFlags = System.Reflection.BindingFlags.Public |
+                           System.Reflection.BindingFlags.Static |
+                           System.Reflection.BindingFlags.Instance;
+
+        var property = registryType.GetProperty(memberName, bindingFlags);
+        var value = property?.GetValue(property.GetMethod?.IsStatic == true ? null : registryInstance);
+
+        if (value is IEnumerable<string> stringValues)
+        {
+            foreach (var stringValue in stringValues)
+            {
+                yield return stringValue;
+            }
+
+            yield break;
+        }
+
+        if (value is System.Collections.IEnumerable values)
+        {
+            foreach (var item in values)
+            {
+                if (item is string stringItem)
+                {
+                    yield return stringItem;
+                    continue;
+                }
+
+                var name = item?.GetType()
+                    .GetProperty("Name", bindingFlags)?
+                    .GetValue(item) as string;
+
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    yield return name;
+                }
+            }
+        }
+    }
     [ObservableProperty]
     private string _diarizationProvider = string.Empty;
 
