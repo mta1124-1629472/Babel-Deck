@@ -289,7 +289,7 @@ public sealed class ApiKeyValidationServiceTests : IDisposable
     // ── HuggingFace helpers ───────────────────────────────────────────────────
 
     // Minimum-length valid-looking HF token for test purposes.
-    private static string ValidHfTokenShape => "hf_" + new string('x', 27); // exactly 30 chars
+    private static string ValidHfTokenShape => "hf_" + new string('x', 30 - "hf_".Length); // exactly 30 chars
 
     private ApiKeyValidationService CreateHfService(
         Func<HttpRequestMessage, HttpResponseMessage>? whoamiResp = null,
