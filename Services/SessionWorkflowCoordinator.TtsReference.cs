@@ -223,7 +223,8 @@ public sealed partial class SessionWorkflowCoordinator
                 continue;
 
             var extractDuration = Math.Min(segEnd - segStart, 10.0);
-            var outputPath = Path.Combine(refsDir, $"{providerTag}-ref-{speakerId}.wav");
+            var safeSpeakerId = string.Join("_", speakerId.Split(Path.GetInvalidFileNameChars()));
+            var outputPath = Path.Combine(refsDir, $"{providerTag}-ref-{safeSpeakerId}.wav");
 
             var psi = new ProcessStartInfo
             {

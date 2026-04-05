@@ -62,16 +62,12 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         var language = ResolveLanguage(request.Language);
         var model = ResolveModel(request.VoiceName);
 
-        var refId = await EnsureReferenceRegisteredAsync(
-            referenceAudioPath, request.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault, cancellationToken);
-
-        var result = await _client.QwenSegmentAsync(
-            request.Text,
-            model,
-            language,
-            referenceId: refId,
-            referenceText: request.ReferenceTranscriptText,
-            cancellationToken: cancellationToken);
+        var result = await QwenSegmentWithRetryAsync(
+            request.Text, model, language,
+            referenceAudioPath,
+            request.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault,
+            request.ReferenceTranscriptText,
+            cancellationToken);
 
         if (!result.Success)
             throw new InvalidOperationException($"Qwen3-TTS failed: {result.ErrorMessage}");
@@ -121,21 +117,17 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
                     throw new InvalidOperationException(
                         $"Qwen3-TTS requires a reference clip for speaker '{seg.SpeakerId ?? "default"}'.");
 
-                var refId = await EnsureReferenceRegisteredAsync(
-                    referenceAudioPath, seg.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault, cancellationToken);
-
                 _log.Info(
                     $"[QwenContainerTts] Combined synth segment start " +
                     $"(segment={seg.Id ?? segmentIndex.ToString()}, model={resolvedModel}, " +
                     $"reference={Path.GetFileName(referenceAudioPath)})");
 
-                var result = await _client.QwenSegmentAsync(
-                    seg.TranslatedText!,
-                    resolvedModel,
-                    language,
-                    referenceId: refId,
-                    referenceText: seg.Text,
-                    cancellationToken: cancellationToken);
+                var result = await QwenSegmentWithRetryAsync(
+                    seg.TranslatedText!, resolvedModel, language,
+                    referenceAudioPath,
+                    seg.SpeakerId ?? QwenReferenceKeys.SingleSpeakerDefault,
+                    seg.Text,
+                    cancellationToken);
 
                 if (!result.Success)
                     throw new InvalidOperationException($"Qwen3-TTS combined synthesis failed: {result.ErrorMessage}");
@@ -211,14 +203,50 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         string speakerId,
         CancellationToken ct)
     {
-        if (_referenceIdCache.TryGetValue(referenceAudioPath, out var cached))
+        var cacheKey = $"{speakerId}|{referenceAudioPath}";
+        if (_referenceIdCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
         var refId = await _client.RegisterQwenReferenceAsync(speakerId, referenceAudioPath, ct);
-        _referenceIdCache[referenceAudioPath] = refId;
+        _referenceIdCache[cacheKey] = refId;
         _log.Info($"[QwenContainerTts] Registered reference for speaker '{speakerId}': {refId}");
         return refId;
     }
+
+    /// <summary>
+    /// Synthesizes one segment using a registered reference ID. If the server returns an
+    /// error consistent with a stale/evicted reference (e.g. after a server restart),
+    /// evicts the cache entry, re-registers once, and retries.
+    /// </summary>
+    private async Task<TtsResult> QwenSegmentWithRetryAsync(
+        string text,
+        string model,
+        string language,
+        string referenceAudioPath,
+        string speakerId,
+        string? referenceText,
+        CancellationToken ct)
+    {
+        var refId = await EnsureReferenceRegisteredAsync(referenceAudioPath, speakerId, ct);
+        var result = await _client.QwenSegmentAsync(
+            text, model, language, referenceId: refId, referenceText: referenceText, cancellationToken: ct);
+
+        if (!result.Success && IsLikelyStaleReferenceError(result.ErrorMessage))
+        {
+            _log.Warning($"[QwenContainerTts] Stale reference_id for speaker '{speakerId}', re-registering.");
+            _referenceIdCache.Remove($"{speakerId}|{referenceAudioPath}");
+            refId = await EnsureReferenceRegisteredAsync(referenceAudioPath, speakerId, ct);
+            result = await _client.QwenSegmentAsync(
+                text, model, language, referenceId: refId, referenceText: referenceText, cancellationToken: ct);
+        }
+
+        return result;
+    }
+
+    private static bool IsLikelyStaleReferenceError(string? errorMessage) =>
+        errorMessage is not null && (
+            errorMessage.Contains("reference_id", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("not found", StringComparison.OrdinalIgnoreCase));
 
     private async Task<string?> EnsureAutoExtractedReferenceAsync(string sourceVideoPath, CancellationToken ct)
     {
