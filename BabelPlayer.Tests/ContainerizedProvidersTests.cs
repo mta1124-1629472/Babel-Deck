@@ -542,6 +542,12 @@ public sealed class ContainerizedProvidersTests : IDisposable
 
         var client = CreateClient(async (request, ct) =>
         {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/references")
+            {
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"reference_id\":\"spk_default_stub123\"}");
+            }
+
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
             {
                 postedModel = request.RequestUri.AbsolutePath;
@@ -611,6 +617,12 @@ public sealed class ContainerizedProvidersTests : IDisposable
 
         var client = CreateClient(async (request, ct) =>
         {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/references")
+            {
+                return await Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"reference_id\":\"spk_default_stub456\"}");
+            }
+
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/tts/qwen/segment")
             {
                 qwenCallCount++;
