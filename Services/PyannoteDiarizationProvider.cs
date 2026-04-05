@@ -25,7 +25,12 @@ public sealed class PyannoteDiarizationProvider : PythonSubprocessServiceBase, I
     // Language consistent with the rest of the codebase — no inline literals
     private const string ScriptPrefix = "diarize";
 
-    public PyannoteDiarizationProvider(AppLog log) : base(log) { }
+    private readonly ApiKeyStore? _keyStore;
+
+    public PyannoteDiarizationProvider(AppLog log, ApiKeyStore? keyStore = null) : base(log)
+    {
+        _keyStore = keyStore;
+    }
 
     // ── Script ────────────────────────────────────────────────────────────────
 
@@ -41,8 +46,14 @@ except ImportError:
 audio_path   = sys.argv[1]
 min_speakers = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != 'null' else None
 max_speakers = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] != 'null' else None
+hf_token     = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] != '' else None
 
-pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1')
+if hf_token is None:
+    print('HuggingFace token is required for pyannote/speaker-diarization-3.1. '
+          'Set it in Settings > API Keys > HuggingFace.', file=sys.stderr)
+    sys.exit(1)
+
+pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=hf_token)
 
 kwargs = {}
 if min_speakers is not None:
@@ -73,8 +84,12 @@ print(json.dumps(result))
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
-        // We verify pyannote is importable by attempting a fast Python check.
-        // This is synchronous and fast (just a Python import probe, no model loading).
+        var token = (keyStore ?? _keyStore)?.GetKey(CredentialKeys.HuggingFace) ?? "";
+        if (string.IsNullOrWhiteSpace(token))
+            return new ProviderReadiness(false,
+                "HuggingFace token is required for pyannote diarization. " +
+                "Set it in Settings > API Keys > HuggingFace.");
+
         return ProviderReadiness.Ready;
     }
 
@@ -98,12 +113,20 @@ print(json.dumps(result))
 
         var minArg = request.MinSpeakers?.ToString() ?? "null";
         var maxArg = request.MaxSpeakers?.ToString() ?? "null";
+        var hfToken = _keyStore?.GetKey(CredentialKeys.HuggingFace) ?? "";
+
+        if (string.IsNullOrWhiteSpace(hfToken))
+        {
+            const string msg = "HuggingFace token is not set. Configure it in Settings > API Keys > HuggingFace.";
+            Log.Error(msg, new InvalidOperationException(msg));
+            return new DiarizationResult(false, [], 0, msg);
+        }
 
         Log.Info($"Starting diarization: {request.SourceAudioPath}");
 
         var result = await RunPythonScriptAsync(
             DiarizeScript,
-            [request.SourceAudioPath, minArg, maxArg],
+            [request.SourceAudioPath, minArg, maxArg, hfToken],
             ScriptPrefix,
             cancellationToken: ct);
 
