@@ -272,12 +272,12 @@
                             <!-- Provider selector -->
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Provider" FontSize="12" Foreground="#808090" />
-                                <TextBox Text="{Binding Playback.DiarizationProvider, Mode=TwoWay}"
-                                         HorizontalAlignment="Stretch" FontSize="12"
-                                         Background="#1E1E2C" Foreground="#C0C0D0"
-                                         BorderBrush="#2A2A3A"
-                                         PlaceholderText="e.g. pyannote"
-                                         ToolTip.Tip="Empty = diarization disabled" />
+                                <ComboBox ItemsSource="{Binding Playback.DiarizationProviderOptions}"
+                                          SelectedItem="{Binding Playback.DiarizationProvider, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" FontSize="12"
+                                          Background="#1E1E2C" Foreground="#C0C0D0"
+                                          BorderBrush="#2A2A3A"
+                                          ToolTip.Tip="Select a supported diarization provider. Leave empty to disable diarization." />
                             </StackPanel>
 
                             <!-- HF token hint — visible whenever a diarization provider is configured (all current providers require a HuggingFace token) -->
