@@ -19,24 +19,24 @@ namespace Babel.Player.Services;
 /// The script outputs JSON: { "speaker_count": N, "segments": [{ "start": f, "end": f, "speaker": "SPEAKER_00" }] }
 ///
 /// Must have pyannote.audio installed: pip install pyannote.audio
-/// Requires HuggingFace model files accepted via the pyannote hub.
+/// Requires HuggingFace model files accepted via the pyannote hub and a valid HF token.
 /// </summary>
 public sealed class PyannoteDiarizationProvider : PythonSubprocessServiceBase, IDiarizationProvider
 {
     // Language consistent with the rest of the codebase — no inline literals
     private const string ScriptPrefix = "diarize";
 
-    private readonly ApiKeyStore _keyStore;
+    private readonly string? _huggingFaceToken;
 
-    public PyannoteDiarizationProvider(AppLog log, ApiKeyStore keyStore) : base(log)
+    public PyannoteDiarizationProvider(AppLog log, string? huggingFaceToken = null) : base(log)
     {
-        _keyStore = keyStore ?? throw new ArgumentNullException(nameof(keyStore));
+        _huggingFaceToken = string.IsNullOrWhiteSpace(huggingFaceToken) ? null : huggingFaceToken.Trim();
     }
 
     // ── Script ────────────────────────────────────────────────────────────────
 
     private const string DiarizeScript = @"
-import sys, json
+import sys, os, json
 
 try:
     from pyannote.audio import Pipeline
@@ -47,14 +47,12 @@ except ImportError:
 audio_path   = sys.argv[1]
 min_speakers = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != 'null' else None
 max_speakers = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] != 'null' else None
-hf_token     = sys.stdin.readline().strip()
+hf_token     = os.environ.get('HF_TOKEN') or None
 
-if not hf_token:
-    print('HuggingFace token is required for pyannote/speaker-diarization-3.1. '
-          'Set it in Settings > API Keys > HuggingFace.', file=sys.stderr)
-    sys.exit(1)
-
-pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', token=hf_token)
+pipeline = Pipeline.from_pretrained(
+    'pyannote/speaker-diarization-3.1',
+    use_auth_token=hf_token
+)
 
 kwargs = {}
 if min_speakers is not None:
@@ -159,13 +157,24 @@ print(json.dumps(result))
             return new DiarizationResult(false, [], 0, msg);
         }
 
+        // Resolve token: per-call override wins over constructor-injected value.
+        // Pass via environment variable — not argv — so the token is not visible
+        // in process listings.
+        var token = !string.IsNullOrWhiteSpace(request.HuggingFaceToken)
+            ? request.HuggingFaceToken!.Trim()
+            : _huggingFaceToken;
+
+        var envVars = string.IsNullOrWhiteSpace(token)
+            ? null
+            : new Dictionary<string, string> { ["HF_TOKEN"] = token };
+
         Log.Info($"Starting diarization: {request.SourceAudioPath}");
 
         var result = await RunPythonScriptAsync(
             DiarizeScript,
             [request.SourceAudioPath, minArg, maxArg],
             ScriptPrefix,
-            standardInput: hfToken,
+            environmentVariables: envVars,
             cancellationToken: ct);
 
         if (result.ExitCode != 0)
