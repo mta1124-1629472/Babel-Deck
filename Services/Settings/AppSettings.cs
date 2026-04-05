@@ -45,9 +45,10 @@ public sealed class AppSettings
     /// <summary>
     /// HuggingFace access token used by the pyannote diarization provider to download
     /// gated models (pyannote/speaker-diarization-3.1). Required when DiarizationProvider
-    /// is non-empty. Stored in app-settings.json — consider using the OS credential store
-    /// for production deployments.
+    /// is non-empty. This value must not be persisted to app-settings.json; use the
+    /// existing ApiKeyStore entry for CredentialKeys.HuggingFace instead.
     /// </summary>
+    [JsonIgnore]
     public string DiarizationHuggingFaceToken { get; set; } = "";
 
     /// <summary>
