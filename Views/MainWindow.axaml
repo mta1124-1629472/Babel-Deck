@@ -280,7 +280,7 @@
                                          ToolTip.Tip="Empty = diarization disabled" />
                             </StackPanel>
 
-                            <!-- HF token hint — visible only when a provider requiring a token is selected -->
+                            <!-- HF token hint — visible whenever a diarization provider is configured (all current providers require a HuggingFace token) -->
                             <TextBlock Text="HuggingFace token required — set it in 🔑 API Keys above."
                                        FontSize="11" Foreground="#C0803A"
                                        TextWrapping="Wrap"
