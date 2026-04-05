@@ -25,11 +25,11 @@ public sealed class PyannoteDiarizationProvider : PythonSubprocessServiceBase, I
     // Language consistent with the rest of the codebase — no inline literals
     private const string ScriptPrefix = "diarize";
 
-    private readonly ApiKeyStore? _keyStore;
+    private readonly ApiKeyStore _keyStore;
 
-    public PyannoteDiarizationProvider(AppLog log, ApiKeyStore? keyStore = null) : base(log)
+    public PyannoteDiarizationProvider(AppLog log, ApiKeyStore keyStore) : base(log)
     {
-        _keyStore = keyStore;
+        _keyStore = keyStore ?? throw new ArgumentNullException(nameof(keyStore));
     }
 
     // ── Script ────────────────────────────────────────────────────────────────
