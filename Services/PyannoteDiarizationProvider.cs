@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
@@ -46,9 +47,9 @@ except ImportError:
 audio_path   = sys.argv[1]
 min_speakers = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != 'null' else None
 max_speakers = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] != 'null' else None
-hf_token     = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] != '' else None
+hf_token     = sys.stdin.readline().strip()
 
-if hf_token is None:
+if not hf_token:
     print('HuggingFace token is required for pyannote/speaker-diarization-3.1. '
           'Set it in Settings > API Keys > HuggingFace.', file=sys.stderr)
     sys.exit(1)
@@ -84,11 +85,36 @@ print(json.dumps(result))
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
-        var token = (keyStore ?? _keyStore)?.GetKey(CredentialKeys.HuggingFace) ?? "";
+        var store = keyStore ?? _keyStore;
+        var token = store.GetKey(CredentialKeys.HuggingFace);
         if (string.IsNullOrWhiteSpace(token))
             return new ProviderReadiness(false,
                 "HuggingFace token is required for pyannote diarization. " +
                 "Set it in Settings > API Keys > HuggingFace.");
+
+        // Fast import probe — verifies pyannote.audio is installed without loading any model.
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName              = PythonPath,
+                RedirectStandardError = true,
+                UseShellExecute       = false,
+                CreateNoWindow        = true,
+            };
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add("import pyannote.audio");
+            using var proc = Process.Start(psi);
+            proc?.WaitForExit(5_000);
+            if (proc?.ExitCode != 0)
+                return new ProviderReadiness(false,
+                    "pyannote.audio is not installed. Run: pip install pyannote.audio");
+        }
+        catch
+        {
+            return new ProviderReadiness(false,
+                "Python probe failed. Ensure Python and pyannote.audio are installed.");
+        }
 
         return ProviderReadiness.Ready;
     }
@@ -113,7 +139,7 @@ print(json.dumps(result))
 
         var minArg = request.MinSpeakers?.ToString() ?? "null";
         var maxArg = request.MaxSpeakers?.ToString() ?? "null";
-        var hfToken = _keyStore?.GetKey(CredentialKeys.HuggingFace) ?? "";
+        var hfToken = _keyStore.GetKey(CredentialKeys.HuggingFace);
 
         if (string.IsNullOrWhiteSpace(hfToken))
         {
@@ -126,8 +152,9 @@ print(json.dumps(result))
 
         var result = await RunPythonScriptAsync(
             DiarizeScript,
-            [request.SourceAudioPath, minArg, maxArg, hfToken],
+            [request.SourceAudioPath, minArg, maxArg],
             ScriptPrefix,
+            standardInput: hfToken,
             cancellationToken: ct);
 
         if (result.ExitCode != 0)

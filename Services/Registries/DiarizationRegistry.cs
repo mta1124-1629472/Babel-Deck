@@ -60,7 +60,10 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     {
         return providerId switch
         {
-            ProviderNames.PyannoteLocal => new PyannoteDiarizationProvider(_log, keyStore),
+            ProviderNames.PyannoteLocal => new PyannoteDiarizationProvider(
+                _log,
+                keyStore ?? throw new PipelineProviderException(
+                    "A credential store is required to create the pyannote diarization provider.")),
             _ => throw new PipelineProviderException(
                 $"Diarization provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")
