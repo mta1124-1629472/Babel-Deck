@@ -105,8 +105,19 @@ print(json.dumps(result))
             psi.ArgumentList.Add("-c");
             psi.ArgumentList.Add("import pyannote.audio");
             using var proc = Process.Start(psi);
-            proc?.WaitForExit(5_000);
-            if (proc?.ExitCode != 0)
+            if (proc == null)
+                return new ProviderReadiness(false,
+                    "Python probe failed. Ensure Python and pyannote.audio are installed.");
+
+            bool exited = proc.WaitForExit(5_000);
+            if (!exited)
+            {
+                proc.Kill();
+                return new ProviderReadiness(false,
+                    "Python probe timed out. Ensure Python and pyannote.audio are installed.");
+            }
+
+            if (proc.ExitCode != 0)
                 return new ProviderReadiness(false,
                     "pyannote.audio is not installed. Run: pip install pyannote.audio");
         }
