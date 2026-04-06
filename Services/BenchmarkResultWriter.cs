@@ -148,7 +148,11 @@ public sealed class BenchmarkResultWriter
             DefaultIgnoreCondition = JsonIgnoreCondition.Never,
         });
 
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        var outputDirectory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDirectory))
+        {
+            Directory.CreateDirectory(outputDirectory);
+        }
         await File.WriteAllTextAsync(outputPath, json, cancellationToken);
         _log.Info($"Benchmark result written → {outputPath}");
     }
