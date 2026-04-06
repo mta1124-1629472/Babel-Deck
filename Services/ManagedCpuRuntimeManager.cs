@@ -49,14 +49,6 @@ public sealed class ManagedCpuRuntimeManager
     public string BootstrapStatusLine { get; private set; } = string.Empty;
 
     /// <summary>
-    /// True when the CPU venv has never been installed (no marker + no python.exe).
-    /// Used to distinguish a first-time install (show size warning) from a hash update.
-    /// </summary>
-    public bool IsFirstInstall =>
-        !File.Exists(ManagedRuntimeLayout.GetCpuBootstrapMarkerPath())
-        && !File.Exists(ManagedRuntimeLayout.GetCpuPythonPath());
-
-    /// <summary>
     /// True when the CPU venv needs to be (re)installed — either missing or requirements changed.
     /// </summary>
     public bool NeedsBootstrap
@@ -74,7 +66,7 @@ public sealed class ManagedCpuRuntimeManager
                 var stored = File.ReadAllText(markerPath).Trim();
                 var requirementsPath = _requirementsPathResolver();
                 return !File.Exists(requirementsPath)
-                    || !string.Equals(stored, ComputeRequirementsHash(requirementsPath), StringComparison.Ordinal);
+                    || !string.Equals(stored, ComputeMarkerHash(requirementsPath), StringComparison.Ordinal);
             }
             catch
             {
@@ -139,9 +131,20 @@ public sealed class ManagedCpuRuntimeManager
         }
 
         var runtimeRoot = _cpuRuntimeRootResolver();
-        var venvDir = ManagedRuntimeLayout.GetCpuVenvDirectory();
-        var pythonPath = ManagedRuntimeLayout.GetCpuPythonPath();
-        var markerPath = ManagedRuntimeLayout.GetCpuBootstrapMarkerPath();
+        var defaultVenvDir = ManagedRuntimeLayout.GetCpuVenvDirectory();
+        var defaultPythonPath = ManagedRuntimeLayout.GetCpuPythonPath();
+        var defaultMarkerPath = ManagedRuntimeLayout.GetCpuBootstrapMarkerPath();
+        var defaultRuntimeRoot = Path.GetDirectoryName(defaultVenvDir) ?? runtimeRoot;
+
+        var venvDir = Path.Combine(
+            runtimeRoot,
+            Path.GetFileName(Path.TrimEndingDirectorySeparator(defaultVenvDir)));
+        var pythonPath = Path.Combine(
+            venvDir,
+            Path.GetRelativePath(defaultVenvDir, defaultPythonPath));
+        var markerPath = Path.Combine(
+            runtimeRoot,
+            Path.GetRelativePath(defaultRuntimeRoot, defaultMarkerPath));
         Directory.CreateDirectory(runtimeRoot);
 
         State = ManagedCpuState.Installing;
@@ -187,7 +190,7 @@ public sealed class ManagedCpuRuntimeManager
 
         await File.WriteAllTextAsync(
             markerPath,
-            ComputeRequirementsHash(requirementsPath),
+            ComputeMarkerHash(requirementsPath),
             cancellationToken);
 
         State = ManagedCpuState.Ready;
@@ -249,9 +252,12 @@ public sealed class ManagedCpuRuntimeManager
             _log.Info(stderr.Trim());
     }
 
-    private static string ComputeRequirementsHash(string requirementsPath)
+    // Marker format: "python:{version}\n{requirements_content}"
+    // Including PythonVersion ensures a version upgrade invalidates the existing venv.
+    private string ComputeMarkerHash(string requirementsPath)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(File.ReadAllText(requirementsPath)));
+        var content = $"python:{PythonVersion}\n{File.ReadAllText(requirementsPath)}";
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
     }
 
