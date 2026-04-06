@@ -31,6 +31,8 @@ public sealed class SessionSwitchServiceTests : IDisposable
 
     public void Dispose()
     {
+        try { _log.Dispose(); }
+        catch { }
         try { Directory.Delete(_dir, recursive: true); }
         catch { }
     }
