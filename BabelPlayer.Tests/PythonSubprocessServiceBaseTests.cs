@@ -78,7 +78,8 @@ public sealed class PythonSubprocessServiceBaseTests : IDisposable
     [Fact]
     public async Task RunPythonScriptAsync_HandlesCancellationGracefully()
     {
-        var log = new AppLog(_tempLogPath);
+        if (DependencyLocator.FindPython() is null) return;
+        using var log = new AppLog(_tempLogPath);
         var service = new TestPythonService(log);
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
@@ -100,7 +101,8 @@ print('Should not reach here')
     [Fact]
     public async Task RunPythonScriptAsync_CleansUpTempFileOnCancellation()
     {
-        var log = new AppLog(_tempLogPath);
+        if (DependencyLocator.FindPython() is null) return;
+        using var log = new AppLog(_tempLogPath);
         var service = new TestPythonService(log);
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
@@ -157,7 +159,8 @@ time.sleep(2)
     [Fact]
     public async Task RunPythonScriptAsync_HandlesStdinProcessDeath()
     {
-        var log = new AppLog(_tempLogPath);
+        if (DependencyLocator.FindPython() is null) return;
+        using var log = new AppLog(_tempLogPath);
         var service = new TestPythonService(log);
 
         // Script that exits immediately without reading stdin
@@ -177,7 +180,8 @@ sys.exit(1)
     [Fact]
     public async Task RunPythonScriptAsync_HandlesStdinIOException()
     {
-        var log = new AppLog(_tempLogPath);
+        if (DependencyLocator.FindPython() is null) return;
+        using var log = new AppLog(_tempLogPath);
         var service = new TestPythonService(log);
 
         // Script that closes stdin immediately
@@ -199,7 +203,8 @@ print('Stdin closed successfully')
     [Fact]
     public async Task RunPythonScriptAsync_PropagatesOperationCancelledException()
     {
-        var log = new AppLog(_tempLogPath);
+        if (DependencyLocator.FindPython() is null) return;
+        using var log = new AppLog(_tempLogPath);
         var service = new TestPythonService(log);
         using var cts = new CancellationTokenSource();
 
@@ -225,7 +230,8 @@ print('Stdin closed successfully')
             return;
         }
 
-        var log = new AppLog(_tempLogPath);
+        if (DependencyLocator.FindPython() is null) return;
+        using var log = new AppLog(_tempLogPath);
         var service = new TestPythonService(log);
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
@@ -252,7 +258,8 @@ time.sleep(10)
     [Fact]
     public async Task RunPythonScriptAsync_SuccessfulExecutionWithCancellation()
     {
-        var log = new AppLog(_tempLogPath);
+        if (DependencyLocator.FindPython() is null) return;
+        using var log = new AppLog(_tempLogPath);
         var service = new TestPythonService(log);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
@@ -272,7 +279,8 @@ print('With multiple lines')
     [Fact]
     public async Task RunPythonScriptAsync_HandlesEnvironmentVariables()
     {
-        var log = new AppLog(_tempLogPath);
+        if (DependencyLocator.FindPython() is null) return;
+        using var log = new AppLog(_tempLogPath);
         var service = new TestPythonService(log);
 
         var script = @"
@@ -300,7 +308,8 @@ print('ANOTHER_VAR=' + os.environ.get('ANOTHER_VAR', 'not_set'))
     [Fact]
     public async Task RunPythonScriptAsync_HandlesArguments()
     {
-        var log = new AppLog(_tempLogPath);
+        if (DependencyLocator.FindPython() is null) return;
+        using var log = new AppLog(_tempLogPath);
         var service = new TestPythonService(log);
 
         var script = @"

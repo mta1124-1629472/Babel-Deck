@@ -232,10 +232,6 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             _ => TimeSpan.Zero,
         };
 
-        ContainerizedProbeResult? cachedResult = null;
-        DateTimeOffset expiresAtUtc = default;
-        bool shouldUpdateCache = false;
-
         try
         {
             lock (entry.Gate)
@@ -245,23 +241,12 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     entry.InFlightTask = null;
                     entry.Cts?.Dispose();
                     entry.Cts = null;
-                }
 
-                if (ttl > TimeSpan.Zero)
-                {
-                    cachedResult = result;
-                    expiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
-                    shouldUpdateCache = true;
-                }
-            }
-
-            // Update cache outside the lock
-            if (shouldUpdateCache)
-            {
-                lock (entry.Gate)
-                {
-                    entry.CachedResult = cachedResult;
-                    entry.ExpiresAtUtc = expiresAtUtc;
+                    if (ttl > TimeSpan.Zero)
+                    {
+                        entry.CachedResult = result;
+                        entry.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+                    }
                 }
             }
 

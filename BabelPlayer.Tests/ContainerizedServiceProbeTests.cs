@@ -13,7 +13,7 @@ public sealed class ContainerizedServiceProbeTests
     public async Task GetCurrentOrStartBackgroundProbe_ReusesCachedAvailableResult()
     {
         var callCount = 0;
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
 
         var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
         {
@@ -41,7 +41,7 @@ public sealed class ContainerizedServiceProbeTests
     [Fact]
     public async Task GetCurrentOrStartBackgroundProbe_HandlesProbeFunctionException()
     {
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
         var exceptionThrown = false;
 
         var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
@@ -67,7 +67,7 @@ public sealed class ContainerizedServiceProbeTests
     [Fact]
     public async Task GetCurrentOrStartBackgroundProbe_ObserverExceptionDoesNotCrash()
     {
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
 
         var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
         {
@@ -95,7 +95,7 @@ public sealed class ContainerizedServiceProbeTests
     [Fact]
     public async Task WaitForProbeAsync_ReturnsCheckingWhenBudgetExpires()
     {
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
 
         var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
         {
@@ -120,7 +120,7 @@ public sealed class ContainerizedServiceProbeTests
     [Fact]
     public async Task WaitForProbeAsync_RespectsCancellationToken()
     {
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
         var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
@@ -149,7 +149,7 @@ public sealed class ContainerizedServiceProbeTests
     public async Task WaitForProbeAsync_RetriesUntilServiceBecomesAvailableWithinBudget()
     {
         var callCount = 0;
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
 
         // retryDelay: 10ms  → many retries fit within the 1 s budget on any CI machine
         var probe = new ContainerizedServiceProbe(
@@ -183,7 +183,7 @@ public sealed class ContainerizedServiceProbeTests
     public async Task WaitForProbeAsync_ReturnsLastUnavailableWhenBudgetExpires()
     {
         var callCount = 0;
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
 
         // retryDelay: 10ms  → many cycles easily fit inside the 650 ms budget
         var probe = new ContainerizedServiceProbe(
@@ -209,7 +209,7 @@ public sealed class ContainerizedServiceProbeTests
     public async Task WaitForProbeAsync_ForceRefreshBypassesCache()
     {
         var callCount = 0;
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
 
         var probe = new ContainerizedServiceProbe(log, (url, _, _) =>
         {
@@ -237,7 +237,7 @@ public sealed class ContainerizedServiceProbeTests
     public async Task GetCurrentOrStartBackgroundProbe_ConcurrentCacheInvalidationRaceCondition()
     {
         var callCount = 0;
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
         var probeStarted = new TaskCompletionSource<bool>();
         var probeCompleted = new TaskCompletionSource<bool>();
 
@@ -297,7 +297,7 @@ public sealed class ContainerizedServiceProbeTests
     public async Task GetCurrentOrStartBackgroundProbe_RapidForceRefreshCalls()
     {
         var callCount = 0;
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
         var probeCompleted = new TaskCompletionSource<bool>();
 
         var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
@@ -362,7 +362,7 @@ public sealed class ContainerizedServiceProbeTests
     public async Task GetCurrentOrStartBackgroundProbe_MemoryPressureScenario()
     {
         var callCount = 0;
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
         
         var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
         {
@@ -424,7 +424,7 @@ public sealed class ContainerizedServiceProbeTests
     public async Task GetCurrentOrStartBackgroundProbe_BasicCacheFunctionality()
     {
         var callCount = 0;
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
         var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
         {
             Interlocked.Increment(ref callCount);
@@ -467,7 +467,7 @@ public sealed class ContainerizedServiceProbeTests
     public async Task GetCurrentOrStartBackgroundProbe_CacheDoubleHitWithinLock()
     {
         var callCount = 0;
-        var log = new AppLog(Path.GetTempFileName());
+        using var log = new AppLog(Path.GetTempFileName());
         var probeCompleted = new TaskCompletionSource<bool>();
 
         var probe = new ContainerizedServiceProbe(log, async (url, _, _) =>
