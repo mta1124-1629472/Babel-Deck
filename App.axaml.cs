@@ -144,9 +144,9 @@ public partial class App : Application
             if (primaryGpuManager is not null)
                 primaryGpuManager.BootstrapProgressCallback = PostStatus;
 
-            // CPU venv — bootstrap silently on startup; surface progress if an install runs.
-            var cpuManager = new ManagedCpuRuntimeManager(appLog);
-            cpuManager.RequestEnsureInstalled(line => PostStatus(line));
+            // CPU runtime installation is intentionally not triggered during startup.
+            // Defer any first-time bootstrap/download until a user-initiated CPU
+            // transcription/TTS workflow explicitly requests it.
 
             // Run heavy startup probes in background and publish results on UI thread.
             var coordinator = _sessionWorkflowCoordinator;
