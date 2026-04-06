@@ -20,7 +20,7 @@ from uuid import uuid4
 import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Configure logging
 logging.basicConfig(
@@ -170,7 +170,7 @@ class TranscriptSegmentResponse(BaseModel):
     start: float
     end: float
     text: str
-    words: list[WordTimestampResponse] = []
+    words: list[WordTimestampResponse] = Field(default_factory=list)
 
 
 class TranscriptionResponse(BaseModel):

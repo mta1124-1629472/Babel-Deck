@@ -121,11 +121,12 @@ public sealed partial class SessionWorkflowCoordinator
 
         return groups.Select(g => new TranscriptSegmentArtifact
         {
-            Start     = g.Words[0].Start,
-            End       = g.Words[^1].End,
-            Text      = string.Join("", g.Words.Select(w => w.Text)).Trim(),
-            SpeakerId = g.SpeakerId,
-            Words     = g.Words,
+            Start         = g.Words[0].Start,
+            End           = g.Words[^1].End,
+            Text          = string.Join("", g.Words.Select(w => w.Text)).Trim(),
+            SpeakerId     = g.SpeakerId,
+            Words         = g.Words,
+            OriginalStart = segment.Start,
         }).ToList<TranscriptSegmentArtifact>();
     }
 
@@ -139,9 +140,16 @@ public sealed partial class SessionWorkflowCoordinator
 
         if (transcript.Segments is null || translation.Segments is null) return;
 
-        var speakerByStart = transcript.Segments
-            .Where(s => s.SpeakerId != null)
-            .ToDictionary(s => s.Start, s => s.SpeakerId!);
+        // Build lookup keyed by OriginalStart (set on split segments) or Start.
+        // For split segments that share the same OriginalStart, the first entry wins
+        // so the translation segment (which uses the pre-split start time) is matched.
+        var speakerByStart = new Dictionary<double, string>();
+        foreach (var s in transcript.Segments)
+        {
+            if (s.SpeakerId is null) continue;
+            var key = s.OriginalStart ?? s.Start;
+            speakerByStart.TryAdd(key, s.SpeakerId);
+        }
 
         var anyChanged = false;
         foreach (var seg in translation.Segments)

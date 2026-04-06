@@ -137,16 +137,26 @@ public partial class App : Application
             desktop.MainWindow = new MainWindow { DataContext = mainVm };
 
             // Wire live bootstrap progress into the status bar.
-            void PostStatus(string line) =>
-                Dispatcher.UIThread.Post(() => mainVm.Playback.StatusText = $"Setup: {line}");
+            // Debounce: create a new 150 ms one-shot timer on each line; swapping
+            // it atomically disposes the previous pending update so rapid pip/uv
+            // output doesn't flood the dispatcher queue.
+            System.Threading.Timer? statusDebounce = null;
+            void PostStatus(string line)
+            {
+                var captured = line;
+                var timer = new System.Threading.Timer(
+                    _ => Dispatcher.UIThread.Post(() => mainVm.Playback.StatusText = $"Setup: {captured}"),
+                    null, 150, System.Threading.Timeout.Infinite);
+                System.Threading.Interlocked.Exchange(ref statusDebounce, timer)?.Dispose();
+            }
 
             // GPU venv — surface install progress (first-time and rebuilds).
             if (primaryGpuManager is not null)
                 primaryGpuManager.BootstrapProgressCallback = PostStatus;
 
-            // CPU venv — bootstrap silently on startup; surface progress if an install runs.
-            var cpuManager = new ManagedCpuRuntimeManager(appLog);
-            cpuManager.RequestEnsureInstalled(line => PostStatus(line));
+            // CPU runtime installation is intentionally not triggered during startup.
+            // Defer any first-time bootstrap/download until a user-initiated CPU
+            // transcription/TTS workflow explicitly requests it.
 
             // Run heavy startup probes in background and publish results on UI thread.
             var coordinator = _sessionWorkflowCoordinator;
