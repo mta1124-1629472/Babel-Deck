@@ -111,8 +111,8 @@ public sealed class ProbeMetricsReporter(ContainerizedServiceProbe probe, AppLog
                          $"{metric.CacheHitRate:F2}," +
                          $"{metric.AverageDurationMs:F2}," +
                          $"{metric.ConsecutiveFailures}," +
-                         $"{(metric.LastProbeAtUtc == DateTimeOffset.MinValue ? "" : metric.LastProbeAtUtc.ToString("yyyy-MM-dd HH:mm:ss UTC"))}," +
-                         $"{(metric.LastSuccessAtUtc == DateTimeOffset.MinValue ? "" : metric.LastSuccessAtUtc.ToString("yyyy-MM-dd HH:mm:ss UTC"))}," +
+                         $"{FormatTimestamp(metric.LastProbeAtUtc)}," +
+                         $"{FormatTimestamp(metric.LastSuccessAtUtc)}," +
                          $"{EscapeCsv(metric.LastError ?? "")}");
         }
 
@@ -193,6 +193,11 @@ public sealed class ProbeMetricsReporter(ContainerizedServiceProbe probe, AppLog
         }
 
         return value;
+    }
+
+    private static string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        return timestamp == DateTimeOffset.MinValue ? "" : timestamp.ToString("yyyy-MM-dd HH:mm:ss UTC");
     }
 }
 

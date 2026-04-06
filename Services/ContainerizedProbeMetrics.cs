@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Net;
 
 namespace Babel.Player.Services;
 
@@ -29,7 +30,94 @@ public sealed class ContainerizedProbeMetrics
             throw new ArgumentException($"Service URL must be a valid HTTP/HTTPS URL: {normalizedUrl}", nameof(serviceUrl));
         }
         
+        // Validate against internal/private endpoints
+        ValidatePublicEndpoint(uri, normalizedUrl);
+        
         return _serviceMetrics.GetOrAdd(normalizedUrl, _ => new ServiceMetrics(normalizedUrl));
+    }
+    
+    /// <summary>
+    /// Validates that the URI points to a public external endpoint, not internal/private addresses.
+    /// </summary>
+    private static void ValidatePublicEndpoint(Uri uri, string normalizedUrl)
+    {
+        var hostName = uri.Host;
+        
+        // Reject localhost and loopback variants
+        if (hostName.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            hostName.Equals("127.0.0.1", StringComparison.Ordinal) ||
+            hostName.Equals("::1", StringComparison.Ordinal))
+        {
+            throw new ArgumentException($"Metrics collection for localhost endpoints is not permitted: {normalizedUrl}", nameof(normalizedUrl));
+        }
+        
+        // Attempt to parse as IP address and reject private/reserved ranges
+        if (IPAddress.TryParse(hostName, out var ipAddress))
+        {
+            if (IsPrivateOrReservedIp(ipAddress))
+            {
+                throw new ArgumentException($"Metrics collection for private/reserved IP addresses is not permitted: {normalizedUrl}", nameof(normalizedUrl));
+            }
+        }
+        
+        // Reject non-standard ports that may indicate internal/debug endpoints
+        var standardPorts = new[] { 80, 443 };
+        if (!standardPorts.Contains(uri.Port))
+        {
+            throw new ArgumentException($"Metrics collection only allowed on standard HTTP (80) or HTTPS (443) ports. Requested: {uri.Port}", nameof(normalizedUrl));
+        }
+    }
+    
+    /// <summary>
+    /// Determines if an IP address is in a private or reserved range.
+    /// </summary>
+    private static bool IsPrivateOrReservedIp(IPAddress ipAddress)
+    {
+        if (ipAddress.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            var bytes = ipAddress.GetAddressBytes();
+            
+            // 10.0.0.0/8
+            if (bytes[0] == 10)
+                return true;
+            
+            // 172.16.0.0/12
+            if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+                return true;
+            
+            // 192.168.0.0/16
+            if (bytes[0] == 192 && bytes[1] == 168)
+                return true;
+            
+            // 127.0.0.0/8 (loopback)
+            if (bytes[0] == 127)
+                return true;
+            
+            // 169.254.0.0/16 (link-local)
+            if (bytes[0] == 169 && bytes[1] == 254)
+                return true;
+            
+            // 0.0.0.0/8 and 255.255.255.255
+            if (bytes[0] == 0 || ipAddress.Equals(IPAddress.Broadcast))
+                return true;
+        }
+        
+        // IPv6 private ranges
+        if (ipAddress.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            // ::1 (loopback) already caught by hostname check
+            // fc00::/7 (Unique Local Addresses)
+            // fe80::/10 (Link-local)
+            var addressString = ipAddress.ToString();
+            if (addressString.StartsWith("fc", StringComparison.OrdinalIgnoreCase) ||
+                addressString.StartsWith("fd", StringComparison.OrdinalIgnoreCase) ||
+                addressString.StartsWith("fe80", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        
+        return false;
     }
     
     /// <summary>

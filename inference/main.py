@@ -994,6 +994,9 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
     if qwen_model is None or qwen_model_key != model_name:
         from qwen_tts import Qwen3TTSModel
         logger.info(f"Loading Qwen3-TTS '{model_name}' on {HOST_DEVICE}")
+        # Use scaled_dot_product_attention (sdpa) for faster inference and lower memory usage
+        # compared to the default attention implementation. sdpa is optimized for transformer
+        # models and provides better performance on modern GPUs without sacrificing quality.
         qwen_model = Qwen3TTSModel.from_pretrained(
             model_name,
             device_map="auto" if HOST_DEVICE == "cuda" else HOST_DEVICE,

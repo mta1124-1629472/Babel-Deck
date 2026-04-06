@@ -21,6 +21,9 @@ namespace Babel.Player.Services;
 /// </summary>
 public abstract class PythonSubprocessServiceBase
 {
+    private const int ProcessTerminationRetryAttempts = 3;
+    private static readonly TimeSpan ProcessTerminationTimeout = TimeSpan.FromSeconds(2);
+
     protected readonly AppLog Log;
     protected readonly string PythonPath;
 
@@ -113,18 +116,18 @@ public abstract class PythonSubprocessServiceBase
                     
                     // Give the process multiple opportunities to terminate
                     var terminated = false;
-                    for (int attempt = 0; attempt < 3 && !terminated; attempt++)
+                    for (int attempt = 0; attempt < ProcessTerminationRetryAttempts && !terminated; attempt++)
                     {
                         try
                         {
-                            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                            using var cts = new CancellationTokenSource(ProcessTerminationTimeout);
                             await proc.WaitForExitAsync(cts.Token);
                             terminated = true;
                         }
                         catch (OperationCanceledException)
                         {
                             // Process didn't terminate within timeout, try again
-                            if (attempt < 2)
+                            if (attempt < ProcessTerminationRetryAttempts - 1)
                             {
                                 proc.Kill(entireProcessTree: true); // Try killing again
                             }

@@ -75,56 +75,59 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
  
         lock (entry.Gate)
         {
-            var nowUtc = DateTimeOffset.UtcNow;
-            
-            // Check cache first to prevent race condition with in-flight task completion
-            if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
+            lock (entry)
             {
-                _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}");
-                ReportCacheAccess(normalizedUrl, true);
-                // Return cached result with WasCacheHit flag set
-                return entry.CachedResult with { WasCacheHit = true };
-            }
-
-            if (entry.InFlightTask is not null && !forceRefresh)
-            {
-                // Double-check cache: the task may have completed between our first check and now
+                var nowUtc = DateTimeOffset.UtcNow;
+                
+                // Check cache first to prevent race condition with in-flight task completion
                 if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
                 {
-                    _log.Info($"Container probe cache hit (after race): url={normalizedUrl}, state={entry.CachedResult.State}");
-                    return entry.CachedResult;
+                    _log.Info($"Container probe cache hit: url={normalizedUrl}, state={entry.CachedResult.State}");
+                    ReportCacheAccess(normalizedUrl, true);
+                    // Return cached result with WasCacheHit flag set
+                    return entry.CachedResult with { WasCacheHit = true };
                 }
-                _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
+
+                if (entry.InFlightTask is not null && !forceRefresh)
+                {
+                    // Double-check cache: the task may have completed between our first check and now
+                    if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
+                    {
+                        _log.Info($"Container probe cache hit (after race): url={normalizedUrl}, state={entry.CachedResult.State}");
+                        return entry.CachedResult;
+                    }
+                    _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
+                    return Checking(normalizedUrl);
+                }
+
+                // If forceRefresh and there's an in-flight task, cancel it and start a fresh probe
+                if (forceRefresh && entry.InFlightTask is not null)
+                {
+                    _log.Info($"Container probe force refresh: url={normalizedUrl}, cancelling previous probe and starting new one");
+                    try
+                    {
+                        entry.Cts?.Cancel();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // CTS already disposed, ignore
+                    }
+                    entry.CachedResult = null;
+                    // Note: We don't null out InFlightTask here - we let the observer handle cleanup
+                    // when the cancelled task completes. We just overwrite it with the new task below.
+                }
+
+
+                // Always start a new probe when forceRefresh is true, or when no probe is in flight
+                entry.Cts = new CancellationTokenSource();
+                var newTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout, entry.Cts.Token);
+                entry.InFlightTask = newTask;
+                _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background, forceRefresh={forceRefresh}");
+                
+                // Fire-and-forget with proper exception handling to prevent resource leaks
+                ObserveCompletionWithFaultHandling(normalizedUrl, entry, entry.InFlightTask);
                 return Checking(normalizedUrl);
             }
-
-            // If forceRefresh and there's an in-flight task, cancel it and start a fresh probe
-            if (forceRefresh && entry.InFlightTask is not null)
-            {
-                _log.Info($"Container probe force refresh: url={normalizedUrl}, cancelling previous probe and starting new one");
-                try
-                {
-                    entry.Cts?.Cancel();
-                }
-                catch (ObjectDisposedException)
-                {
-                    // CTS already disposed, ignore
-                }
-                entry.CachedResult = null;
-                // Note: We don't null out InFlightTask here - we let the observer handle cleanup
-                // when the cancelled task completes. We just overwrite it with the new task below.
-            }
-
-
-            // Always start a new probe when forceRefresh is true, or when no probe is in flight
-            entry.Cts = new CancellationTokenSource();
-            var newTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout, entry.Cts.Token);
-            entry.InFlightTask = newTask;
-            _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background, forceRefresh={forceRefresh}");
-            
-            // Fire-and-forget with proper exception handling to prevent resource leaks
-            ObserveCompletionWithFaultHandling(normalizedUrl, entry, entry.InFlightTask);
-            return Checking(normalizedUrl);
         }
     }
 
@@ -259,19 +262,8 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
 
                 if (ttl > TimeSpan.Zero)
                 {
-                    cachedResult = result;
-                    expiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
-                    shouldUpdateCache = true;
-                }
-            }
-
-            // Update cache outside the lock
-            if (shouldUpdateCache)
-            {
-                lock (entry.Gate)
-                {
-                    entry.CachedResult = cachedResult;
-                    entry.ExpiresAtUtc = expiresAtUtc;
+                    entry.CachedResult = result;
+                    entry.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
                 }
             }
 

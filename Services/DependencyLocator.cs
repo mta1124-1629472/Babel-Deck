@@ -14,7 +14,13 @@ public static class DependencyLocator
 {
     private const int ProbeTimeoutMs = 500;
 
-    /// <summary>Returns a working Python executable path, or null if not found.</summary>
+    /// <summary>
+    /// Returns a working Python executable path, or null if not found.
+    /// Probes managed CPU runtime first (preferred for CPU-only inference operations),
+    /// then falls back to managed GPU runtime, and finally searches system PATH.
+    /// This order optimizes resource allocation by reserving GPU for workloads that
+    /// explicitly require GPU acceleration.
+    /// </summary>
     public static string? FindPython()
     {
         var appDir = AppContext.BaseDirectory;
