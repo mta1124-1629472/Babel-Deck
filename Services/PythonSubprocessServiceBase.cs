@@ -33,12 +33,20 @@ public abstract class PythonSubprocessServiceBase
     }
 
     /// <summary>Captures the output of a single Python subprocess invocation.</summary>
-    public sealed record ScriptResult(int ExitCode, string Stdout, string Stderr);
+    /// <param name="ExitCode">Process exit code (0 = success).</param>
+    /// <param name="Stdout">Captured standard output text.</param>
+    /// <param name="Stderr">Captured standard error text.</param>
+    /// <param name="ElapsedMs">
+    /// Wall-clock milliseconds measured from just before <c>WaitForExitAsync</c> is called
+    /// to just after it returns. Includes I/O flushing but not script write / process spawn
+    /// overhead, so it closely approximates the inference duration seen by the caller.
+    /// </param>
+    public sealed record ScriptResult(int ExitCode, string Stdout, string Stderr, long ElapsedMs = 0);
 
     /// <summary>
     /// Writes <paramref name="scriptContent"/> to a uniquely-named temp file, runs it
     /// under <see cref="PythonPath"/> with <paramref name="arguments"/> appended after
-/// the script path, captures stdout/stderr, then deletes the temp file.
+    /// the script path, captures stdout/stderr, then deletes the temp file.
     ///
     /// Throws <see cref="OperationCanceledException"/> if <paramref name="cancellationToken"/>
     /// is signalled during the wait.
@@ -78,7 +86,7 @@ public abstract class PythonSubprocessServiceBase
 
             var psi = new ProcessStartInfo
             {
-                FileName              = PythonPath,
+                FileName               = PythonPath,
                 RedirectStandardOutput = true,
                 RedirectStandardError  = true,
                 RedirectStandardInput  = standardInput is not null,
@@ -95,10 +103,12 @@ public abstract class PythonSubprocessServiceBase
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException($"Failed to start Python process ({scriptPrefix}).");
 
-            var stdinTask = WriteStandardInputAsync(proc, standardInput, cancellationToken);
+            var stdinTask  = WriteStandardInputAsync(proc, standardInput, cancellationToken);
             var stdoutTask = proc.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
-            
+
+            // ── Timing: measure the wall-clock duration of the inference subprocess ──
+            var sw = Stopwatch.StartNew();
             try
             {
                 await Task.WhenAll(stdoutTask, stderrTask, stdinTask);
@@ -107,10 +117,10 @@ public abstract class PythonSubprocessServiceBase
             catch (OperationCanceledException)
             {
                 // Cancellation requested - kill the process to prevent zombie
-                try 
-                { 
-                    proc.Kill(entireProcessTree: true); 
-                    
+                try
+                {
+                    proc.Kill(entireProcessTree: true);
+
                     // Give the process multiple opportunities to terminate
                     var terminated = false;
                     for (int attempt = 0; attempt < 3 && !terminated; attempt++)
@@ -125,36 +135,31 @@ public abstract class PythonSubprocessServiceBase
                         {
                             // Process didn't terminate within timeout, try again
                             if (attempt < 2)
-                            {
-                                proc.Kill(entireProcessTree: true); // Try killing again
-                            }
+                                proc.Kill(entireProcessTree: true);
                         }
                     }
-                    
+
                     if (!terminated)
                     {
-                        // Last resort - try to force terminate without waiting
-                        try
-                        {
-                            proc.Kill(entireProcessTree: true);
-                        }
-                        catch
-                        {
-                            // Process is likely already dead or inaccessible
-                        }
+                        try { proc.Kill(entireProcessTree: true); }
+                        catch { /* best effort */ }
                     }
                 }
-                catch 
-                { 
-                    // Best effort - process might already be dead or inaccessible
+                catch
+                {
+                    // Best effort — process might already be dead or inaccessible
                 }
                 throw;
             }
-            
+            finally
+            {
+                sw.Stop();
+            }
+
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
 
-            return new ScriptResult(proc.ExitCode, stdout, stderr);
+            return new ScriptResult(proc.ExitCode, stdout, stderr, sw.ElapsedMilliseconds);
         }
         finally
         {
@@ -179,18 +184,15 @@ public abstract class PythonSubprocessServiceBase
         }
         catch (IOException)
         {
-            // Process likely died or closed stdin - this is expected in some scenarios
-            // Don't rethrow - let the main process handling logic detect the failure
+            // Process likely died or closed stdin — expected in some scenarios
         }
         catch (OperationCanceledException)
         {
-            // Cancellation requested - let this propagate
             throw;
         }
         catch (ObjectDisposedException)
         {
-            // Process was disposed - expected during cancellation
-            // Don't rethrow
+            // Process was disposed — expected during cancellation
         }
     }
 
