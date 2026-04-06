@@ -31,6 +31,14 @@ public sealed class TranscriptSegmentArtifact
 
     [JsonPropertyName("words")]
     public List<WordTimestamp>? Words { get; set; }
+
+    /// <summary>
+    /// Set only on segments produced by speaker-boundary splitting.
+    /// Preserves the original segment's Start so downstream artifacts
+    /// (translation, TTS) keyed by that time can still be aligned.
+    /// </summary>
+    [JsonPropertyName("originalStart")]
+    public double? OriginalStart { get; set; }
 }
 
 public sealed record WordTimestamp(

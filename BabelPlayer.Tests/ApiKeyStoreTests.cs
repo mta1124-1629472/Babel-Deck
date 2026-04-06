@@ -22,7 +22,7 @@ public sealed class ApiKeyStoreTests : IDisposable
     }
 
     [Fact]
-    public void DirectoryPathMode_PersistsAndReloadsKey()
+    public void FileSystemCredentialProvider_PersistsAndReloads_OpenAiKey()
     {
         var store = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "state", "api-keys.json")));
         store.SetKey(CredentialKeys.OpenAi, "test-openai-key");
@@ -37,7 +37,7 @@ public sealed class ApiKeyStoreTests : IDisposable
     }
 
     [Fact]
-    public void FilePathMode_PersistsAndReloadsKey()
+    public void FileSystemCredentialProvider_PersistsAndReloads_DeeplKey()
     {
         var filePath = Path.Combine(_dir, "state", "keys.json");
         var store = new ApiKeyStore(new FileSystemCredentialProvider(filePath));
