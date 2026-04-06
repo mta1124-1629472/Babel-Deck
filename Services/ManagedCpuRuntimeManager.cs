@@ -139,9 +139,20 @@ public sealed class ManagedCpuRuntimeManager
         }
 
         var runtimeRoot = _cpuRuntimeRootResolver();
-        var venvDir = ManagedRuntimeLayout.GetCpuVenvDirectory();
-        var pythonPath = ManagedRuntimeLayout.GetCpuPythonPath();
-        var markerPath = ManagedRuntimeLayout.GetCpuBootstrapMarkerPath();
+        var defaultVenvDir = ManagedRuntimeLayout.GetCpuVenvDirectory();
+        var defaultPythonPath = ManagedRuntimeLayout.GetCpuPythonPath();
+        var defaultMarkerPath = ManagedRuntimeLayout.GetCpuBootstrapMarkerPath();
+        var defaultRuntimeRoot = Path.GetDirectoryName(defaultVenvDir) ?? runtimeRoot;
+
+        var venvDir = Path.Combine(
+            runtimeRoot,
+            Path.GetFileName(Path.TrimEndingDirectorySeparator(defaultVenvDir)));
+        var pythonPath = Path.Combine(
+            venvDir,
+            Path.GetRelativePath(defaultVenvDir, defaultPythonPath));
+        var markerPath = Path.Combine(
+            runtimeRoot,
+            Path.GetRelativePath(defaultRuntimeRoot, defaultMarkerPath));
         Directory.CreateDirectory(runtimeRoot);
 
         State = ManagedCpuState.Installing;
