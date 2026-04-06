@@ -70,6 +70,12 @@ public abstract class PythonSubprocessServiceBase
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         CancellationToken cancellationToken = default)
     {
+        // Validate scriptPrefix to prevent path traversal attacks
+        if (!IsValidScriptPrefix(scriptPrefix))
+            throw new ArgumentException(
+                $"scriptPrefix must contain only alphanumeric characters, hyphens, and underscores. Got: {scriptPrefix}",
+                nameof(scriptPrefix));
+
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
 
         // Check for cancellation before doing any work
@@ -164,6 +170,13 @@ public abstract class PythonSubprocessServiceBase
             if (File.Exists(scriptPath))
                 File.Delete(scriptPath);
         }
+    }
+
+    private static bool IsValidScriptPrefix(string prefix)
+    {
+        // Allow only alphanumeric, hyphens, and underscores to prevent path traversal
+        return !string.IsNullOrEmpty(prefix) 
+            && prefix.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_');
     }
 
     private static async Task WriteStandardInputAsync(

@@ -213,8 +213,11 @@ public sealed class ServiceMetrics
     { 
         get
         {
-            var totalAccesses = CacheHits + CacheMisses;
-            return totalAccesses > 0 ? (double)CacheHits / totalAccesses * 100 : 0;
+            lock (_gate)
+            {
+                var totalAccesses = CacheHits + CacheMisses;
+                return totalAccesses > 0 ? (double)CacheHits / totalAccesses * 100 : 0;
+            }
         }
     }
     
