@@ -737,11 +737,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         if (_isUpdatingPositionFromTimer) return;
         _coordinator.SourceMediaPlayer?.Seek((long)value);
         if (IsDubModeOn)
-        {
-            RestoreDucking();
-            _coordinator.StopTtsPlayback();
-            _lastDubbedSegment = null;
-        }
+            ApplyDubForSegment(null);
     }
 
     partial void OnSelectedSegmentChanged(WorkflowSegmentState? value)
@@ -886,16 +882,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
         // Immediately sync dub mode to the new segment without waiting for the next timer tick
         if (IsDubModeOn)
-        {
-            RestoreDucking();
-            _coordinator.StopTtsPlayback();
-            _lastDubbedSegment = segment;
-            if (segment.HasTtsAudio)
-            {
-                ApplyDucking();
-                _ = _coordinator.PlayTtsForSegmentAsync(segment.SegmentId);
-            }
-        }
+            ApplyDubForSegment(segment);
     }
 
     partial void OnSourceVolumeChanged(double value)
@@ -1420,9 +1407,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     {
         if (!value)
         {
-            RestoreDucking();
-            _coordinator.StopTtsPlayback();
-            _lastDubbedSegment = null;
+            ApplyDubForSegment(null);
         }
         else if (!IsSourcePaused)
         {
@@ -1609,26 +1594,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         return candidate >= 0 ? arr[candidate] : null;
     }
 
-    private void UpdateDubMode()
+    // Core dub-sync helper. Restores ducking, stops any in-flight TTS, updates
+    // _lastDubbedSegment, and — when seg is non-null and seekVideoToSegmentStart is true —
+    // seeks the video to seg's start. When seg has audio, applies ducking and starts TTS.
+    // Pass null for seg to stop and clear only (on pause, manual scrub, or dub-mode-off).
+    private void ApplyDubForSegment(WorkflowSegmentState? seg, bool seekVideoToSegmentStart = false)
     {
-        var currentSeg = FindSegmentAt(SourcePositionMs / 1000.0);
-        if (currentSeg?.SegmentId == _lastDubbedSegment?.SegmentId) return;
-        _lastDubbedSegment = currentSeg;
-        RestoreDucking();
-        _coordinator.StopTtsPlayback();
-        if (currentSeg?.HasTtsAudio == true)
-        {
-            ApplyDucking();
-            _ = _coordinator.PlayTtsForSegmentAsync(currentSeg.SegmentId);
-        }
-    }
-
-    // Seeks video to the start of the current segment (when seekVideoToSegmentStart is true),
-    // stops any in-flight TTS, and immediately starts TTS for that segment.
-    // Called on explicit play/resume and on dub-mode toggle-on while playing.
-    private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart)
-    {
-        var seg = FindSegmentAt(SourcePositionMs / 1000.0);
         RestoreDucking();
         _coordinator.StopTtsPlayback();
         _lastDubbedSegment = seg;
@@ -1641,6 +1612,19 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             _ = _coordinator.PlayTtsForSegmentAsync(seg.SegmentId);
         }
     }
+
+    private void UpdateDubMode()
+    {
+        var currentSeg = FindSegmentAt(SourcePositionMs / 1000.0);
+        if (currentSeg?.SegmentId == _lastDubbedSegment?.SegmentId) return;
+        ApplyDubForSegment(currentSeg);
+    }
+
+    // Finds the segment at the current playback position and delegates to ApplyDubForSegment.
+    // Pass seekVideoToSegmentStart: true when resuming play (seek to segment start for clean A/V
+    // alignment); false when the video position is already correct (e.g., timer-driven update).
+    private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart)
+        => ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -1737,11 +1721,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             player.Pause();
             IsSourcePaused = true;
             if (IsDubModeOn)
-            {
-                RestoreDucking();
-                _coordinator.StopTtsPlayback();
-                _lastDubbedSegment = null;
-            }
+                ApplyDubForSegment(null);
         }
     }
 
