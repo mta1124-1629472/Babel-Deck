@@ -98,18 +98,28 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                 return Checking(normalizedUrl);
             }
 
-            // If forceRefresh and there's an in-flight task, clear cache before starting new one.
-            // We do NOT cancel the previous in-flight task here to allow rapid force refreshes
-            // without killing newly started tasks that haven't hit the scheduler yet.
+            // If forceRefresh and there's an in-flight task, cancel it and start a fresh probe
             if (forceRefresh && entry.InFlightTask is not null)
             {
-                _log.Info($"Container probe force refresh: url={normalizedUrl}, clearing cache for new probe");
+                _log.Info($"Container probe force refresh: url={normalizedUrl}, cancelling previous probe and starting new one");
+                try
+                {
+                    entry.Cts?.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // CTS already disposed, ignore
+                }
                 entry.CachedResult = null;
+                // Note: We don't null out InFlightTask here - we let the observer handle cleanup
+                // when the cancelled task completes. We just overwrite it with the new task below.
             }
 
 
+            // Always start a new probe when forceRefresh is true, or when no probe is in flight
             entry.Cts = new CancellationTokenSource();
-            entry.InFlightTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout, entry.Cts.Token);
+            var newTask = StartProbeTask(normalizedUrl, PassiveProbeTimeout, entry.Cts.Token);
+            entry.InFlightTask = newTask;
             _log.Info($"Container probe start: url={normalizedUrl}, timeoutMs={PassiveProbeTimeout.TotalMilliseconds}, mode=background, forceRefresh={forceRefresh}");
             
             // Fire-and-forget with proper exception handling to prevent resource leaks
