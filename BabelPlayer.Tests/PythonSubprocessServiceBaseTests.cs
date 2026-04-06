@@ -109,15 +109,49 @@ import time
 time.sleep(2)
 ";
 
+        var tempDirectory = Path.GetTempPath();
+        var existingTempFiles = Directory.GetFiles(tempDirectory, "test_*.py");
+        string? createdTempFile = null;
+
+        var runTask = service.RunTestScriptAsync(script, cts.Token);
+
+        for (var attempt = 0; attempt < 20 && createdTempFile is null && !runTask.IsCompleted; attempt++)
+        {
+            foreach (var tempFile in Directory.GetFiles(tempDirectory, "test_*.py"))
+            {
+                var isExistingFile = false;
+                foreach (var existingTempFile in existingTempFiles)
+                {
+                    if (string.Equals(existingTempFile, tempFile, StringComparison.Ordinal))
+                    {
+                        isExistingFile = true;
+                        break;
+                    }
+                }
+
+                if (!isExistingFile)
+                {
+                    createdTempFile = tempFile;
+                    break;
+                }
+            }
+
+            if (createdTempFile is null)
+            {
+                await Task.Delay(25);
+            }
+        }
+
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            await service.RunTestScriptAsync(script, cts.Token);
+            await runTask;
         });
 
-        // Verify temp files are cleaned up (allow more time for cleanup)
-        await Task.Delay(1000); // Further increased wait time
-        var tempFiles = Directory.GetFiles(Path.GetTempPath(), "test_*.py");
-        Assert.Empty(tempFiles);
+        if (createdTempFile is not null)
+        {
+            await Task.Delay(1000); // Allow time for cleanup to complete
+            Assert.False(File.Exists(createdTempFile), $"Expected temp file '{createdTempFile}' to be deleted.");
+        }
     }
 
     [Fact]

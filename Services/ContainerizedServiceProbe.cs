@@ -88,6 +88,12 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
 
             if (entry.InFlightTask is not null && !forceRefresh)
             {
+                // Double-check cache: the task may have completed between our first check and now
+                if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
+                {
+                    _log.Info($"Container probe cache hit (after race): url={normalizedUrl}, state={entry.CachedResult.State}");
+                    return entry.CachedResult;
+                }
                 _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
                 return Checking(normalizedUrl);
             }
@@ -336,8 +342,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         switch (result)
         {
             case ProbeResult.Success:
-                if (duration.HasValue)
-                    metrics.RecordSuccess(duration.Value, wasCacheHit);
+                metrics.RecordSuccess(duration ?? TimeSpan.Zero, wasCacheHit);
                 break;
             case ProbeResult.Failure:
                 metrics.RecordFailure(errorDetail, wasCacheHit);
