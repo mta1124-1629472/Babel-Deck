@@ -89,7 +89,7 @@ time.sleep(2)
 print('Should not reach here')
 ";
 
-        var exception = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await service.RunTestScriptAsync(longRunningScript, cts.Token);
         });
@@ -142,7 +142,7 @@ time.sleep(2)
             }
         }
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await runTask;
         });
@@ -208,7 +208,7 @@ print('Stdin closed successfully')
 
         var script = "print('Hello')";
 
-        var exception = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await service.RunTestScriptAsync(script, cts.Token);
         });
@@ -241,7 +241,7 @@ signal.signal(signal.SIGTERM, handler)
 time.sleep(10)
 ";
 
-        var exception = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await service.RunTestScriptAsync(script, cts.Token);
         });

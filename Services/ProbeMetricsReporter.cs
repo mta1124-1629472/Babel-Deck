@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -11,16 +12,16 @@ namespace Babel.Player.Services;
 /// Service for reporting and exporting containerized probe metrics.
 /// Provides multiple output formats for monitoring and diagnostics.
 /// </summary>
-public sealed class ProbeMetricsReporter
+public sealed class ProbeMetricsReporter(ContainerizedServiceProbe probe, AppLog log)
 {
-    private readonly ContainerizedServiceProbe _probe;
-    private readonly AppLog _log;
+    private readonly ContainerizedServiceProbe _probe = probe ?? throw new ArgumentNullException(nameof(probe));
+    private readonly AppLog _log = log ?? throw new ArgumentNullException(nameof(log));
 
-    public ProbeMetricsReporter(ContainerizedServiceProbe probe, AppLog log)
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        _probe = probe ?? throw new ArgumentNullException(nameof(probe));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
-    }
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     /// <summary>
     /// Gets a human-readable summary of all probe metrics.
@@ -56,7 +57,7 @@ public sealed class ProbeMetricsReporter
     /// <summary>
     /// Exports metrics as JSON for programmatic consumption.
     /// </summary>
-    public async Task<string> ExportJsonAsync()
+    public Task<string> ExportJsonAsync()
     {
         var metrics = _probe.GetAllMetrics();
         var exportData = new
@@ -72,9 +73,9 @@ public sealed class ProbeMetricsReporter
                 m.Cancellations,
                 m.CacheHits,
                 m.CacheMisses,
-                SuccessRate = m.SuccessRate,
-                CacheHitRate = m.CacheHitRate,
-                AverageDurationMs = m.AverageDurationMs,
+                m.SuccessRate,
+                m.CacheHitRate,
+                m.AverageDurationMs,
                 m.ConsecutiveFailures,
                 LastProbeAtUtc = m.LastProbeAtUtc == DateTimeOffset.MinValue ? (DateTimeOffset?)null : m.LastProbeAtUtc,
                 LastSuccessAtUtc = m.LastSuccessAtUtc == DateTimeOffset.MinValue ? (DateTimeOffset?)null : m.LastSuccessAtUtc,
@@ -82,13 +83,7 @@ public sealed class ProbeMetricsReporter
             })
         };
 
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
-
-        return JsonSerializer.Serialize(exportData, options);
+        return Task.FromResult(JsonSerializer.Serialize(exportData, JsonOptions));
     }
 
     /// <summary>
@@ -181,11 +176,10 @@ public sealed class ProbeMetricsReporter
     /// </summary>
     public ServiceMetrics[] GetProblematicServices(double failureRateThreshold = 50.0, int consecutiveFailureThreshold = 3)
     {
-        return _probe.GetAllMetrics()
+        return [.. _probe.GetAllMetrics()
             .Where(m => 
                 (m.TotalProbes >= 5 && m.SuccessRate < failureRateThreshold) ||
-                m.ConsecutiveFailures >= consecutiveFailureThreshold)
-            .ToArray();
+                m.ConsecutiveFailures >= consecutiveFailureThreshold)];
     }
 
     private static string EscapeCsv(string? value)
