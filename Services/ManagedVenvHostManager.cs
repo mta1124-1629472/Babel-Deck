@@ -82,6 +82,12 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
     public string? FailureReason { get; private set; }
 
+    /// <summary>
+    /// The most recent status line from the bootstrap process (e.g., "Downloading torch (2.4 GB)").
+    /// Updated live during installation.
+    /// </summary>
+    public string BootstrapStatusLine { get; private set; } = string.Empty;
+
     public void RequestEnsureStarted(AppSettings settings, ContainerizedStartupTrigger trigger)
     {
         BackgroundTaskObserver.Observe(
@@ -459,7 +465,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             uvPath,
             AppContext.BaseDirectory,
             cancellationToken,
-            BootstrapProgressCallback,
+            line =>
+            {
+                BootstrapStatusLine = line;
+                BootstrapProgressCallback?.Invoke(line);
+            },
             "pip",
             "install",
             "--index-strategy",
