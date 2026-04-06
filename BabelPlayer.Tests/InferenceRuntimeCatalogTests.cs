@@ -315,7 +315,7 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void NormalizeTtsProvider_CloudProfile_UnknownProviderMapsToDefault()
+    public void NormalizeTtsProvider_CloudProfile_CpuOnlyProviderMapsToDefault()
     {
         var result = InferenceRuntimeCatalog.NormalizeTtsProvider(ComputeProfile.Cloud, ProviderNames.Piper);
         Assert.Equal(ProviderNames.EdgeTts, result);

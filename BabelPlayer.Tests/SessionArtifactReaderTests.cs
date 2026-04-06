@@ -270,10 +270,10 @@ public sealed class SessionArtifactReaderTests : IDisposable
     {
         var translationPath = WriteTranslation("es", "en",
         [
-            ("segment_0", 0.0, 1.5, "Hola", "Hello", null),
+            ("segment_0.0", 0.0, 1.5, "Hola", "Hello", null),
         ]);
 
-        var text = await _reader.GetTranslatedTextAsync(translationPath, "segment_0");
+        var text = await _reader.GetTranslatedTextAsync(translationPath, "segment_0.0");
         Assert.Equal("Hello", text);
     }
 
@@ -282,11 +282,11 @@ public sealed class SessionArtifactReaderTests : IDisposable
     {
         var translationPath = WriteTranslation("es", "en",
         [
-            ("segment_0", 0.0, 1.5, "Hola", "Hello", null),
+            ("segment_0.0", 0.0, 1.5, "Hola", "Hello", null),
         ]);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _reader.GetTranslatedTextAsync(translationPath, "segment_99"));
+            () => _reader.GetTranslatedTextAsync(translationPath, "segment_99.0"));
     }
 
     // ── GetSourceTextAsync ────────────────────────────────────────────────────
@@ -296,10 +296,10 @@ public sealed class SessionArtifactReaderTests : IDisposable
     {
         var translationPath = WriteTranslation("es", "en",
         [
-            ("segment_0", 0.0, 1.5, "Hola mundo", "Hello world", null),
+            ("segment_0.0", 0.0, 1.5, "Hola mundo", "Hello world", null),
         ]);
 
-        var text = await _reader.GetSourceTextAsync(translationPath, "segment_0");
+        var text = await _reader.GetSourceTextAsync(translationPath, "segment_0.0");
         Assert.Equal("Hola mundo", text);
     }
 
@@ -308,10 +308,10 @@ public sealed class SessionArtifactReaderTests : IDisposable
     {
         var translationPath = WriteTranslation("es", "en",
         [
-            ("segment_0", 0.0, 1.5, "Hola", "Hello", null),
+            ("segment_0.0", 0.0, 1.5, "Hola", "Hello", null),
         ]);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _reader.GetSourceTextAsync(translationPath, "segment_missing"));
+            () => _reader.GetSourceTextAsync(translationPath, "segment_99.0"));
     }
 }

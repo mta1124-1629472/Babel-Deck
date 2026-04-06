@@ -108,26 +108,29 @@ public sealed class SessionSwitchServiceTests : IDisposable
         var cache = new Dictionary<string, WorkflowSessionSnapshot>();
 
         var firstPath = Path.Combine(_dir, "video0.mp4");
+        var firstKey = Path.GetFullPath(firstPath);
         var firstSession = MakeSession(mediaPath: firstPath);
         _svc.StashCurrentSession(firstSession, cache, cacheLimit: 2);
 
         var secondPath = Path.Combine(_dir, "video1.mp4");
+        var secondKey = Path.GetFullPath(secondPath);
         var secondSession = MakeSession(mediaPath: secondPath);
         _svc.StashCurrentSession(secondSession, cache, cacheLimit: 2);
 
         Assert.Equal(2, cache.Count);
-        Assert.Contains(firstSession.SessionId, cache.Keys);
-        Assert.Contains(secondSession.SessionId, cache.Keys);
+        Assert.Contains(firstKey, cache.Keys);
+        Assert.Contains(secondKey, cache.Keys);
 
         // Adding a third should evict the oldest entry (the first one added)
         var extraPath = Path.Combine(_dir, "video_extra.mp4");
+        var extraKey = Path.GetFullPath(extraPath);
         var extraSession = MakeSession(mediaPath: extraPath);
         _svc.StashCurrentSession(extraSession, cache, cacheLimit: 2);
 
         Assert.Equal(2, cache.Count); // still at limit after eviction
-        Assert.DoesNotContain(firstSession.SessionId, cache.Keys);
-        Assert.Contains(secondSession.SessionId, cache.Keys);
-        Assert.Contains(extraSession.SessionId, cache.Keys);
+        Assert.DoesNotContain(firstKey, cache.Keys);
+        Assert.Contains(secondKey, cache.Keys);
+        Assert.Contains(extraKey, cache.Keys);
     }
 
     // ── LoadSession ───────────────────────────────────────────────────────────
