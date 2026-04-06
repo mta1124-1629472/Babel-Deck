@@ -336,8 +336,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         switch (result)
         {
             case ProbeResult.Success:
-                if (duration.HasValue)
-                    metrics.RecordSuccess(duration.Value, wasCacheHit);
+                metrics.RecordSuccess(duration ?? TimeSpan.Zero, wasCacheHit);
                 break;
             case ProbeResult.Failure:
                 metrics.RecordFailure(errorDetail, wasCacheHit);
