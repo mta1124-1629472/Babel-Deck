@@ -23,7 +23,6 @@ public abstract class PythonSubprocessServiceBase
 {
     protected readonly AppLog Log;
     protected readonly string PythonPath;
-    private static readonly TimeSpan ProcessKillTimeout = TimeSpan.FromSeconds(10);
 
     protected PythonSubprocessServiceBase(AppLog log)
     {
