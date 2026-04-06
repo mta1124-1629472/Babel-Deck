@@ -1719,11 +1719,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         {
             try
             {
+                if (IsDubModeOn)
+                    SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
+
                 await Task.Run(() => player.Play());
                 IsSourcePaused = false;
                 ClearStatusErrorDetail();
-                if (IsDubModeOn)
-                    SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
             }
             catch (Exception ex)
             {
