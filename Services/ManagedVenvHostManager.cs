@@ -920,8 +920,11 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             $"Managed GPU process exited: file={fileName}, exit_code={process.ExitCode}");
 
         if (process.ExitCode != 0)
+        {
+            var stdoutSnippet = stdoutLines.Length > 0 ? $"\nstdout: {stdoutLines}" : string.Empty;
             throw new InvalidOperationException(
-                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}");
+                $"Process '{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {stderr}{stdoutSnippet}");
+        }
 
         if (!string.IsNullOrWhiteSpace(stderr))
             _log.Info(stderr.Trim());
