@@ -8,33 +8,21 @@ public static class ManagedRuntimeLayout
     private const string ManagedGpuRuntimeFolderName = "managed-gpu";
     private const string ManagedCpuRuntimeFolderName = "managed-cpu";
 
-    public static string GetRuntimeRoot() =>
     private static string RuntimeBase =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "BabelPlayer",
             "runtime");
 
-    // ── GPU (managed venv + host process) ─────────────────────────────────
+    // GPU runtime
+    public static string GetRuntimeRoot() =>
+        Path.Combine(RuntimeBase, ManagedGpuRuntimeFolderName);
 
-    public static string GetRuntimeRoot() => Path.Combine(RuntimeBase, "managed-gpu");
-
-    public static string GetCpuRuntimeRoot() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "BabelPlayer",
-            "runtime",
-            ManagedCpuRuntimeFolderName);
-
-    public static string GetVenvDirectory() => Path.Combine(GetRuntimeRoot(), ".venv");
-
-    public static string GetCpuVenvDirectory() => Path.Combine(GetCpuRuntimeRoot(), ".venv");
+    public static string GetVenvDirectory() =>
+        Path.Combine(GetRuntimeRoot(), ".venv");
 
     public static string GetManagedPythonPath() =>
         Path.Combine(GetVenvDirectory(), "Scripts", "python.exe");
-
-    public static string GetCpuPythonPath() =>
-        Path.Combine(GetCpuVenvDirectory(), "Scripts", "python.exe");
 
     public static string GetBootstrapMarkerPath() =>
         Path.Combine(GetRuntimeRoot(), ".bootstrap-version");
@@ -42,11 +30,12 @@ public static class ManagedRuntimeLayout
     public static string GetHostPidPath() =>
         Path.Combine(GetRuntimeRoot(), "managed-host.pid");
 
-    // ── CPU (managed venv, no host process) ───────────────────────────────
+    // CPU runtime
+    public static string GetCpuRuntimeRoot() =>
+        Path.Combine(RuntimeBase, ManagedCpuRuntimeFolderName);
 
-    public static string GetCpuRuntimeRoot() => Path.Combine(RuntimeBase, "managed-cpu");
-
-    public static string GetCpuVenvDirectory() => Path.Combine(GetCpuRuntimeRoot(), ".venv");
+    public static string GetCpuVenvDirectory() =>
+        Path.Combine(GetCpuRuntimeRoot(), ".venv");
 
     public static string GetCpuPythonPath() =>
         Path.Combine(GetCpuVenvDirectory(), "Scripts", "python.exe");
