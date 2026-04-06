@@ -13,7 +13,6 @@ namespace Babel.Player.Services;
 /// <code>
 /// var harness = new BenchmarkRunHarness(log, warmupRuns: 1, measuredRuns: 5);
 /// var entries = await harness.RunAsync(
-///     audioPath: "/path/to/clip.wav",
 ///     audioDurationSeconds: 30.0,
 ///     runFn: async (runIndex, runType, ct) =>
 ///     {

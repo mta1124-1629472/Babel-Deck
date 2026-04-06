@@ -47,31 +47,38 @@ public sealed class BenchmarkResultWriter
         double Cer = -1
     );
 
+    /// <summary>
+    /// Top-level benchmark result file. Top-level structure is intentionally aligned with
+    /// the Python-emitted benchmark schema (<c>environment_snapshot</c>,
+    /// <c>normalized_inputs</c>, <c>results</c>, <c>limitations</c>). The <c>aggregates</c>
+    /// section is a C#-side addition and is not present in Python-emitted files.
+    /// </summary>
     public sealed record BenchmarkResultFile(
-        [property: JsonPropertyName("schema_version")] string SchemaVersion,
-        [property: JsonPropertyName("run_batch_id")]   string RunBatchId,
-        [property: JsonPropertyName("matrix_id")]      string MatrixId,
-        [property: JsonPropertyName("created_at")]     string CreatedAt,
-        [property: JsonPropertyName("hardware")]       BenchmarkHardware Hardware,
-        [property: JsonPropertyName("normalized_inputs")] BenchmarkInputs NormalizedInputs,
-        [property: JsonPropertyName("results")]        List<BenchmarkResultEntry> Results,
-        [property: JsonPropertyName("aggregates")]     BenchmarkAggregates Aggregates
+        [property: JsonPropertyName("run_batch_id")]         string RunBatchId,
+        [property: JsonPropertyName("created_at")]           string CreatedAt,
+        [property: JsonPropertyName("environment_snapshot")] BenchmarkEnvironmentSnapshot EnvironmentSnapshot,
+        [property: JsonPropertyName("normalized_inputs")]    BenchmarkInputs NormalizedInputs,
+        [property: JsonPropertyName("results")]              List<BenchmarkResultEntry> Results,
+        [property: JsonPropertyName("aggregates")]           BenchmarkAggregates Aggregates,
+        [property: JsonPropertyName("limitations")]          List<string> Limitations
     );
 
-    public sealed record BenchmarkHardware(
-        [property: JsonPropertyName("gpu_name")]    string? GpuName,
-        [property: JsonPropertyName("vram_mb")]     long VramMb,
+    /// <summary>Hardware and runtime environment at the time of the benchmark run.</summary>
+    public sealed record BenchmarkEnvironmentSnapshot(
         [property: JsonPropertyName("cpu_name")]    string? CpuName,
-        [property: JsonPropertyName("ram_mb")]      long RamMb
+        [property: JsonPropertyName("ram_mb")]      long RamMb,
+        [property: JsonPropertyName("gpu_name")]    string? GpuName,
+        [property: JsonPropertyName("vram_mb")]     long VramMb
     );
 
     public sealed record BenchmarkInputs(
-        [property: JsonPropertyName("dataset_id")]     string DatasetId,
+        [property: JsonPropertyName("dataset_id")]       string DatasetId,
+        [property: JsonPropertyName("matrix_id")]        string MatrixId,
         [property: JsonPropertyName("audio_duration_s")] double AudioDurationSeconds,
-        [property: JsonPropertyName("sample_rate_hz")] int SampleRateHz,
-        [property: JsonPropertyName("provider")]       string Provider,
-        [property: JsonPropertyName("model")]          string Model,
-        [property: JsonPropertyName("compute_device")] string ComputeDevice
+        [property: JsonPropertyName("sample_rate_hz")]   int SampleRateHz,
+        [property: JsonPropertyName("provider")]         string Provider,
+        [property: JsonPropertyName("model")]            string Model,
+        [property: JsonPropertyName("compute_device")]   string ComputeDevice
     );
 
     public sealed record BenchmarkResultEntry(
@@ -105,8 +112,7 @@ public sealed class BenchmarkResultWriter
     /// </summary>
     public async Task WriteAsync(
         string outputPath,
-        string matrixId,
-        BenchmarkHardware hardware,
+        BenchmarkEnvironmentSnapshot environmentSnapshot,
         BenchmarkInputs inputs,
         IReadOnlyList<BenchmarkRunEntry> entries,
         CancellationToken cancellationToken = default)
@@ -133,18 +139,17 @@ public sealed class BenchmarkResultWriter
         var aggregates = ComputeAggregates(measured, inputs.AudioDurationSeconds);
 
         var file = new BenchmarkResultFile(
-            SchemaVersion:   "1.0",
-            RunBatchId:      Guid.NewGuid().ToString("N"),
-            MatrixId:        matrixId,
-            CreatedAt:       DateTimeOffset.UtcNow.ToString("o"),
-            Hardware:        hardware,
-            NormalizedInputs: inputs,
-            Results:         resultEntries,
-            Aggregates:      aggregates);
+            RunBatchId:          Guid.NewGuid().ToString("N"),
+            CreatedAt:           DateTimeOffset.UtcNow.ToString("o"),
+            EnvironmentSnapshot: environmentSnapshot,
+            NormalizedInputs:    inputs,
+            Results:             resultEntries,
+            Aggregates:          aggregates,
+            Limitations:         []);
 
         var json = JsonSerializer.Serialize(file, new JsonSerializerOptions
         {
-            WriteIndented        = true,
+            WriteIndented          = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.Never,
         });
 
