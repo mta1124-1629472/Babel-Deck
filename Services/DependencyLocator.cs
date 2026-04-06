@@ -18,6 +18,13 @@ public static class DependencyLocator
     public static string? FindPython()
     {
         var appDir = AppContext.BaseDirectory;
+        
+        // Check managed CPU runtime first (preferred for CPU-only operations)
+        var managedCpuPython = ManagedRuntimeLayout.GetCpuPythonPath();
+        if (ProbePythonCandidate(managedCpuPython, requirePip: true))
+            return managedCpuPython;
+        
+        // Fall back to managed GPU runtime
         var managedPython = ManagedRuntimeLayout.GetManagedPythonPath();
         if (ProbePythonCandidate(managedPython, requirePip: true))
             return managedPython;
