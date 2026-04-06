@@ -137,12 +137,12 @@ public partial class App : Application
             desktop.MainWindow = new MainWindow { DataContext = mainVm };
 
             // Wire live bootstrap progress into the status bar.
-            // Debounce: each new line cancels the previous pending update so rapid
-            // pip/uv output doesn't flood the dispatcher queue.
+            // Debounce: create a new 150 ms one-shot timer on each line; swapping
+            // it atomically disposes the previous pending update so rapid pip/uv
+            // output doesn't flood the dispatcher queue.
             System.Threading.Timer? statusDebounce = null;
             void PostStatus(string line)
             {
-                System.Threading.Interlocked.Exchange(ref statusDebounce, null)?.Dispose();
                 var captured = line;
                 var timer = new System.Threading.Timer(
                     _ => Dispatcher.UIThread.Post(() => mainVm.Playback.StatusText = $"Setup: {captured}"),
