@@ -37,9 +37,10 @@ public abstract class PythonSubprocessServiceBase
     /// <param name="Stdout">Captured standard output text.</param>
     /// <param name="Stderr">Captured standard error text.</param>
     /// <param name="ElapsedMs">
-    /// Wall-clock milliseconds measured from just before <c>WaitForExitAsync</c> is called
-    /// to just after it returns. Includes I/O flushing but not script write / process spawn
-    /// overhead, so it closely approximates the inference duration seen by the caller.
+    /// Wall-clock milliseconds measured over the awaited execution phase after process
+    /// startup, including stdin completion and stdout/stderr drain tasks, through process
+    /// exit. Excludes script write / process spawn overhead, so it closely approximates
+    /// the duration observed by the caller after launch.
     /// </param>
     public sealed record ScriptResult(int ExitCode, string Stdout, string Stderr, long ElapsedMs = 0);
 
