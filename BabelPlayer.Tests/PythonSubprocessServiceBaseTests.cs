@@ -8,6 +8,7 @@ using Xunit;
 
 namespace BabelPlayer.Tests;
 
+[Collection("PythonSubprocessService")]
 public sealed class PythonSubprocessServiceBaseTests : IDisposable
 {
     private readonly string _tempLogPath;

@@ -6,6 +6,7 @@ using Babel.Player.Services;
 
 namespace BabelPlayer.Tests;
 
+[Collection("ContainerizedServiceProbe")]
 public sealed class ContainerizedServiceProbeTests
 {
     [Fact]

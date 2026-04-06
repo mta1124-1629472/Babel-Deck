@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
@@ -126,7 +127,7 @@ public sealed class ProbeMetricsReporter
     /// <summary>
     /// Writes metrics to a file in the specified format.
     /// </summary>
-    public async Task WriteToFileAsync(string filePath, MetricsFormat format)
+    public async Task WriteToFileAsync(string filePath, MetricsFormat format, CancellationToken cancellationToken = default)
     {
         var content = format switch
         {
@@ -136,7 +137,7 @@ public sealed class ProbeMetricsReporter
             _ => throw new ArgumentException($"Unsupported format: {format}")
         };
 
-        await File.WriteAllTextAsync(filePath, content);
+        await File.WriteAllTextAsync(filePath, content, cancellationToken);
         _log.Info($"Probe metrics exported to {filePath} in {format} format");
     }
 
