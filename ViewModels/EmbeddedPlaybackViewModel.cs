@@ -1424,6 +1424,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             _coordinator.StopTtsPlayback();
             _lastDubbedSegment = null;
         }
+        else if (!IsSourcePaused)
+        {
+            // Video is currently playing — seek to segment start and start TTS immediately.
+            SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
+        }
+        // If paused: no auto-play; the Play button applies the dub-aware path on next press.
     }
 
     partial void OnIsFullscreenChanged(bool value)
@@ -1617,6 +1623,25 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         }
     }
 
+    // Seeks video to the start of the current segment (when seekVideoToSegmentStart is true),
+    // stops any in-flight TTS, and immediately starts TTS for that segment.
+    // Called on explicit play/resume and on dub-mode toggle-on while playing.
+    private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart)
+    {
+        var seg = FindSegmentAt(SourcePositionMs / 1000.0);
+        RestoreDucking();
+        _coordinator.StopTtsPlayback();
+        _lastDubbedSegment = seg;
+        if (seg == null) return;
+        if (seekVideoToSegmentStart)
+            _coordinator.SourceMediaPlayer?.Seek((long)(seg.StartSeconds * 1000));
+        if (seg.HasTtsAudio)
+        {
+            ApplyDucking();
+            _ = _coordinator.PlayTtsForSegmentAsync(seg.SegmentId);
+        }
+    }
+
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -1697,6 +1722,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 await Task.Run(() => player.Play());
                 IsSourcePaused = false;
                 ClearStatusErrorDetail();
+                if (IsDubModeOn)
+                    SyncDubToCurrentPosition(seekVideoToSegmentStart: true);
             }
             catch (Exception ex)
             {
@@ -1708,6 +1735,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         {
             player.Pause();
             IsSourcePaused = true;
+            if (IsDubModeOn)
+            {
+                RestoreDucking();
+                _coordinator.StopTtsPlayback();
+                _lastDubbedSegment = null;
+            }
         }
     }
 
@@ -1829,13 +1862,27 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         try
         {
             var list = await _coordinator.GetSegmentWorkflowListAsync();
-            Segments = new ObservableCollection<WorkflowSegmentState>(list);
-            HasSegments = Segments.Count > 0;
-            StatusText = HasSegments
-                ? $"{Segments.Count} segments loaded."
-                : "No segments available. Run the workflow first.";
-            ClearStatusErrorDetail();
-            if (IsSubtitleModeOn) ApplySubtitleState();
+            // Guard: replacing the Segments collection can cause Avalonia's ListBox TwoWay binding
+            // to update SelectedSegment (e.g., by re-confirming a structurally-equal item in the
+            // new collection). Without this guard, OnSelectedSegmentChanged would call
+            // SeekAndPlayAsync unexpectedly. Nulling SelectedSegment first ensures the ListBox
+            // has no prior selection to re-confirm when ItemsSource changes.
+            _isUpdatingActiveSegment = true;
+            try
+            {
+                SelectedSegment = null;
+                Segments = new ObservableCollection<WorkflowSegmentState>(list);
+                HasSegments = Segments.Count > 0;
+                StatusText = HasSegments
+                    ? $"{Segments.Count} segments loaded."
+                    : "No segments available. Run the workflow first.";
+                ClearStatusErrorDetail();
+                if (IsSubtitleModeOn) ApplySubtitleState();
+            }
+            finally
+            {
+                _isUpdatingActiveSegment = false;
+            }
         }
         catch (Exception ex)
         {
