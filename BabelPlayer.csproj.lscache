@@ -81,6 +81,7 @@ Models/
  ProviderNames.cs
  RecentSessionEntry.cs
  SessionWorkflowStage.cs
+ TranscriptionResult.cs
  VideoPlaybackOptions.cs
  WorkflowSegmentState.cs
  WorkflowSessionSnapshot.cs
@@ -93,6 +94,7 @@ Services/
  AppLog.cs
  AvaloniaErrorDialogService.cs
  BackgroundTaskObserver.cs
+ BenchmarkOrchestrator.cs
  BenchmarkResultWriter.cs
  BenchmarkRunHarness.cs
  BootstrapDiagnostics.cs

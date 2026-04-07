@@ -93,10 +93,12 @@ build.log
 test.log
 dist/
 publish/
-
+tasks.json
+skills/
 
 # Generated benchmark outputs
-benchmarks/
+# docs/benchmarks/ (results remain in git, but ignore temp or lock files if any)
+# docs/benchmarks/*.lock
 
 # Local tool state
 .kilo/node_modules/
@@ -105,7 +107,8 @@ benchmarks/
 .kilo/
 .windsurf/
 .Benchmarks/
-
+.codex/tasks
+*.lscache
 
 
 # External binaries
