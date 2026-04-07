@@ -59,6 +59,7 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 
 [sourceFiles]
 App.axaml.cs
+AppIdentity.cs
 BuildInfo.cs
 Converters/EnumDisplayConverters.cs
 Models/Artifacts/
@@ -171,6 +172,7 @@ Services/
  SessionSwitchService.cs
  SessionWorkflowCoordinator.Containerized.cs
  SessionWorkflowCoordinator.cs
+ SessionWorkflowCoordinator.DevTools.cs
  SessionWorkflowCoordinator.Pipeline.cs
  SessionWorkflowCoordinator.Playback.cs
  SessionWorkflowCoordinator.Progress.cs
@@ -191,6 +193,7 @@ Services/
 ViewLocator.cs
 ViewModels/
  ApiKeysViewModel.cs
+ Dev/DevLogViewModel.cs
  EmbeddedPlaybackViewModel.cs
  MainWindowViewModel.cs
  ModelDownloadEntry.cs
@@ -201,6 +204,7 @@ ViewModels/
 Views/
  ApiKeysDialog.axaml.cs
  CrashReportWindow.axaml.cs
+ Dev/DevLogWindow.axaml.cs
  MainWindow.axaml.cs
  MpvVideoView.cs
  SettingsWindow.axaml.cs
@@ -442,5 +446,6 @@ App.axaml
 Views/
  ApiKeysDialog.axaml
  CrashReportWindow.axaml
+ Dev/DevLogWindow.axaml
  MainWindow.axaml
  SettingsWindow.axaml
