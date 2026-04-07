@@ -97,7 +97,7 @@ public sealed class BenchmarkCliTests
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task RunAsync_ManifestExists_ReturnsExitCode0OrNonZeroOnPythonAbsence()
+    public async System.Threading.Tasks.Task RunAsync_ManifestExists_ReturnsExitCode0()
     {
         // Write a real manifest with no clips so the orchestrator loop is a no-op
         var dir          = Path.Combine(Path.GetTempPath(), $"bp_cli_test_{Guid.NewGuid():N}");
