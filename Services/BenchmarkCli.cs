@@ -30,7 +30,6 @@ public static class BenchmarkCli
         "test-assets/datasets/bp.dataset.local.dialogue.es-en.s.v1.0.0/manifest.json";
     private const string DefaultOutput    = "benchmarks/results";
     private const string DefaultModel     = "tiny";
-    private const string DefaultMatrix    = "fw-default-cpu-int8";
     private const int    DefaultWarmup    = 1;
     private const int    DefaultRuns      = 5;
 
