@@ -114,6 +114,7 @@ Services/
   FileSystemCredentialProvider.cs
   ISecureCredentialProvider.cs
   WindowsCredentialProvider.cs
+ CTranslate2FallbackTranslationProvider.cs
  CTranslate2TranslationProvider.cs
  DeepLApiClient.cs
  DeepLTranslationProvider.cs
