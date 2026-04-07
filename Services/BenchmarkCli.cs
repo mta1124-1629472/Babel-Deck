@@ -55,14 +55,36 @@ public static class BenchmarkCli
         int    warmup   = GetArgInt(args, "--warmup") ?? DefaultWarmup;
         int    runs     = GetArgInt(args, "--runs")   ?? DefaultRuns;
 
-        // Check for unrecognised flags (anything starting with -- that isn't known)
+        // Check for unrecognised flags while respecting flags that consume a value.
         var known = new[] { "--benchmark", "--manifest", "--output", "--model",
                             "--matrix", "--warmup", "--runs", "--help", "-h" };
-        var unknown = args
-            .Where(a => a.StartsWith("-") && !known.Contains(a, StringComparer.OrdinalIgnoreCase))
-            .ToArray();
+        var knownValueFlags = new[] { "--manifest", "--output", "--model",
+                                      "--matrix", "--warmup", "--runs" };
+        var unknown = new System.Collections.Generic.List<string>();
 
-        if (unknown.Length > 0)
+        for (int i = 0; i < args.Length; i++)
+        {
+            var arg = args[i];
+
+            if (!arg.StartsWith("-"))
+            {
+                continue;
+            }
+
+            if (known.Contains(arg, StringComparer.OrdinalIgnoreCase))
+            {
+                if (knownValueFlags.Contains(arg, StringComparer.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    i++;
+                }
+
+                continue;
+            }
+
+            unknown.Add(arg);
+        }
+
+        if (unknown.Count > 0)
         {
             Console.Error.WriteLine($"[benchmark] Unknown flag(s): {string.Join(", ", unknown)}");
             PrintUsage();
