@@ -19,7 +19,7 @@
        Defines BABEL_DEV, disables optimisations, keeps full debug info.
        ═══════════════════════════════════════════════════════════════ -->
   <PropertyGroup Condition="'$(Configuration)' == 'Dev'">
-    <DefineConstants>$(DefineConstants);BABEL_DEV</DefineConstants>
+    <DefineConstants>DEBUG;TRACE;BABEL_DEV</DefineConstants>
     <Optimize>false</Optimize>
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
