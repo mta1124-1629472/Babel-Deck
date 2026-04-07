@@ -52,8 +52,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
             videoHeight: 720,
             displayWidth: 1280,
             displayHeight: 720,
-            hwPixelFormat: "nv12",
-            vsrQuality: 4);
+            hwPixelFormat: "nv12");
 
         var snapshot = LibMpvEmbeddedTransport.CreateVsrDiagnosticSnapshot(
             "display-size-updated",
@@ -79,8 +78,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
             videoHeight: 720,
             displayWidth: 1538,
             displayHeight: 789,
-            hwPixelFormat: "nv12",
-            vsrQuality: 4);
+            hwPixelFormat: "nv12");
 
         var snapshot = LibMpvEmbeddedTransport.CreateVsrDiagnosticSnapshot(
             "display-size-updated",
@@ -125,8 +123,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
                 videoHeight: 720,
                 displayWidth: 1538,
                 displayHeight: 789,
-                hwPixelFormat: "nv12",
-                vsrQuality: 4),
+                hwPixelFormat: "nv12"),
             backendResultCode: -12,
             videoOutput: "gpu-next",
             gpuContext: "d3d11",
