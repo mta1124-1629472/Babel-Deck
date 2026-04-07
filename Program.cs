@@ -1,24 +1,29 @@
 using Avalonia;
 using Babel.Player.Services;
 using System;
-using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 
 namespace Babel.Player;
 
 sealed class Program
 {
-    // Avalonia requires [STAThread] for the UI path.
-    // The benchmark path is headless and never touches Avalonia, but the
-    // attribute is harmless on async Task entry points on .NET 10.
+    // AttachConsole lets WinExe binaries write to the parent terminal.
+    // Returns false (harmlessly) when there is no parent console to attach to.
+    [DllImport("kernel32.dll")]
+    private static extern bool AttachConsole(int dwProcessId);
+
+    // [STAThread] is honoured only on synchronous entry points.
+    // The benchmark path is headless; .GetAwaiter().GetResult() is safe there.
     [STAThread]
-    public static async Task<int> Main(string[] args)
+    public static int Main(string[] args)
     {
         // Intercept --benchmark before Avalonia sees the args.
         // All other args are forwarded to Avalonia as normal.
         if (Array.Exists(args, a =>
                 string.Equals(a, "--benchmark", StringComparison.OrdinalIgnoreCase)))
         {
-            return await BenchmarkCli.RunAsync(args);
+            AttachConsole(-1); // attach to parent terminal; no-op if none exists
+            return BenchmarkCli.RunAsync(args).GetAwaiter().GetResult();
         }
 
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
