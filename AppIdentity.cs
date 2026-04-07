@@ -18,8 +18,9 @@ public static class AppIdentity
 #endif
 
     /// <summary>
-    /// Short product name without any build-configuration suffix — suitable for
-    /// file paths, log file prefixes, and registry keys.
+    /// Stable non-display product identifier without any build-configuration suffix —
+    /// suitable for file paths, log file prefixes, registry keys, and other persisted names.
+    /// This intentionally matches the existing persisted identifier form ("BabelPlayer").
     /// </summary>
-    public const string ProductName = "Babel-Player";
+    public const string ProductName = "BabelPlayer";
 }
