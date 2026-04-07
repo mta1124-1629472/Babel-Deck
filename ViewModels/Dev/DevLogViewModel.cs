@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
 using System.Windows.Input;
+using Avalonia.Controls;
 using Babel.Player.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -53,7 +54,14 @@ public partial class DevLogViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void CopyAll()
     {
-        Avalonia.Application.Current?.Clipboard?.SetTextAsync(RawContent);
+        // Application.Current.Clipboard was removed in Avalonia 11.
+        // Resolve the clipboard via the active TopLevel (window) instead.
+        var topLevel = TopLevel.GetTopLevel(
+            Avalonia.Application.Current?.ApplicationLifetime is
+                Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.MainWindow
+                : null);
+        topLevel?.Clipboard?.SetTextAsync(RawContent);
     }
 
     [RelayCommand]
