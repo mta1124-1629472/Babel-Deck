@@ -43,11 +43,13 @@ public static class BuildInfo
 #endif
 
     /// <summary>
-    /// Human-readable configuration name, e.g. "Dev" or "Release".
+    /// Human-readable configuration name, e.g. "Dev", "Debug", or "Release".
     /// </summary>
     public static string Configuration =>
 #if BABEL_DEV
         "Dev";
+#elif DEBUG
+        "Debug";
 #else
         "Release";
 #endif
