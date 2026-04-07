@@ -115,7 +115,7 @@ public sealed class BenchmarkCliTests
         try
         {
             var result = await BenchmarkCli.RunAsync(
-                new[] { "--benchmark", "--manifest", manifestPath, "--runs", "1" });
+                new[] { "--benchmark", "--manifest", manifestPath, "--runs", "1", "--output", dir });
             // 0 clips => orchestrator loops zero times => success
             Assert.Equal(0, result);
         }

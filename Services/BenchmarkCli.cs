@@ -26,8 +26,6 @@ public static class BenchmarkCli
 {
     // ── Defaults ───────────────────────────────────────────────────────────
 
-    private const string DefaultManifest =
-        "test-assets/datasets/bp.dataset.local.dialogue.es-en.s.v1.0.0/manifest.json";
     private const string DefaultOutput    = "benchmarks/results";
     private const string DefaultModel     = "tiny";
     private const int    DefaultWarmup    = 1;
@@ -41,13 +39,14 @@ public static class BenchmarkCli
     {
         // ── Parse args ──────────────────────────────────────────────────
 
-        if (args.Any(a => a is "--help" or "-h"))
+        if (args.Any(a => string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(a, "-h",     StringComparison.OrdinalIgnoreCase)))
         {
             PrintUsage();
             return 0;
         }
 
-        string manifest = GetArg(args, "--manifest") ?? DefaultManifest;
+        string? manifest = GetArg(args, "--manifest");
         string output   = GetArg(args, "--output")   ?? DefaultOutput;
         string model    = GetArg(args, "--model")     ?? DefaultModel;
         string matrix   = GetArg(args, "--matrix")   ?? $"fw-{model}-cpu-int8";
@@ -86,6 +85,14 @@ public static class BenchmarkCli
         if (unknown.Count > 0)
         {
             Console.Error.WriteLine($"[benchmark] Unknown flag(s): {string.Join(", ", unknown)}");
+            PrintUsage();
+            return 1;
+        }
+
+        if (manifest is null)
+        {
+            Console.Error.WriteLine("[benchmark] --manifest <path> is required.");
+            Console.Error.WriteLine("  Tip: pass --manifest pointing at your dataset manifest.json.");
             PrintUsage();
             return 1;
         }
@@ -151,7 +158,10 @@ public static class BenchmarkCli
 
         // ── Run orchestrator ─────────────────────────────────────────────
 
-        var log          = new AppLog();
+        var logPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BabelPlayer", "logs", "benchmark.log");
+        var log          = new AppLog(logPath);
         var provider     = new FasterWhisperTranscriptionProvider(log);
         var orchestrator = new BenchmarkOrchestrator(log, hardware);
 
@@ -223,7 +233,7 @@ public static class BenchmarkCli
         Console.WriteLine("  dotnet run -- --benchmark [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine($"  --manifest <path>   Dataset manifest.json  (default: {DefaultManifest})");
+        Console.WriteLine($"  --manifest <path>   Dataset manifest.json  (required)");
         Console.WriteLine($"  --output   <dir>    Results output dir      (default: {DefaultOutput})");
         Console.WriteLine($"  --model    <name>   faster-whisper model    (default: {DefaultModel})");
         Console.WriteLine($"  --matrix   <id>     Benchmark matrix ID     (default: auto from model)");

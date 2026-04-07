@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
 using Babel.Player.Services;
+using Babel.Player.Services.Registries;
 using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Tests;
@@ -25,7 +26,7 @@ public sealed class BenchmarkOrchestratorTests : IDisposable
     {
         _tempDir = Path.Combine(Path.GetTempPath(), $"bp_orch_tests_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
-        _log = new AppLog();
+        _log = new AppLog(Path.Combine(_tempDir, "bench-test.log"));
         _fakeHardware = HardwareSnapshot.Detecting with
         {
             IsDetecting    = false,
@@ -181,11 +182,15 @@ public sealed class BenchmarkOrchestratorTests : IDisposable
             warmupRuns:    0,
             measuredRuns:  1);
 
-        // No output directory or files should be created for the skipped clip
+        // Orchestrator writes a placeholder result JSON for missing audio
         var files = Directory.Exists(outputDir)
             ? Directory.GetFiles(outputDir, "*.json")
             : Array.Empty<string>();
-        Assert.Empty(files);
+        var placeholderFile = Assert.Single(files);
+
+        // Verify the placeholder captures the audio_stub limitation
+        var json = await File.ReadAllTextAsync(placeholderFile);
+        Assert.Contains("audio_stub", json);
     }
 
     [Fact]
@@ -272,8 +277,8 @@ public sealed class BenchmarkOrchestratorTests : IDisposable
         var json       = await File.ReadAllTextAsync(resultFile);
         using var doc  = JsonDocument.Parse(json);
 
-        var summary = doc.RootElement.GetProperty("summary");
-        var meanWer  = summary.GetProperty("mean_wer").GetDouble();
+        var aggregates = doc.RootElement.GetProperty("aggregates");
+        var meanWer    = aggregates.GetProperty("mean_wer").GetDouble();
         Assert.Equal(0.0, meanWer, precision: 4);
     }
 
@@ -317,7 +322,7 @@ public sealed class BenchmarkOrchestratorTests : IDisposable
         var fakeProvider = new FakeTranscriptionProvider();
         var orchestrator = new BenchmarkOrchestrator(_log, _fakeHardware);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             orchestrator.RunAsync(
                 manifestPath:  manifestPath,
                 outputDir:     outputDir,
