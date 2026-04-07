@@ -25,7 +25,7 @@ namespace Babel.Player.Models;
 /// </param>
 public sealed record TranscriptionResult(
     bool Success,
-    IReadOnlyList<TranscriptSegment>? Segments,
+    IReadOnlyList<Babel.Player.Services.TranscriptSegment>? Segments,
     string Language,
     double LanguageProbability,
     string? ErrorMessage,
