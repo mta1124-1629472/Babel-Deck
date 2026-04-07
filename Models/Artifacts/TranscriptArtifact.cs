@@ -13,6 +13,12 @@ public sealed class TranscriptArtifact
 
     [JsonPropertyName("segments")]
     public List<TranscriptSegmentArtifact>? Segments { get; set; }
+
+    [JsonPropertyName("peak_vram_mb")]
+    public double PeakVramMb { get; set; } = -1;
+
+    [JsonPropertyName("peak_ram_mb")]
+    public double PeakRamMb { get; set; } = -1;
 }
 
 public sealed class TranscriptSegmentArtifact
