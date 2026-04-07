@@ -116,13 +116,29 @@ public static class BenchmarkCli
 
         // ── Boot hardware detection off the UI thread ─────────────────────
 
-        Console.Write("[benchmark] Detecting hardware… ");
-        var hardware = await Task.Run(HardwareSnapshot.Run, cancellationToken);
-        Console.WriteLine("done.");
-        Console.WriteLine($"[benchmark] CPU : {hardware.CpuLine}");
-        Console.WriteLine($"[benchmark] GPU : {hardware.GpuLine}");
-        Console.WriteLine($"[benchmark] RAM : {hardware.RamLine}");
-        Console.WriteLine();
+        HardwareSnapshot hardware;
+        try
+        {
+            Console.Write("[benchmark] Detecting hardware… ");
+            hardware = await Task.Run(HardwareSnapshot.Run, cancellationToken);
+            Console.WriteLine("done.");
+            Console.WriteLine($"[benchmark] CPU : {hardware.CpuLine}");
+            Console.WriteLine($"[benchmark] GPU : {hardware.GpuLine}");
+            Console.WriteLine($"[benchmark] RAM : {hardware.RamLine}");
+            Console.WriteLine();
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine();
+            Console.Error.WriteLine("[benchmark] Hardware detection was canceled.");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine();
+            Console.Error.WriteLine($"[benchmark] Hardware detection failed: {ex.Message}");
+            return 1;
+        }
 
         // ── Build settings ──────────────────────────────────────────────
 
