@@ -600,9 +600,10 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
             hwPixelFormat != "nv12" &&
             hwPixelFormat != "yuv420p";
 
+        string scaleStr = scale.ToString("F1", CultureInfo.InvariantCulture);
         string filterChain = needsFormatConversion
-            ? $"@vsr:lavfi=[format=nv12],d3d11vpp=scaling-mode=nvidia:scale={scale:F1}"
-            : $"@vsr:d3d11vpp=scaling-mode=nvidia:scale={scale:F1}";
+            ? $"@vsr:lavfi=[format=nv12],d3d11vpp=scaling-mode=nvidia:scale={scaleStr}"
+            : $"@vsr:d3d11vpp=scaling-mode=nvidia:scale={scaleStr}";
 
         return VsrFilterPlan.Apply(filterChain, scale, videoWidth, videoHeight, displayWidth, displayHeight, hwPixelFormat);
     }
