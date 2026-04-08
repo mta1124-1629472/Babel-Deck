@@ -283,19 +283,34 @@ public static class DependencyLocator
             appLog.Info("App startup: session coordinator ready.");
             return coordinator;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
-            startupLog?.Error("App startup: primary initialization failed (likely corrupt state). Retrying with empty session.", ex);
-            
+            startupLog?.Error("App startup: primary initialization failed (corrupt session snapshot JSON). Retrying with empty session.", ex);
+
             var coordinator = CreateCoordinatorInstance(
-                appLog, appSettings, perSessionStore, recentStore, apiKeyStore, 
+                appLog, appSettings, perSessionStore, recentStore, apiKeyStore,
                 transportManager, appDataRoot, out primaryGpuManager);
-            
+
             // Skip Initialize() to start with an empty session rather than crashing on corrupt state.
             // Still request containerized autostart.
             coordinator.ContainerizedInferenceManager?.RequestEnsureStarted(
                 appSettings, ContainerizedStartupTrigger.AppStartup);
-                
+
+            return coordinator;
+        }
+        catch (IOException ex)
+        {
+            startupLog?.Error("App startup: primary initialization failed (snapshot I/O error). Retrying with empty session.", ex);
+
+            var coordinator = CreateCoordinatorInstance(
+                appLog, appSettings, perSessionStore, recentStore, apiKeyStore,
+                transportManager, appDataRoot, out primaryGpuManager);
+
+            // Skip Initialize() to start with an empty session rather than crashing on corrupt state.
+            // Still request containerized autostart.
+            coordinator.ContainerizedInferenceManager?.RequestEnsureStarted(
+                appSettings, ContainerizedStartupTrigger.AppStartup);
+
             return coordinator;
         }
     }

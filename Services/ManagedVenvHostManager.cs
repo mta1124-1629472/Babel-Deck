@@ -1120,6 +1120,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         string constraintsPath)
     {
         var builder = new StringBuilder();
+        builder.AppendLine(PythonVersion);
         builder.AppendLine(File.ReadAllText(requirementsPath));
         builder.AppendLine(File.ReadAllText(constraintsPath));
 

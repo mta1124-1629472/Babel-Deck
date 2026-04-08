@@ -195,6 +195,15 @@ public sealed class PipelineStageProgressTests : IDisposable
             transcriptionRegistry,
             translationRegistry,
             ttsRegistry,
+            transportManager: null,
+            segmentPlayer: null,
+            sourcePlayer: null,
+            keyStore: null,
+            artifactReader: null,
+            sessionSwitchService: null,
+            diarizationRegistry: null,
+            containerizedProbe: null,
+            containerizedInferenceManager: null,
             audioProcessingService: new StubAudioProcessingService());
 
     }
