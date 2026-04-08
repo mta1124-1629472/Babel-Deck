@@ -279,7 +279,18 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         }
 
         _log.Info($"Validating managed GPU runtime via {pythonPath}.");
-        var runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+        ManagedGpuRuntimeValidationResult runtimeValidation;
+        try
+        {
+            runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // If the runtime validator itself throws an exception, preserve the error message
+            // and return a failure that includes the validation context
+            return Fail($"Managed local GPU runtime validation failed: {ex.Message}");
+        }
+
         if (!runtimeValidation.CudaAvailable)
         {
             var isMissingTorch = runtimeValidation.Message.Contains("missing PyTorch", StringComparison.OrdinalIgnoreCase);
@@ -326,7 +337,15 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
                 }
 
                 _log.Info($"Re-validating managed GPU runtime after auto-rebuild.");
-                runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+                try
+                {
+                    runtimeValidation = await _runtimeValidator(pythonPath, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    return Fail($"Managed local GPU runtime validation failed after auto-rebuild: {ex.Message}");
+                }
+                
                 if (!runtimeValidation.CudaAvailable)
                 {
                     return Fail(

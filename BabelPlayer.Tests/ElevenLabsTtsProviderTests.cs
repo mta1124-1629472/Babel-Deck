@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -178,7 +179,8 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
     [Fact]
     public async Task GenerateTtsAsync_GeneratesCombinedAudio()
     {
-        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        var mockAudioService = new MockAudioProcessingService();
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient, audioProcessingService: mockAudioService);
         var translationPath = WriteTranslationJson(twoSegments: true);
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
@@ -190,6 +192,7 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
         // Verify multi-segment stitching executed (output should be larger than single segment)
         var fileSize = new FileInfo(outputPath).Length;
         Assert.True(fileSize > 0, "Combined audio file should have non-zero size after stitching two segments");
+        Assert.True(mockAudioService.CombineAudioSegmentsAsyncCalled, "Audio concatenation should have been called for multi-segment input");
     }
 
     [Fact]
@@ -336,6 +339,51 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
             if (disposing)
                 onDispose();
             base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>
+    /// Manual mock implementation of IAudioProcessingService for testing.
+    /// Writes dummy audio data to the output path when CombineAudioSegmentsAsync is called.
+    /// </summary>
+    private sealed class MockAudioProcessingService : IAudioProcessingService
+    {
+        public bool CombineAudioSegmentsAsyncCalled { get; private set; }
+
+        public Task CombineAudioSegmentsAsync(
+            IReadOnlyList<string> segmentAudioPaths,
+            string outputAudioPath,
+            CancellationToken cancellationToken)
+        {
+            CombineAudioSegmentsAsyncCalled = true;
+            
+            // Create output directory if it doesn't exist
+            var outputDir = Path.GetDirectoryName(outputAudioPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            
+            // Write dummy audio data (3 bytes) to simulate concatenated audio
+            File.WriteAllBytes(outputAudioPath, new byte[] { 0x01, 0x02, 0x03 });
+            
+            return Task.CompletedTask;
+        }
+
+        public Task ExtractAudioClipAsync(
+            string inputPath,
+            string outputPath,
+            double startTimeSeconds,
+            double durationSeconds,
+            CancellationToken cancellationToken)
+        {
+            // Create output directory if it doesn't exist
+            var outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+            
+            // Write dummy audio data
+            File.WriteAllBytes(outputPath, new byte[] { 0x01, 0x02, 0x03 });
+            
+            return Task.CompletedTask;
         }
     }
 }
