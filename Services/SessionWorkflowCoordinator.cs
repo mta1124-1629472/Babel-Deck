@@ -238,32 +238,6 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                             ? "Resumed session with media. Ready for transcription."
                             : "Resumed saved foundation session. Workflow not yet started.";
 
-            // If we have MediaLoaded stage but missing IngestedMediaPath, regenerate it
-            if (validated.Stage >= SessionWorkflowStage.MediaLoaded && 
-                !string.IsNullOrEmpty(validated.SourceMediaPath) && 
-                string.IsNullOrEmpty(validated.IngestedMediaPath))
-            {
-                var sessionDir = _sessionSwitchService.GetSessionDirectory(validated.SessionId);
-                var mediaDir = Path.Combine(sessionDir, "media");
-                Directory.CreateDirectory(mediaDir);
-                var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(validated.SourceMediaPath));
-                File.Copy(validated.SourceMediaPath, ingestedPath, overwrite: true);
-                _log.Info($"Regenerated ingested media on load: {ingestedPath}");
-                
-                validated = validated with
-                {
-                    IngestedMediaPath = ingestedPath,
-                    MediaLoadedAtUtc = validated.MediaLoadedAtUtc ?? nowUtc,
-                };
-                
-                statusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
-                    ? "Resumed session with TTS. Dubbing complete."
-                    : validated.Stage >= SessionWorkflowStage.Translated
-                        ? "Resumed session with translation. Ready for TTS/dubbing."
-                        : validated.Stage >= SessionWorkflowStage.Transcribed
-                            ? "Resumed session with transcript. Ready for translation."
-                            : "Resumed session with media. Ready for transcription.";
-            }
 
             CurrentSession = validated with
             {

@@ -51,21 +51,10 @@ public static class SessionSnapshotSemantics
         if (stage >= SessionWorkflowStage.MediaLoaded
             && (string.IsNullOrEmpty(snapshot.IngestedMediaPath) || !File.Exists(snapshot.IngestedMediaPath)))
         {
-            // For MediaLoaded stage, only downgrade if the source media is missing.
-            // The ingested media can be regenerated from the source.
-            if (string.IsNullOrEmpty(snapshot.SourceMediaPath) || !File.Exists(snapshot.SourceMediaPath))
-            {
-                stage = SessionWorkflowStage.Foundation;
-                snapshot = ClearMediaLoadedOutputs(snapshot);
-                cleared.Add("media");
-            }
-            else
-            {
-                // Source media exists but ingested media is missing - clear ingested path
-                // but keep the stage so the session can be restored.
-                snapshot = snapshot with { IngestedMediaPath = null, MediaLoadedAtUtc = null };
-                cleared.Add("ingested-media");
-            }
+            // Ingested media is missing - downgrade to Foundation stage
+            stage = SessionWorkflowStage.Foundation;
+            snapshot = ClearMediaLoadedOutputs(snapshot);
+            cleared.Add("media");
         }
 
         return new ValidationResult(
@@ -130,16 +119,10 @@ public static class SessionSnapshotSemantics
             && File.Exists(snapshot.TranscriptPath))
             return SessionWorkflowStage.Transcribed;
 
-        if (snapshot.Stage >= SessionWorkflowStage.MediaLoaded)
-        {
-            // For MediaLoaded stage, check if source media exists (ingested can be regenerated)
-            if (!string.IsNullOrWhiteSpace(snapshot.SourceMediaPath) && File.Exists(snapshot.SourceMediaPath))
-                return SessionWorkflowStage.MediaLoaded;
-            
-            // If ingested media exists but source doesn't, still consider it MediaLoaded
-            if (!string.IsNullOrWhiteSpace(snapshot.IngestedMediaPath) && File.Exists(snapshot.IngestedMediaPath))
-                return SessionWorkflowStage.MediaLoaded;
-        }
+        if (snapshot.Stage >= SessionWorkflowStage.MediaLoaded
+            && !string.IsNullOrWhiteSpace(snapshot.IngestedMediaPath)
+            && File.Exists(snapshot.IngestedMediaPath))
+            return SessionWorkflowStage.MediaLoaded;
 
         return SessionWorkflowStage.Foundation;
     }
