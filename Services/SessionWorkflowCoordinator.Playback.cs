@@ -403,7 +403,7 @@ public sealed partial class SessionWorkflowCoordinator
         var player = GetOrCreateSegmentPlayer();
         player.Load(audioPath);
         ActiveTtsSegmentId = segmentId;
-        Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play TTS for segment {segmentId}");
+        _ = Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play TTS for segment {segmentId}");
         return Task.CompletedTask;
     }
 

@@ -26,11 +26,6 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     private readonly Lazy<OpenAiApiClient> _clientLazy;
 
     /// <summary>
-    /// Initializes a new OpenAiTtsProvider that produces OpenAI-backed text-to-speech audio.
-    /// </summary>
-    /// <param name="log">Application logging instance used by the provider.</param>
-    /// <param name="apiKey">OpenAI API key used to authenticate speech requests.</param>
-    /// <summary>
     /// Initializes a new OpenAiTtsProvider that generates speech via OpenAI and defers creation of the API client until it is first needed.
     /// </summary>
     /// <param name="log">Application logger used to record provider activity.</param>

@@ -751,11 +751,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
     /// Regenerates the translation for a single segment identified by its segment ID and updates the current session snapshot.
     /// </summary>
     /// <param name="segmentId">The identifier of the segment to retranslate (e.g., "segment_0.0").</param>
-    /// <exception cref="InvalidOperationException">Thrown when no translation exists for the current session, the source text for the segment is missing, or the session's source/target language is not set.</exception>
-    /// <summary>
-    /// Regenerates the translation for a single segment and updates the current session's status.
-    /// </summary>
-    /// <param name="segmentId">The identifier of the segment to regenerate (e.g., "segment_0.0").</param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when there is no translation available for the current session, when the source text for the specified segment is missing,
     /// when the session's source or target language is not set, or when the translation operation fails.
@@ -913,8 +908,6 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
 
     /// <summary>
     /// Updates the snapshot's LastUpdatedAtUtc, sets it as the current session, and persists that snapshot.
-    /// <summary>
-    /// Update the current session's LastUpdatedAtUtc to now and persist the session snapshot.
     /// </summary>
     /// <remarks>
     /// Sets <c>CurrentSession</c> to a copy with an updated <c>LastUpdatedAtUtc</c> and saves that snapshot to the configured persistence stores.
