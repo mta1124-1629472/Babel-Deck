@@ -492,6 +492,9 @@ public sealed class PipelineStageProgressTests : IDisposable
     {
         public Task CombineAudioSegmentsAsync(IReadOnlyList<string> segmentAudioPaths, string outputPath, CancellationToken cancellationToken)
         {
+            var outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
             File.WriteAllText(outputPath, "fake combined audio");
             return Task.CompletedTask;
         }
@@ -499,6 +502,9 @@ public sealed class PipelineStageProgressTests : IDisposable
 
         public Task ExtractAudioClipAsync(string sourcePath, string outputPath, double startTimeSeconds, double durationSeconds, CancellationToken cancellationToken)
         {
+            var outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
             File.WriteAllText(outputPath, "fake extracted clip");
             return Task.CompletedTask;
         }
