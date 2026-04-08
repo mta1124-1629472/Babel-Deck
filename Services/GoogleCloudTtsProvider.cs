@@ -29,6 +29,11 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
     /// </summary>
     /// <param name="log">Application logger used for informational messages about TTS operations.</param>
     /// <param name="apiKey">API key used to construct the Google API client.</param>
+    /// <summary>
+    /// Creates a GoogleCloudTtsProvider configured with the given logger and Google Cloud API key, and an optional factory for producing the underlying GoogleApiClient.
+    /// </summary>
+    /// <param name="log">Logger used to record provider activity and synthesis results.</param>
+    /// <param name="apiKey">Google Cloud API key used to construct the client when no factory is provided.</param>
     /// <param name="clientFactory">Optional factory that produces a <see cref="GoogleApiClient"/>; if null, a default factory that calls <c>new GoogleApiClient(apiKey)</c> is used. The client is created lazily and cached using thread-safe initialization.</param>
     public GoogleCloudTtsProvider(
         AppLog log,
@@ -47,7 +52,10 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
     /// <param name="keyStore">Unused by this provider.</param>
     /// <returns>
     /// A <see cref="ProviderReadiness"/> that is ready when an API key is present; otherwise not ready with an explanatory message.
-    /// </returns>
+    /// <summary>
+    /// Determines whether the Google Cloud TTS provider is configured and ready to synthesize speech.
+    /// </summary>
+    /// <returns>`ProviderReadiness.Ready` if an API key is configured; otherwise a `ProviderReadiness` with `IsReady` = false and an explanatory message.</returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
@@ -63,6 +71,13 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
     /// <param name="cancellationToken">Token to cancel asynchronous operations.</param>
     /// <returns>A TtsResult describing the generated audio file path, requested voice, byte length, and success status.</returns>
     /// <exception cref="FileNotFoundException">Thrown if <see cref="TtsRequest.TranslationJsonPath"/> does not exist.</exception>
+    /// <summary>
+    /// Synthesizes speech for a translation artifact by combining translated segments and writing the resulting audio to the requested output path.
+    /// </summary>
+    /// <param name="request">Request containing the translation JSON path, desired output audio path, and voice selection.</param>
+    /// <param name="cancellationToken">Optional token to cancel the operation.</param>
+    /// <returns>A <see cref="TtsResult"/> describing the generated audio file path, selected voice, and byte length.</returns>
+    /// <exception cref="FileNotFoundException">Thrown if <see cref="TtsRequest.TranslationJsonPath"/> does not point to an existing file.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the translation artifact contains no translated text to synthesize.</exception>
     public async Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
@@ -102,6 +117,12 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
     /// <param name="request">Request containing the segment text, desired voice selection, and output audio path. Uses <see cref="SingleSegmentTtsRequest.Text"/>, <see cref="SingleSegmentTtsRequest.VoiceName"/>, and <see cref="SingleSegmentTtsRequest.OutputAudioPath"/>.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A <see cref="TtsResult"/> describing the generated audio file path, voice, and byte length.</returns>
+    /// <summary>
+    — Synthesizes speech for a single text segment and writes the resulting audio file to disk.
+    /// </summary>
+    /// <param name="request">Request containing the segment text, target voice name, and output audio path.</param>
+    /// <param name="cancellationToken">Token used to cancel the synthesis and file-write operations.</param>
+    /// <returns>A TtsResult indicating whether synthesis succeeded, the output audio path, the requested voice name, the length of the generated audio in bytes, and null error on success.</returns>
     /// <exception cref="ArgumentException">Thrown when <see cref="SingleSegmentTtsRequest.Text"/> is null, empty, or whitespace.</exception>
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
@@ -125,6 +146,11 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
         return new TtsResult(true, request.OutputAudioPath, request.VoiceName, audioBytes.Length, null);
     }
 
+    /// <summary>
+    /// Maps a user-facing model or voice key to the corresponding Google Cloud TTS voice identifier.
+    /// </summary>
+    /// <param name="modelOrVoice">A model or voice key such as "standard", "wavenet", or "neural2".</param>
+    /// <returns>The Google Cloud TTS voice identifier for the given key (e.g. "en-US-Standard-C", "en-US-Wavenet-D", "en-US-Neural2-D"); defaults to "en-US-Standard-C".</returns>
     private static string ResolveVoiceName(string modelOrVoice) => modelOrVoice switch
     {
         "standard" => "en-US-Standard-C",
@@ -133,6 +159,9 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
         _ => "en-US-Standard-C"
     };
 
+    /// <summary>
+    /// Disposes the cached GoogleApiClient instance if it has been created.
+    /// </summary>
     public void Dispose()
     {
         if (_clientLazy.IsValueCreated)

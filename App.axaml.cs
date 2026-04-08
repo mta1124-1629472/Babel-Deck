@@ -27,6 +27,9 @@ public partial class App : Application
     // touching the AppLog instance (which may itself be in a bad state).
     private string? _logFilePath;
 
+    /// <summary>
+    /// Loads the Avalonia XAML resources for the application.
+    /// </summary>
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -44,6 +47,11 @@ public partial class App : Application
     /// - Creates and shows the main window with its view model and sets application shutdown behavior.
     /// - Wires GPU bootstrap progress into the UI status bar (debounced) when a primary GPU manager is available.
     /// - Starts background tasks to gather bootstrap warmup data and detect hardware, posting results to the UI thread.
+    /// <summary>
+    /// Performs application startup: sets up global exception handlers and logging, loads settings and persistence stores, initializes credential and media subsystems, constructs the session coordinator and main window view model, wires desktop lifecycle handlers and UI status updates, and starts background warmup and hardware-detection probes.
+    /// </summary>
+    /// <remarks>
+    /// Executed after the Avalonia framework has initialized. Initialization is performed only for a classic desktop lifetime; otherwise control falls through to the base implementation. This method also forces the app theme to dark and registers an exit handler to flush and dispose session resources on shutdown.
     /// </remarks>
     public override void OnFrameworkInitializationCompleted()
     {

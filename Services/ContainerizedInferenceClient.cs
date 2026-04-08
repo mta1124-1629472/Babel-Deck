@@ -336,6 +336,19 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    /// <summary>
+    /// Synthesizes speech for the given text using the Qwen segmented TTS endpoint.
+    /// </summary>
+    /// <param name="text">The text to synthesize.</param>
+    /// <param name="model">TTS model identifier; when null or whitespace the default model "Qwen/Qwen3-TTS-12Hz-1.7B-Base" is used.</param>
+    /// <param name="language">Optional language tag (e.g., BCP-47) to guide synthesis.</param>
+    /// <param name="referenceAudioPath">Path to a reference audio file to upload; the file is uploaded only when <paramref name="referenceId"/> is not provided.</param>
+    /// <param name="referenceText">Optional textual description or transcript of the reference audio.</param>
+    /// <param name="referenceId">Identifier of a previously registered reference; when provided, no reference file is uploaded.</param>
+    /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
+    /// <returns>
+    /// A <see cref="TtsResult"/> containing the synthesis outcome: on success includes the remote audio path, voice identifier, and file size in bytes; on failure includes an error message and an empty audio path.
+    /// </returns>
     public async Task<TtsResult> QwenSegmentAsync(
         string text,
         string model,
@@ -397,6 +410,12 @@ public sealed class ContainerizedInferenceClient
     /// <param name="filename">The remote TTS audio filename on the service to download (will be URL-escaped).</param>
     /// <param name="localOutputPath">The local file path where the downloaded audio will be created or overwritten.</param>
     /// <param name="cancellationToken">Token to cancel the download operation.</param>
+    /// <summary>
+    /// Downloads synthesized TTS audio identified by the given filename from the inference service and writes it to the specified local file path.
+    /// </summary>
+    /// <param name="filename">The remote TTS audio filename on the service (will be URL-escaped).</param>
+    /// <param name="localOutputPath">Path to create or overwrite with the downloaded audio file.</param>
+    /// <param name="cancellationToken">Token to cancel the download operation.</param>
     /// <exception cref="InvalidOperationException">Thrown when the service responds with a non-success status; the exception message contains the response body.</exception>
     public async Task DownloadTtsAudioAsync(
         string filename,
@@ -433,7 +452,13 @@ public sealed class ContainerizedInferenceClient
     /// <param name="cancellationToken">Token to cancel the probe operations.</param>
     /// <returns>
     /// A ContainerHealthStatus describing service availability. If the liveness check fails or an exception occurs, an unavailable status is returned with the error message; otherwise the result includes CUDA information and a capabilities snapshot (which may contain a warmup-prefixed error detail if capability probing failed).
-    /// </returns>
+    /// <summary>
+    /// Probes the service's liveness and capabilities and returns a consolidated health status.
+    /// </summary>
+    /// <param name="httpClient">The HTTP client used to perform the probe requests.</param>
+    /// <param name="serviceUrl">Base URL of the inference service to probe (should not include a trailing '/').</param>
+    /// <param name="cancellationToken">Token to observe while waiting for the HTTP responses.</param>
+    /// <returns>A ContainerHealthStatus indicating whether the container is available. When available, includes CUDA availability/version and a capabilities snapshot; when unavailable, contains an error message describing the failure.</returns>
     private static async Task<ContainerHealthStatus> ProbeHealthAsync(
         HttpClient httpClient,
         string serviceUrl,

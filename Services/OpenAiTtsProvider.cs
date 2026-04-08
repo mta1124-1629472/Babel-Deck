@@ -30,6 +30,11 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     /// </summary>
     /// <param name="log">Application logging instance used by the provider.</param>
     /// <param name="apiKey">OpenAI API key used to authenticate speech requests.</param>
+    /// <summary>
+    /// Initializes a new OpenAiTtsProvider that generates speech via OpenAI and defers creation of the API client until it is first needed.
+    /// </summary>
+    /// <param name="log">Application logger used to record provider activity.</param>
+    /// <param name="apiKey">OpenAI API key used by the default client if no factory is provided.</param>
     /// <param name="clientFactory">Optional factory to create an <see cref="OpenAiApiClient"/>; when not provided, a default client that uses <paramref name="apiKey"/> is created lazily and reused.</param>
     public OpenAiTtsProvider(
         AppLog log,
@@ -46,7 +51,10 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     /// </summary>
     /// <returns>
     /// A <see cref="ProviderReadiness"/> that is ready when an API key is present; otherwise a readiness with `IsReady` false and a message indicating the API key is missing.
-    /// </returns>
+    /// <summary>
+    /// Determines whether the provider has a configured API key and is ready to make requests.
+    /// </summary>
+    /// <returns>A <see cref="ProviderReadiness"/> indicating readiness; if the stored API key is null, empty, or whitespace, returns a not-ready instance with message "API key missing for provider 'OpenAI API'."; otherwise returns <see cref="ProviderReadiness.Ready"/>.</returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
@@ -62,6 +70,13 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A <see cref="TtsResult"/> representing the generated audio file and its metadata (output path, voice, byte length).</returns>
     /// <exception cref="FileNotFoundException">Thrown when the translation JSON file specified by <paramref name="request"/> does not exist.</exception>
+    /// <summary>
+    /// Synthesizes speech for an entire translation artifact and writes the resulting audio file to the requested path.
+    /// </summary>
+    /// <param name="request">Request describing the translation artifact location, target output audio path, and voice to use.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A TtsResult with success status, the output audio path, selected voice name, and the generated audio byte length.</returns>
+    /// <exception cref="FileNotFoundException">Thrown when the translation JSON file at <paramref name="request"/>.TranslationJsonPath does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the translation artifact contains no translated text to synthesize.</exception>
     public async Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
@@ -101,6 +116,14 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     /// <param name="request">A request containing the segment Text to synthesize, the desired VoiceName (model), and the OutputAudioPath where the audio will be written.</param>
     /// <param name="cancellationToken">A token to observe while waiting for the operation to complete.</param>
     /// <returns>A <see cref="TtsResult"/> with the success status, output path, voice name, and audio byte length when generation succeeds.</returns>
+    /// <summary>
+    /// Synthesizes speech for a single segment and writes the resulting audio file to disk.
+    /// </summary>
+    /// <param name="request">Request containing the segment text, target voice name, and output audio path.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>
+    /// A <see cref="TtsResult"/> with success set to true, the output file path, the voice name used, the number of bytes written, and a null error message.
+    /// </returns>
     /// <exception cref="ArgumentException">Thrown when <see cref="SingleSegmentTtsRequest.Text"/> is null, empty, or whitespace.</exception>
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
@@ -124,6 +147,11 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
         return new TtsResult(true, request.OutputAudioPath, request.VoiceName, audioBytes.Length, null);
     }
 
+    /// <summary>
+    /// Map a requested model identifier to a supported OpenAI TTS model name.
+    /// </summary>
+    /// <param name="selected">Requested model identifier (e.g., "tts-1", "tts-1-hd", "gpt-4o-mini-tts").</param>
+    /// <returns>Canonical model name to use for OpenAI TTS; returns "tts-1" for unknown inputs.</returns>
     private static string NormalizeModel(string selected) => selected switch
     {
         "tts-1" => "tts-1",
@@ -132,6 +160,12 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
         _ => "tts-1"
     };
 
+    /// <summary>
+    /// Disposes unmanaged resources held by the provider by disposing the lazily-created OpenAiApiClient if it has been initialized.
+    /// </summary>
+    /// <remarks>
+    /// If the underlying OpenAiApiClient has not yet been created, this method returns without action.
+    /// </remarks>
     public void Dispose()
     {
         if (_clientLazy.IsValueCreated)

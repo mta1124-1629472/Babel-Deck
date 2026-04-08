@@ -165,6 +165,11 @@ public static class DependencyLocator
         }
     }
 
+    /// <summary>
+    /// Resolves a candidate executable name or path to an existing filesystem path.
+    /// </summary>
+    /// <param name="candidate">An executable file path or command name; if it contains directory separators or is rooted it is treated as an explicit path, otherwise it is looked up on the system PATH (and PATHEXT on Windows).</param>
+    /// <returns>The full path to an existing executable if found, or <c>null</c> if the candidate is empty or no matching file exists.</returns>
     private static string? ResolveExecutable(string candidate)
     {
         if (string.IsNullOrWhiteSpace(candidate))
@@ -206,7 +211,10 @@ public static class DependencyLocator
     /// <summary>
     /// Get the file extensions to try when resolving an executable name on the current platform.
     /// </summary>
-    /// <returns>An array of extensions (each starting with a dot, except the empty string) to append when searching for executables. On Windows the list is parsed from the PATHEXT environment variable (or defaults to [".exe", ".cmd", ".bat", ""] if PATHEXT is missing); on non-Windows the array contains only the empty string.</returns>
+    /// <summary>
+    /// Get the list of filename extensions to try when resolving an executable name on the current platform.
+    /// </summary>
+    /// <returns>An array of extensions to append when searching for executables. On Windows the list is parsed from the PATHEXT environment variable (entries start with a dot and an empty string is included); if PATHEXT is missing returns { ".exe", ".cmd", ".bat", "" }. On non-Windows returns an array containing only the empty string.</returns>
     private static string[] GetExecutableExtensions()
     {
         if (!OperatingSystem.IsWindows())
@@ -237,7 +245,14 @@ public static class DependencyLocator
     /// <param name="appDataRoot">Filesystem root used to locate the session snapshot at '{appDataRoot}/state/current-session.json'.</param>
     /// <param name="startupLog">Optional logger that receives startup errors if primary initialization fails.</param>
     /// <param name="primaryGpuManager">Outputs the ManagedVenvHostManager instance chosen as the primary GPU-capable host manager.</param>
+    /// <summary>
+    /// Constructs and initializes a SessionWorkflowCoordinator wired with host managers, registries, stores, and containerized probes; if primary initialization fails, performs a fallback initialization and continues with an empty session state.
+    /// </summary>
+    /// <param name="appDataRoot">Root application data directory where the session snapshot is stored (the snapshot file is placed at {appDataRoot}/state/current-session.json).</param>
+    /// <param name="startupLog">Optional logger used to record initialization failures encountered during the primary initialization path.</param>
+    /// <param name="primaryGpuManager">Outputs the ManagedVenvHostManager selected as the primary GPU-capable host manager (may be null if initialization fails before manager creation).</param>
     /// <returns>The initialized SessionWorkflowCoordinator.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if both primary and fallback initialization paths fail to produce a coordinator.</exception>
     public static SessionWorkflowCoordinator CreateSessionCoordinator(
         AppLog appLog,
         AppSettings appSettings,
