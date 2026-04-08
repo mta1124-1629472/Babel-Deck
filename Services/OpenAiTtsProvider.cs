@@ -21,6 +21,8 @@ namespace Babel.Player.Services;
 /// </summary>
 public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
 {
+    public int MaxConcurrency => 12;
+
     private readonly AppLog _log;
     private readonly string _apiKey;
     private readonly Lazy<OpenAiApiClient> _clientLazy;
@@ -73,36 +75,11 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     /// <returns>A TtsResult with success status, the output audio path, selected voice name, and the generated audio byte length.</returns>
     /// <exception cref="FileNotFoundException">Thrown when the translation JSON file at <paramref name="request"/>.TranslationJsonPath does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the translation artifact contains no translated text to synthesize.</exception>
-    public async Task<TtsResult> GenerateTtsAsync(
+    public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(request.TranslationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
-
-        var translation = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
-        var combinedText = string.Join(" ",
-            (translation.Segments ?? [])
-                .Select(s => s.TranslatedText)
-                .Where(t => !string.IsNullOrWhiteSpace(t))
-                .Select(t => t!.Trim()));
-
-        if (string.IsNullOrWhiteSpace(combinedText))
-            throw new InvalidOperationException("No translated text found in translation artifact.");
-
-        var model = NormalizeModel(request.VoiceName);
-        var client = _clientLazy.Value;
-        var audioBytes = await client.CreateSpeechAsync(combinedText, model, "alloy", cancellationToken);
-
-        var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
-        if (!string.IsNullOrEmpty(outputDir))
-            Directory.CreateDirectory(outputDir);
-
-        await File.WriteAllBytesAsync(request.OutputAudioPath, audioBytes, cancellationToken);
-
-        _log.Info($"[OpenAITTS] Generated combined audio: {request.OutputAudioPath} ({audioBytes.Length} bytes)");
-
-        return new TtsResult(true, request.OutputAudioPath, request.VoiceName, audioBytes.Length, null);
+        throw new NotImplementedException("PLACEHOLDER: Combined generation is now handled by the coordinator.");
     }
 
     /// <summary>

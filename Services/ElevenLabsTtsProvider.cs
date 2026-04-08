@@ -22,6 +22,8 @@ namespace Babel.Player.Services;
 /// </summary>
 public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
 {
+    public int MaxConcurrency => 10;
+
     /// <summary>
     /// ElevenLabs pre-made "Rachel" voice — available on all subscription tiers.
     /// Used as the default character voice for all synthesis requests.
@@ -92,39 +94,11 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
     /// <returns>A <see cref="TtsResult"/> describing the generated audio file and its metadata.</returns>
     /// <exception cref="FileNotFoundException">Thrown when the translation file at <paramref name="request"/>.TranslationJsonPath does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the translation artifact contains no non-empty translated text segments.</exception>
-    public async Task<TtsResult> GenerateTtsAsync(
+    public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(request.TranslationJsonPath))
-            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
-
-        var translationArtifact = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
-        var texts = (translationArtifact.Segments ?? [])
-            .Select(s => s.TranslatedText ?? string.Empty)
-            .Where(t => !string.IsNullOrWhiteSpace(t))
-            .ToList();
-
-        if (texts.Count == 0)
-            throw new InvalidOperationException("No translated text found in translation artifact.");
-
-        var combinedText = string.Join(" ", texts);
-        var modelId = NormalizeModelId(request.VoiceName);
-
-        _log.Info($"[ElevenLabsTTS] Generating combined audio: {texts.Count} segments, model={modelId}");
-
-        var client = _clientLazy.Value;
-        var audioBytes = await client.TextToSpeechAsync(combinedText, DefaultVoiceId, modelId, cancellationToken);
-
-        var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
-        if (!string.IsNullOrEmpty(outputDir))
-            Directory.CreateDirectory(outputDir);
-
-        await File.WriteAllBytesAsync(request.OutputAudioPath, audioBytes, cancellationToken);
-
-        _log.Info($"[ElevenLabsTTS] Combined audio written: {request.OutputAudioPath} ({audioBytes.Length} bytes)");
-
-        return new TtsResult(true, request.OutputAudioPath, request.VoiceName, audioBytes.Length, null);
+        throw new NotImplementedException("PLACEHOLDER: Combined generation is now handled by the coordinator.");
     }
 
     /// <summary>
