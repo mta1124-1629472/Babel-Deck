@@ -203,6 +203,10 @@ public static class DependencyLocator
         return null;
     }
 
+    /// <summary>
+    /// Get the file extensions to try when resolving an executable name on the current platform.
+    /// </summary>
+    /// <returns>An array of extensions (each starting with a dot, except the empty string) to append when searching for executables. On Windows the list is parsed from the PATHEXT environment variable (or defaults to [".exe", ".cmd", ".bat", ""] if PATHEXT is missing); on non-Windows the array contains only the empty string.</returns>
     private static string[] GetExecutableExtensions()
     {
         if (!OperatingSystem.IsWindows())
@@ -227,7 +231,13 @@ public static class DependencyLocator
     /// <summary>
     /// Bootstraps the inference services, registries, and the session coordinator.
     /// Handles fallback creation if the primary initialization fails (e.g., due to corrupt state files).
+    /// <summary>
+    /// Bootstraps and returns a SessionWorkflowCoordinator by constructing and wiring host managers, registries, and a session snapshot store, and by requesting containerized services to start.
     /// </summary>
+    /// <param name="appDataRoot">Filesystem root used to locate the session snapshot at '{appDataRoot}/state/current-session.json'.</param>
+    /// <param name="startupLog">Optional logger that receives startup errors if primary initialization fails.</param>
+    /// <param name="primaryGpuManager">Outputs the ManagedVenvHostManager instance chosen as the primary GPU-capable host manager.</param>
+    /// <returns>The initialized SessionWorkflowCoordinator.</returns>
     public static SessionWorkflowCoordinator CreateSessionCoordinator(
         AppLog appLog,
         AppSettings appSettings,

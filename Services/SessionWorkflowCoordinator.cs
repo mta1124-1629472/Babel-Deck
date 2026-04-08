@@ -703,6 +703,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
+    /// <summary>
+    /// Regenerates the translation for a single segment identified by its segment ID and updates the current session snapshot.
+    /// </summary>
+    /// <param name="segmentId">The identifier of the segment to retranslate (e.g., "segment_0.0").</param>
+    /// <exception cref="InvalidOperationException">Thrown when no translation exists for the current session, the source text for the segment is missing, or the session's source/target language is not set.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the current session's translation file cannot be found on disk.</exception>
     public async Task RegenerateSegmentTranslationAsync(string segmentId)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
@@ -854,6 +860,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Advances the pipeline from its current stage through any remaining stages
     /// (Transcribe → Translate → GenerateTts) that have not yet completed.
     /// Stage-gating decisions live here, not in callers.
+    /// <summary>
+    /// Updates the snapshot's LastUpdatedAtUtc, sets it as the current session, and initiates background persistence of that snapshot.
     /// </summary>
     public void SaveCurrentSession()
     {
@@ -863,6 +871,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             .FireAndForgetAsync(_log, "SaveCurrentSession");
     }
 
+    /// <summary>
+    /// Immediately persists the current session snapshot to persistent stores after updating LastUpdatedAtUtc.
+    /// </summary>
+    /// <remarks>
+    /// Updates the in-memory <c>CurrentSession</c> with the current UTC <c>LastUpdatedAtUtc</c> timestamp and then synchronously saves that snapshot to the underlying stores.
+    /// </remarks>
     public void FlushPendingSave()
     {
         var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };

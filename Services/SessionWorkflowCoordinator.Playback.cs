@@ -354,12 +354,23 @@ public sealed partial class SessionWorkflowCoordinator
         return player;
     }
 
+    /// <summary>
+    /// Update the segment player's playback rate to reflect a changed TTS playback rate.
+    /// </summary>
+    /// <param name="value">The new playback rate multiplier (e.g., 1.0 = normal speed).</param>
     partial void OnTtsPlaybackRateChanged(double value)
     {
         if (_transportManager.SegmentPlayer is { } player)
             player.PlaybackRate = value;
     }
 
+    /// <summary>
+    /// Starts TTS playback for the specified segment by loading its audio and scheduling playback.
+    /// </summary>
+    /// <param name="segmentId">The identifier of the segment whose TTS audio should be played.</param>
+    /// <returns>A Task that completes after playback has been scheduled.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if there is no active session or if no TTS audio path exists for the given segment.</exception>
+    /// <exception cref="FileNotFoundException">Thrown if the resolved TTS audio file does not exist on disk.</exception>
     public Task PlayTtsForSegmentAsync(string segmentId)
     {
         if (CurrentSession is null)
@@ -382,6 +393,13 @@ public sealed partial class SessionWorkflowCoordinator
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Stops any active TTS playback and resets the coordinator's TTS playback state.
+    /// </summary>
+    /// <remarks>
+    /// Attempts to pause the segment player; if the player has already been disposed, the method ignores that condition.
+    /// After returning, <see cref="ActiveTtsSegmentId"/> is cleared and <see cref="PlaybackState"/> is set to <see cref="PlaybackState.Idle"/>.
+    /// </remarks>
     public void StopTtsPlayback()
     {
         try
@@ -402,6 +420,15 @@ public sealed partial class SessionWorkflowCoordinator
         StopSourceMedia();
     }
 
+    /// <summary>
+    /// Start playback of the ingested source media positioned at the start time of the specified segment.
+    /// </summary>
+    /// <param name="segmentId">Identifier of the segment whose start time will be used as the seek target.</param>
+    /// <returns>A task that completes after playback has been scheduled.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when there is no active session, when no media is loaded, or when the specified segment cannot be found.
+    /// </exception>
+    /// <exception cref="FileNotFoundException">Thrown when the ingested media file does not exist at the recorded path.</exception>
     public async Task PlaySourceMediaAtSegmentAsync(string segmentId)
     {
         if (CurrentSession is null)
@@ -425,6 +452,9 @@ public sealed partial class SessionWorkflowCoordinator
         Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play Source Media at segment {segmentId}");
     }
 
+    /// <summary>
+    /// Pauses playback of the currently loaded source media, if a source media player exists.
+    /// </summary>
     public void StopSourceMedia()
     {
         _transportManager.SourceMediaPlayer?.Pause();
