@@ -658,7 +658,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         var fakeTts = new FakeTtsProvider();
         var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
         var settings = CreateMatchingSettings();
-        settings.TtsProvider = ProviderNames.XttsContainer;
+        settings.TtsProvider = ProviderNames.Qwen;
 
         var coord = new SessionWorkflowCoordinator(
             _store,

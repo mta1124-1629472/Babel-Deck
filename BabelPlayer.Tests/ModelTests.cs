@@ -377,7 +377,6 @@ public sealed class ModelTests
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.FasterWhisper));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.GoogleTranslateFree));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.EdgeTts));
-        Assert.False(string.IsNullOrWhiteSpace(ProviderNames.XttsContainer));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Piper));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Nllb200));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.ContainerizedService));
@@ -405,7 +404,6 @@ public sealed class ModelTests
             ProviderNames.Deepl,
             ProviderNames.OpenAi,
             ProviderNames.EdgeTts,
-            ProviderNames.XttsContainer,
             ProviderNames.Piper,
             ProviderNames.ElevenLabs,
             ProviderNames.GoogleCloudTts,
@@ -416,17 +414,17 @@ public sealed class ModelTests
     }
 
     [Fact]
-    public void InferenceRuntimeCatalog_DefaultTtsProvider_ContainerizedIsXttsContainer()
+    public void InferenceRuntimeCatalog_DefaultTtsProvider_ContainerizedIsQwen()
     {
         var provider = InferenceRuntimeCatalog.DefaultTtsProvider(InferenceRuntime.Containerized);
-        Assert.Equal(ProviderNames.XttsContainer, provider);
+        Assert.Equal(ProviderNames.Qwen, provider);
     }
 
     [Fact]
-    public void InferenceRuntimeCatalog_NormalizeTtsProvider_ContainerizedBlankIsXttsContainer()
+    public void InferenceRuntimeCatalog_NormalizeTtsProvider_ContainerizedBlankIsQwen()
     {
         var provider = InferenceRuntimeCatalog.NormalizeTtsProvider(InferenceRuntime.Containerized, "");
-        Assert.Equal(ProviderNames.XttsContainer, provider);
+        Assert.Equal(ProviderNames.Qwen, provider);
     }
 
     // ── TranscriptArtifact ────────────────────────────────────────────────────

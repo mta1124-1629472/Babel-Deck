@@ -21,7 +21,6 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     private readonly ContainerizedInferenceClient _client;
     private readonly AppLog _log;
     private readonly TtsReferenceExtractor _extractor;
-    private readonly Func<IReadOnlyList<string>, string, CancellationToken, Task> _combineAudioFunc;
 
     private string? _autoExtractedReferencePath;
     private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);

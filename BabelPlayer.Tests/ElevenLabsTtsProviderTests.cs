@@ -125,26 +125,14 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task GenerateTtsAsync_InvokesClientFactory_ExactlyOnce()
+    public async Task GenerateTtsAsync_ThrowsNotImplementedException()
     {
-        var callCount = 0;
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
         var translationPath = WriteTranslationJson("Hello world");
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
-        using var provider = new ElevenLabsTtsProvider(_log, "key", () =>
-        {
-            callCount++;
-            return MakeClient();
-        });
-
-        // Two calls should still only create the client once (lazy)
-        try { await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "eleven_multilingual_v2")); }
-        catch { /* ignore network/content errors — we only care about factory call count */ }
-
-        try { await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "eleven_multilingual_v2")); }
-        catch { /* ignore */ }
-
-        Assert.Equal(1, callCount);
+        await Assert.ThrowsAsync<NotImplementedException>(() =>
+            provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "eleven_multilingual_v2")));
     }
 
     [Fact]
@@ -211,32 +199,12 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
     // ── Request validation ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GenerateTtsAsync_FileNotFound_ThrowsFileNotFoundException()
+    public async Task GenerateSegmentTtsAsync_NullText_ThrowsArgumentException()
     {
-        using var provider = new ElevenLabsTtsProvider(_log, "key", () => MakeClient());
-        var request = new TtsRequest("nonexistent.json", Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        var request = new SingleSegmentTtsRequest(null!, Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
 
-        await Assert.ThrowsAsync<FileNotFoundException>(() => provider.GenerateTtsAsync(request));
-    }
-
-    [Fact]
-    public async Task GenerateTtsAsync_EmptySegments_ThrowsInvalidOperationException()
-    {
-        using var provider = new ElevenLabsTtsProvider(_log, "key", () => MakeClient());
-        var translationPath = WriteEmptySegmentsTranslationJson();
-        var request = new TtsRequest(translationPath, Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(request));
-    }
-
-    [Fact]
-    public async Task GenerateTtsAsync_AllSegmentsEmpty_ThrowsInvalidOperationException()
-    {
-        using var provider = new ElevenLabsTtsProvider(_log, "key", () => MakeClient());
-        var translationPath = WriteTranslationJson(translatedText: null);
-        var request = new TtsRequest(translationPath, Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(request));
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GenerateSegmentTtsAsync(request));
     }
 
     [Fact]

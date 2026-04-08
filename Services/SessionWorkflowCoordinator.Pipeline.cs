@@ -327,40 +327,9 @@ public sealed partial class SessionWorkflowCoordinator
         _log.Info($"Starting TTS generation: {CurrentSession.TranslationPath} -> {ttsPath}");
 
         var ttsLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
-        var combinedProgress = new Progress<(int Completed, int Total)>(update =>
-            ReportStage(
-                stageContext,
-                $"Generating combined dub audio: segment {update.Completed} of {update.Total}…",
-                progress01: update.Total > 0 ? (double)update.Completed / update.Total : 0,
-                isIndeterminate: false));
-
-        var ttsTask = _ttsService.GenerateTtsAsync(
-            new TtsRequest(
-                CurrentSession.TranslationPath,
-                ttsPath,
-                v,
-                CurrentSession.SpeakerVoiceAssignments,
-                CurrentSession.SpeakerReferenceAudioPaths,
-                CurrentSession.DefaultTtsVoiceFallback,
-                ttsLanguage,
-                SourceVideoPath: CurrentSession.IngestedMediaPath ?? CurrentSession.SourceMediaPath,
-                SegmentProgress: combinedProgress),
-            cancellationToken);
-        _pendingTtsTasks.Add(ttsTask);
-        var result = await ttsTask;
-
-        if (!result.Success)
-        {
-            var errorMsg = result.ErrorMessage ?? "Unknown TTS error";
-            _log.Error($"TTS failed: {errorMsg}", new Exception(errorMsg));
-            throw new InvalidOperationException($"TTS failed: {errorMsg}");
-        }
-
-        _log.Info($"TTS complete: {ttsPath}, size: {result.FileSizeBytes} bytes");
-
         ReportStage(
             stageContext,
-            "Combined dub audio is ready. Generating per-segment dubbed clips for preview, seek, and segment-level refinement…",
+            "Generating per-segment dubbed clips for preview, seek, and segment-level refinement…",
             progress01: 0,
             isIndeterminate: true);
 
@@ -380,7 +349,7 @@ public sealed partial class SessionWorkflowCoordinator
 
             totalSegments = candidateSegments.Count;
             int completed = 0;
-            int parallelism = Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
+            int parallelism = Math.Max(1, Math.Min(_ttsService.MaxConcurrency, candidateSegments.Count));
 
             ReportStage(
                 stageContext,
@@ -444,6 +413,25 @@ public sealed partial class SessionWorkflowCoordinator
                         _log.Error($"Segment TTS generation failed for {id}: {ex.Message}", ex);
                     }
                 });
+
+            var orderedPaths = new List<string>();
+            foreach (var seg in candidateSegments)
+            {
+                if (seg.Id != null && segmentAudioPaths.TryGetValue(seg.Id, out var path))
+                {
+                    orderedPaths.Add(path);
+                }
+            }
+
+            _log.Info($"Stitching {orderedPaths.Count} segment clips into combined dub file...");
+            ReportStage(
+                stageContext,
+                "Stitching segment clips into combined dub file…",
+                progress01: 1,
+                isIndeterminate: true);
+                
+            await AudioConcatUtility.CombineAudioSegmentsAsync(orderedPaths, ttsPath, cancellationToken);
+            _log.Info($"TTS combined complete: {ttsPath}");
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
