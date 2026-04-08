@@ -9,14 +9,19 @@ internal static class TaskExtensions
     /// Safely executes a task in the background without awaiting it.
     /// Any unhandled exceptions are caught and explicitly routed to the application log.
     /// </summary>
-    public static void FireAndForgetAsync(this Task task, AppLog log, string context = "background operation")
+    public static Task FireAndForgetAsync(this Task task, AppLog log, string context = "background operation")
     {
-        task.ContinueWith(t =>
+        ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(log);
+
+        _ = task.ContinueWith(t =>
         {
             if (t.IsFaulted && t.Exception != null)
             {
                 log.Error($"Unhandled exception during {context}", t.Exception);
             }
         }, TaskContinuationOptions.OnlyOnFaulted);
+
+        return task;
     }
 }
