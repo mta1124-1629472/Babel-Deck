@@ -22,7 +22,7 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider
 {
     private readonly AppLog _log;
     private readonly string _apiKey;
-    private readonly Func<GoogleApiClient> _clientFactory;
+    private readonly Lazy<GoogleApiClient> _clientLazy;
 
     public GoogleCloudTtsProvider(
         AppLog log,
@@ -31,7 +31,7 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider
     {
         _log = log;
         _apiKey = apiKey;
-        _clientFactory = clientFactory ?? (() => new GoogleApiClient(_apiKey));
+        _clientLazy = new Lazy<GoogleApiClient>(clientFactory ?? (() => new GoogleApiClient(_apiKey)), LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
@@ -60,7 +60,7 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider
             throw new InvalidOperationException("No translated text found in translation artifact.");
 
         var voiceName = ResolveVoiceName(request.VoiceName);
-        using var client = _clientFactory();
+        var client = _clientLazy.Value;
         var audioBytes = await client.SynthesizeSpeechAsync(combinedText, voiceName, cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
@@ -82,7 +82,7 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider
             throw new ArgumentException("Segment text cannot be empty", nameof(request));
 
         var voiceName = ResolveVoiceName(request.VoiceName);
-        using var client = _clientFactory();
+        var client = _clientLazy.Value;
         var audioBytes = await client.SynthesizeSpeechAsync(request.Text, voiceName, cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);

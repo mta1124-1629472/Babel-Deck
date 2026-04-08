@@ -398,6 +398,7 @@ public sealed class ContainerizedInferenceClient
     {
         using var response = await _httpClient.GetAsync(
             $"{_inferenceServiceUrl}/tts/audio/{Uri.EscapeDataString(filename)}",
+            HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
@@ -406,8 +407,9 @@ public sealed class ContainerizedInferenceClient
             throw new InvalidOperationException($"Failed to download TTS audio '{filename}': {error}");
         }
 
-        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-        await File.WriteAllBytesAsync(localOutputPath, bytes, cancellationToken);
+        using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var fileStream = File.Create(localOutputPath);
+        await contentStream.CopyToAsync(fileStream, cancellationToken);
     }
 
     private static async Task<ContainerHealthStatus> ProbeHealthAsync(

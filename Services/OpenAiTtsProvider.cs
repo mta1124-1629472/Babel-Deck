@@ -23,7 +23,7 @@ public sealed class OpenAiTtsProvider : ITtsProvider
 {
     private readonly AppLog _log;
     private readonly string _apiKey;
-    private readonly Func<OpenAiApiClient> _clientFactory;
+    private readonly Lazy<OpenAiApiClient> _clientLazy;
 
     public OpenAiTtsProvider(
         AppLog log,
@@ -32,7 +32,7 @@ public sealed class OpenAiTtsProvider : ITtsProvider
     {
         _log = log;
         _apiKey = apiKey;
-        _clientFactory = clientFactory ?? (() => new OpenAiApiClient(_apiKey));
+        _clientLazy = new Lazy<OpenAiApiClient>(clientFactory ?? (() => new OpenAiApiClient(_apiKey)), LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
@@ -61,7 +61,7 @@ public sealed class OpenAiTtsProvider : ITtsProvider
             throw new InvalidOperationException("No translated text found in translation artifact.");
 
         var model = NormalizeModel(request.VoiceName);
-        using var client = _clientFactory();
+        var client = _clientLazy.Value;
         var audioBytes = await client.CreateSpeechAsync(combinedText, model, "alloy", cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
@@ -83,7 +83,7 @@ public sealed class OpenAiTtsProvider : ITtsProvider
             throw new ArgumentException("Segment text cannot be empty", nameof(request));
 
         var model = NormalizeModel(request.VoiceName);
-        using var client = _clientFactory();
+        var client = _clientLazy.Value;
         var audioBytes = await client.CreateSpeechAsync(request.Text, model, "alloy", cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);

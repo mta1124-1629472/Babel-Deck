@@ -87,46 +87,10 @@ public partial class App : Application
                     TargetPeak:     appSettings.VideoTargetPeak,
                     HdrComputePeak: appSettings.VideoHdrComputePeak),
                 log: appLog);
+            _sessionWorkflowCoordinator = DependencyLocator.CreateSessionCoordinator(
+                appLog, appSettings, perSessionStore, recentStore, _apiKeyStore, transportManager, 
+                appDataRoot, _startupLog, out var primaryGpuManager);
 
-            ManagedVenvHostManager? primaryGpuManager = null;
-            try
-            {
-                appLog.Info("App startup: initializing session coordinator.");
-                var containerizedProbe = new ContainerizedServiceProbe(appLog);
-                var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
-                primaryGpuManager = managedHostManager;
-                var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
-                var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
-                var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
-                var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
-                var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
-                var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
-                _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                    store, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore, containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
-                _sessionWorkflowCoordinator.Initialize();
-                containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
-                appLog.Info("App startup: session coordinator ready.");
-            }
-            catch (Exception ex)
-            {
-                _startupLog?.Error("App startup: session initialization failed. Continuing with empty session.", ex);
-                if (_sessionWorkflowCoordinator is null)
-                {
-                    var containerizedProbe = new ContainerizedServiceProbe(appLog);
-                    var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
-                    primaryGpuManager = managedHostManager;
-                    var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
-                    var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
-                    var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
-                    var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
-                    var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
-                    var fallbackStore = new SessionSnapshotStore(
-                        Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
-                    _sessionWorkflowCoordinator = new SessionWorkflowCoordinator(
-                        fallbackStore, appLog, appSettings, perSessionStore, recentStore, transcriptionRegistry, translationRegistry, ttsRegistry, transportManager: transportManager, keyStore: _apiKeyStore, containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
-                    containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
-                }
-            }
 
             desktop.Exit += OnDesktopExit;
             desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose;

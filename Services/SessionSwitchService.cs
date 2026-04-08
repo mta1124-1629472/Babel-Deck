@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -28,7 +29,7 @@ public sealed class SessionSwitchService
 
     public IReadOnlyList<RecentSessionEntry> StashCurrentSession(
         WorkflowSessionSnapshot currentSession,
-        IDictionary<string, WorkflowSessionSnapshot> mediaSnapshotCache,
+        ConcurrentDictionary<string, WorkflowSessionSnapshot> mediaSnapshotCache,
         int cacheLimit)
     {
         if (string.IsNullOrWhiteSpace(currentSession.SourceMediaPath))
@@ -68,7 +69,7 @@ public sealed class SessionSwitchService
     public void CacheCurrentSession(
         string mediaPath,
         WorkflowSessionSnapshot snapshot,
-        IDictionary<string, WorkflowSessionSnapshot> mediaSnapshotCache,
+        ConcurrentDictionary<string, WorkflowSessionSnapshot> mediaSnapshotCache,
         int cacheLimit)
     {
         CacheMediaSnapshot(
@@ -82,7 +83,7 @@ public sealed class SessionSwitchService
         _perSessionStore.GetSessionDirectory(sessionId);
 
     private void CacheMediaSnapshot(
-        IDictionary<string, WorkflowSessionSnapshot> cache,
+        ConcurrentDictionary<string, WorkflowSessionSnapshot> cache,
         string key,
         WorkflowSessionSnapshot snapshot,
         int cacheLimit)
@@ -91,8 +92,10 @@ public sealed class SessionSwitchService
         if (cache.Count <= cacheLimit)
             return;
 
-        var oldest = cache.Keys.First();
-        cache.Remove(oldest);
-        _log.Info($"Evicted cached session for media key '{oldest}' to keep cache bounded.");
+        var oldest = cache.Keys.FirstOrDefault();
+        if (oldest != null && cache.TryRemove(oldest, out _))
+        {
+            _log.Info($"Evicted cached session for media key '{oldest}' to keep cache bounded.");
+        }
     }
 }

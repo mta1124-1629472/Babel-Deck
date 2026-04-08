@@ -30,7 +30,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
 
     private readonly AppLog _log;
     private readonly string _apiKey;
-    private readonly Func<ElevenLabsApiClient> _clientFactory;
+    private readonly Lazy<ElevenLabsApiClient> _clientLazy;
 
     public ElevenLabsTtsProvider(
         AppLog log,
@@ -39,7 +39,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
     {
         _log = log;
         _apiKey = apiKey;
-        _clientFactory = clientFactory ?? (() => new ElevenLabsApiClient(_apiKey));
+        _clientLazy = new Lazy<ElevenLabsApiClient>(clientFactory ?? (() => new ElevenLabsApiClient(_apiKey)), LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
@@ -76,7 +76,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
 
         _log.Info($"[ElevenLabsTTS] Generating combined audio: {texts.Count} segments, model={modelId}");
 
-        using var client = _clientFactory();
+        var client = _clientLazy.Value;
         var audioBytes = await client.TextToSpeechAsync(combinedText, DefaultVoiceId, modelId, cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);
@@ -106,7 +106,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
 
         _log.Info($"[ElevenLabsTTS] Generating segment audio: {request.Text[..Math.Min(30, request.Text.Length)]}... model={modelId}");
 
-        using var client = _clientFactory();
+        var client = _clientLazy.Value;
         var audioBytes = await client.TextToSpeechAsync(request.Text, DefaultVoiceId, modelId, cancellationToken);
 
         var outputDir = Path.GetDirectoryName(request.OutputAudioPath);

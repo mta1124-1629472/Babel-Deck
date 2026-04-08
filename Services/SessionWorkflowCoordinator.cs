@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -39,7 +40,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private readonly EventHandler<Exception> _segmentErrorHandler;
     private readonly Action<VsrDiagnosticSnapshot> _vsrDiagnosticChangedHandler;
     private VsrDiagnosticSnapshot? _latestVsrDiagnostic;
-    private readonly Dictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
+    private readonly ConcurrentDictionary<string, WorkflowSessionSnapshot> _mediaSnapshotCache =
         new(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty]
@@ -725,8 +726,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         _translationService ??= CreateTranslationService();
 
-        var sourceLanguage = CurrentSession.SourceLanguage ?? "es";
-        var targetLanguage = CurrentSession.TargetLanguage ?? "en";
+        if (string.IsNullOrEmpty(CurrentSession.SourceLanguage))
+            throw new InvalidOperationException("Source language is not set in the current session. Transcription must be completed first.");
+            
+        if (string.IsNullOrEmpty(CurrentSession.TargetLanguage))
+            throw new InvalidOperationException("Target language is not set in the current session.");
+
+        var sourceLanguage = CurrentSession.SourceLanguage;
+        var targetLanguage = CurrentSession.TargetLanguage;
 
         _log.Info($"Regenerating translation for segment {segmentId}: {sourceText.Substring(0, Math.Min(30, sourceText.Length))}...");
 
@@ -852,7 +859,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     {
         var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
         CurrentSession = snapshot;
-        PersistSnapshot(snapshot, updateStatus: true);
+        Task.Run(() => PersistSnapshot(snapshot, updateStatus: true))
+            .FireAndForgetAsync(_log, "SaveCurrentSession");
     }
 
     public void FlushPendingSave()

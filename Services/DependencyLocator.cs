@@ -3,6 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Babel.Player.Models;
+using Babel.Player.Services.Credentials;
+using Babel.Player.Services.Registries;
+using Babel.Player.Services.Settings;
 
 namespace Babel.Player.Services;
 
@@ -219,5 +222,78 @@ public static class DependencyLocator
             parsed.Add(string.Empty);
 
         return [.. parsed];
+    }
+
+    /// <summary>
+    /// Bootstraps the inference services, registries, and the session coordinator.
+    /// Handles fallback creation if the primary initialization fails (e.g., due to corrupt state files).
+    /// </summary>
+    public static SessionWorkflowCoordinator CreateSessionCoordinator(
+        AppLog appLog,
+        AppSettings appSettings,
+        PerSessionSnapshotStore perSessionStore,
+        RecentSessionsStore recentStore,
+        ApiKeyStore apiKeyStore,
+        IMediaTransportManager transportManager,
+        string appDataRoot,
+        AppLog? startupLog,
+        out ManagedVenvHostManager? primaryGpuManager)
+    {
+        SessionWorkflowCoordinator? coordinator = null;
+        primaryGpuManager = null;
+
+        try
+        {
+            appLog.Info("App startup: initializing session coordinator.");
+            var containerizedProbe = new ContainerizedServiceProbe(appLog);
+            var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+            primaryGpuManager = managedHostManager;
+            var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
+            var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
+            
+            var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
+            var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
+            var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
+            
+            var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
+            
+            coordinator = new SessionWorkflowCoordinator(
+                store, appLog, appSettings, perSessionStore, recentStore, 
+                transcriptionRegistry, translationRegistry, ttsRegistry, 
+                transportManager: transportManager, keyStore: apiKeyStore, 
+                containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
+            
+            coordinator.Initialize();
+            containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
+            appLog.Info("App startup: session coordinator ready.");
+        }
+        catch (Exception ex)
+        {
+            startupLog?.Error("App startup: session initialization failed. Continuing with empty session.", ex);
+            
+            // Fallback initialization
+            var containerizedProbe = new ContainerizedServiceProbe(appLog);
+            var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+            primaryGpuManager = managedHostManager;
+            var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
+            var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
+            
+            var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
+            var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
+            var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
+            
+            var fallbackStore = new SessionSnapshotStore(
+                Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
+            
+            coordinator = new SessionWorkflowCoordinator(
+                fallbackStore, appLog, appSettings, perSessionStore, recentStore, 
+                transcriptionRegistry, translationRegistry, ttsRegistry, 
+                transportManager: transportManager, keyStore: apiKeyStore, 
+                containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
+            
+            containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
+        }
+
+        return coordinator;
     }
 }

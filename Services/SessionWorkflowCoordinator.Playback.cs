@@ -360,7 +360,7 @@ public sealed partial class SessionWorkflowCoordinator
             player.PlaybackRate = value;
     }
 
-    public async Task PlayTtsForSegmentAsync(string segmentId)
+    public Task PlayTtsForSegmentAsync(string segmentId)
     {
         if (CurrentSession is null)
             throw new InvalidOperationException("No active session.");
@@ -378,7 +378,8 @@ public sealed partial class SessionWorkflowCoordinator
         var player = GetOrCreateSegmentPlayer();
         player.Load(audioPath);
         ActiveTtsSegmentId = segmentId;
-        await Task.Run(() => player.Play());
+        Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play TTS for segment {segmentId}");
+        return Task.CompletedTask;
     }
 
     public void StopTtsPlayback()
@@ -420,8 +421,8 @@ public sealed partial class SessionWorkflowCoordinator
         var player = GetOrCreateSourcePlayer();
         player.Load(CurrentSession.IngestedMediaPath);
         player.Seek((long)(target.StartSeconds * 1000));
-        await Task.Run(() => player.Play());
         _log.Info($"Playing source media at segment {segmentId} ({target.StartSeconds:F1}s)");
+        Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play Source Media at segment {segmentId}");
     }
 
     public void StopSourceMedia()
