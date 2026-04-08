@@ -18,6 +18,10 @@ public static class AudioConcatUtility
         if (segmentAudioPaths.Count == 0)
             throw new InvalidOperationException("Cannot combine zero segment audio files.");
 
+        var outputDir = Path.GetDirectoryName(outputAudioPath);
+        if (!string.IsNullOrEmpty(outputDir))
+            Directory.CreateDirectory(outputDir);
+
         if (segmentAudioPaths.Count == 1)
         {
             File.Copy(segmentAudioPaths[0], outputAudioPath, overwrite: true);

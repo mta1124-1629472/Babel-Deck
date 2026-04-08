@@ -38,8 +38,6 @@ public sealed partial class SessionWorkflowCoordinator
         if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
             throw new FileNotFoundException("Cannot create Qwen reference audio: source media is unavailable.", mediaPath);
 
-        var ffmpegPath = DependencyLocator.FindFfmpeg()
-            ?? throw new InvalidOperationException("ffmpeg not found. Qwen auto reference extraction requires ffmpeg.");
         var refsDir = Path.Combine(GetSessionDirectory(), "tts", "references");
         Directory.CreateDirectory(refsDir);
         var outputPath = Path.Combine(refsDir, "qwen-single-speaker-reference.wav");
@@ -140,6 +138,14 @@ public sealed partial class SessionWorkflowCoordinator
                     segStart,
                     extractDuration,
                     cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (TaskCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

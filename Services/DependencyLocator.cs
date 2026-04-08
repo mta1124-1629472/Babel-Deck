@@ -330,15 +330,15 @@ public static class DependencyLocator
         primaryGpuManager = managedHostManager;
         var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
         var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
-        
-        var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
-        var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
-        var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
-        
-        var snapshotStore = new SessionSnapshotStore(
-            Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
 
         var audioProcessingService = new FfmpegAudioProcessingService(appLog);
+
+        var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
+        var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
+        var ttsRegistry = new TtsRegistry(appLog, containerizedProbe, audioProcessingService);
+
+        var snapshotStore = new SessionSnapshotStore(
+            Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
         
         return new SessionWorkflowCoordinator(
             snapshotStore, appLog, appSettings, perSessionStore, recentStore, 

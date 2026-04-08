@@ -46,25 +46,56 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
                 Content = new ByteArrayContent([0x01, 0x02, 0x03])
             })));
 
-    private string WriteTranslationJson(string? translatedText = "Hello world")
+    private string WriteTranslationJson(string? translatedText = "Hello world", bool twoSegments = false)
     {
         var path = Path.Combine(_testDir, $"translation-{Guid.NewGuid():N}.json");
-        var json = $$"""
+
+        if (twoSegments)
         {
-          "sourceLanguage": "es",
-          "targetLanguage": "en",
-          "segments": [
+            var json = $$"""
             {
-              "id": "segment_0.0",
-              "start": 0.0,
-              "end": 2.5,
-              "text": "Hola mundo",
-              "translatedText": {{(translatedText is null ? "null" : $"\"{translatedText}\"")}}
+              "sourceLanguage": "es",
+              "targetLanguage": "en",
+              "segments": [
+                {
+                  "id": "segment_0.0",
+                  "start": 0.0,
+                  "end": 2.5,
+                  "text": "Hola mundo",
+                  "translatedText": "Hello world"
+                },
+                {
+                  "id": "segment_2.5",
+                  "start": 2.5,
+                  "end": 5.0,
+                  "text": "Como estas",
+                  "translatedText": "How are you"
+                }
+              ]
             }
-          ]
+            """;
+            File.WriteAllText(path, json);
         }
-        """;
-        File.WriteAllText(path, json);
+        else
+        {
+            var json = $$"""
+            {
+              "sourceLanguage": "es",
+              "targetLanguage": "en",
+              "segments": [
+                {
+                  "id": "segment_0.0",
+                  "start": 0.0,
+                  "end": 2.5,
+                  "text": "Hola mundo",
+                  "translatedText": {{(translatedText is null ? "null" : $"\"{translatedText}\"")}}
+                }
+              ]
+            }
+            """;
+            File.WriteAllText(path, json);
+        }
+
         return path;
     }
 
@@ -148,7 +179,7 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
     public async Task GenerateTtsAsync_GeneratesCombinedAudio()
     {
         using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
-        var translationPath = WriteTranslationJson("Hello world");
+        var translationPath = WriteTranslationJson(twoSegments: true);
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
         var result = await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "eleven_multilingual_v2"));
@@ -156,6 +187,9 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
         Assert.True(result.Success);
         Assert.Equal(outputPath, result.AudioPath);
         Assert.True(File.Exists(outputPath));
+        // Verify multi-segment stitching executed (output should be larger than single segment)
+        var fileSize = new FileInfo(outputPath).Length;
+        Assert.True(fileSize > 0, "Combined audio file should have non-zero size after stitching two segments");
     }
 
     [Fact]

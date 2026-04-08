@@ -34,6 +34,7 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
     private readonly AppLog _log;
     private readonly string _apiKey;
     private readonly Lazy<ElevenLabsApiClient> _clientLazy;
+    private readonly IAudioProcessingService? _audioProcessingService;
 
     /// <summary>
     /// Creates a new ElevenLabsTtsProvider and configures a lazily initialized ElevenLabsApiClient.
@@ -46,14 +47,17 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
     /// <param name="log">Application logger used for informational and error messages.</param>
     /// <param name="apiKey">ElevenLabs API key used to create the API client when a default factory is used.</param>
     /// <param name="clientFactory">Optional factory to create an <see cref="ElevenLabsApiClient"/>; if null, a default factory that uses <paramref name="apiKey"/> will be used and the client instance will be created on first use.</param>
+    /// <param name="audioProcessingService">Optional audio processing service for combining segments; if null, falls back to AudioConcatUtility.</param>
     public ElevenLabsTtsProvider(
         AppLog log,
         string apiKey,
-        Func<ElevenLabsApiClient>? clientFactory = null)
+        Func<ElevenLabsApiClient>? clientFactory = null,
+        IAudioProcessingService? audioProcessingService = null)
     {
         _log = log;
         _apiKey = apiKey;
         _clientLazy = new Lazy<ElevenLabsApiClient>(clientFactory ?? (() => new ElevenLabsApiClient(_apiKey)), LazyThreadSafetyMode.ExecutionAndPublication);
+        _audioProcessingService = audioProcessingService;
     }
 
     /// <summary>
@@ -133,7 +137,14 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
                 }
             }
 
-            await AudioConcatUtility.CombineAudioSegmentsAsync(segmentPaths, request.OutputAudioPath, cancellationToken);
+            if (_audioProcessingService is not null)
+            {
+                await _audioProcessingService.CombineAudioSegmentsAsync(segmentPaths, request.OutputAudioPath, cancellationToken);
+            }
+            else
+            {
+                await AudioConcatUtility.CombineAudioSegmentsAsync(segmentPaths, request.OutputAudioPath, cancellationToken);
+            }
 
             if (!File.Exists(request.OutputAudioPath))
                 throw new InvalidOperationException($"Combined audio file was not created at {request.OutputAudioPath}");
