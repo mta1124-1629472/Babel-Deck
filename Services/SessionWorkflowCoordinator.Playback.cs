@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -542,6 +543,20 @@ public sealed partial class SessionWorkflowCoordinator
             catch (Exception ex)
             {
                 _log.Warning($"Failed to dispose containerized inference manager on shutdown: {ex.Message}");
+            }
+        }
+
+        // Wait for all in-flight TTS operations to complete before disposing the TTS service
+        // to avoid killing a shared HttpClient mid-request.
+        if (_pendingTtsTasks.Count > 0)
+        {
+            try
+            {
+                Task.WhenAll(_pendingTtsTasks).Wait();
+            }
+            catch
+            {
+                // Ignore exceptions during shutdown - tasks may have been canceled or failed.
             }
         }
 
