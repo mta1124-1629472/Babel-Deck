@@ -98,7 +98,7 @@ public sealed class FfmpegAudioProcessingServiceTests : IDisposable
         // Skip this test if ffmpeg is actually available (would succeed instead of throw)
         var ffmpegPath = DependencyLocator.FindFfmpeg();
         if (ffmpegPath is not null)
-            return; // ffmpeg is available, skip this test
+            Assert.Skip("ffmpeg is available");
 
         var seg1 = Path.Combine(_dir, "seg1.mp3");
         var seg2 = Path.Combine(_dir, "seg2.mp3");
@@ -119,7 +119,7 @@ public sealed class FfmpegAudioProcessingServiceTests : IDisposable
         // Skip if ffmpeg is not available (test path requires ffmpeg to be invoked)
         var ffmpegPath = DependencyLocator.FindFfmpeg();
         if (ffmpegPath is null)
-            return;
+            Assert.Skip("ffmpeg is not available");
 
         var seg1 = Path.Combine(_dir, "seg1.mp3");
         var seg2 = Path.Combine(_dir, "seg2.mp3");

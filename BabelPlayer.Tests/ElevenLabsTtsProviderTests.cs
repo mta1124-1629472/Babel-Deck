@@ -128,8 +128,8 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
         // ElevenLabs is a cloud provider and should allow more concurrency than local providers.
         using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
         var interfaceDefault = Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
-        Assert.True(provider.MaxConcurrency > interfaceDefault || provider.MaxConcurrency >= 1,
-            $"Expected MaxConcurrency={provider.MaxConcurrency} to be at least 1");
+        Assert.True(provider.MaxConcurrency > interfaceDefault,
+            $"Expected MaxConcurrency={provider.MaxConcurrency} to be greater than interfaceDefault={interfaceDefault}");
         Assert.Equal(10, provider.MaxConcurrency);
     }
 
