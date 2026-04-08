@@ -143,10 +143,6 @@ public sealed partial class SessionWorkflowCoordinator
             {
                 throw;
             }
-            catch (TaskCanceledException)
-            {
-                throw;
-            }
             catch (Exception ex)
             {
                 _log.Warning($"Auto-reference extraction failed for speaker '{speakerId}': {ex.Message}");

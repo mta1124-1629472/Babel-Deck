@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Babel.Player.Models;
 using Babel.Player.Services.Credentials;
 using Babel.Player.Services.Registries;
@@ -348,4 +349,4 @@ public static class DependencyLocator
             audioProcessingService: audioProcessingService);
     }
 }
-
+
