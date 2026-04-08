@@ -1184,7 +1184,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     {
         var coord = CreateCoordinator();
         coord.Initialize();
-        coord.FlushPendingSave();
+        coord.SaveCurrentSession();
 
         var coord2 = CreateCoordinator();
         coord2.Initialize();
