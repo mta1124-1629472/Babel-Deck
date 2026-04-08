@@ -32,6 +32,14 @@ public partial class App : Application
         AvaloniaXamlLoader.Load(this);
     }
 
+    /// <summary>
+    /// Performs application startup initialization: wires global exception handlers, configures logging and settings, constructs core services and UI, and starts background probes.
+    /// </summary>
+    /// <remarks>
+    /// Subscribes to unhandled exception events, initializes application directories, logging, settings, credential and session stores, media transport, and the session workflow coordinator.  
+    /// Builds and assigns the main window view model and error dialog service, configures shutdown behavior, and wires GPU bootstrap progress into the UI.  
+    /// Starts non-blocking background tasks to gather bootstrap warmup data and run a hardware snapshot, posting results to the UI thread when available.
+    /// </remarks>
     public override void OnFrameworkInitializationCompleted()
     {
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;

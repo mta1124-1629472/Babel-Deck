@@ -391,6 +391,13 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    /// <summary>
+    /// Download a TTS audio artifact from the inference service and save it to the given local file path.
+    /// </summary>
+    /// <param name="filename">The remote TTS audio filename or identifier to request from the service.</param>
+    /// <param name="localOutputPath">The local filesystem path to create or overwrite with the downloaded audio.</param>
+    /// <param name="cancellationToken">Token to cancel the download operation.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the inference service responds with a non-success status; the exception message contains the response body.</exception>
     public async Task DownloadTtsAudioAsync(
         string filename,
         string localOutputPath,
@@ -412,6 +419,13 @@ public sealed class ContainerizedInferenceClient
         await contentStream.CopyToAsync(fileStream, cancellationToken);
     }
 
+    /// <summary>
+    /// Checks the inference container's liveness and capability endpoints and produces a consolidated health status for the given service URL.
+    /// </summary>
+    /// <param name="serviceUrl">Base URL of the inference service (e.g., "http://host:port"); trailing slash is not required.</param>
+    /// <returns>
+    /// A <see cref="ContainerHealthStatus"/> describing availability, CUDA information, and reported capabilities. If any probe fails or the live endpoint reports a non-healthy status, an unavailable status is returned with the probe error message.
+    /// </returns>
     private static async Task<ContainerHealthStatus> ProbeHealthAsync(
         HttpClient httpClient,
         string serviceUrl,

@@ -703,6 +703,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
+    /// <summary>
+    /// Regenerates the translation for the specified segment and updates the current session's status.
+    /// </summary>
+    /// <param name="segmentId">Stable identifier of the segment to regenerate (for example, "segment_0.0").</param>
+    /// <exception cref="InvalidOperationException">Thrown when no translation is available, the segment's source text is missing, required source or target languages are not set, or the translation provider reports a failure.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the current session does not exist.</exception>
     public async Task RegenerateSegmentTranslationAsync(string segmentId)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
@@ -854,6 +860,8 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Advances the pipeline from its current stage through any remaining stages
     /// (Transcribe → Translate → GenerateTts) that have not yet completed.
     /// Stage-gating decisions live here, not in callers.
+    /// <summary>
+    /// Updates the current session's LastUpdatedAtUtc to now, assigns the updated snapshot to <c>CurrentSession</c>, and schedules asynchronous persistence of the snapshot.
     /// </summary>
     public void SaveCurrentSession()
     {
@@ -863,6 +871,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             .FireAndForgetAsync(_log, "SaveCurrentSession");
     }
 
+    /// <summary>
+    /// Immediately persists the current session snapshot to durable stores.
+    /// </summary>
+    /// <remarks>
+    /// Updates CurrentSession.LastUpdatedAtUtc to the current UTC time, assigns the updated snapshot to CurrentSession, and performs a synchronous save of the snapshot to the configured persistent stores.
+    /// </remarks>
     public void FlushPendingSave()
     {
         var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
