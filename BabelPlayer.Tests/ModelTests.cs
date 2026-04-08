@@ -379,6 +379,7 @@ public sealed class ModelTests
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.EdgeTts));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Piper));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Nllb200));
+        Assert.False(string.IsNullOrWhiteSpace(ProviderNames.Qwen));
         Assert.False(string.IsNullOrWhiteSpace(ProviderNames.ContainerizedService));
     }
 
@@ -408,6 +409,7 @@ public sealed class ModelTests
             ProviderNames.ElevenLabs,
             ProviderNames.GoogleCloudTts,
             ProviderNames.OpenAiTts,
+            ProviderNames.Qwen,
             ProviderNames.ContainerizedService,
         };
         Assert.Equal(names.Length, new System.Collections.Generic.HashSet<string>(names).Count);
