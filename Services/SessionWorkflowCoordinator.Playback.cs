@@ -403,7 +403,7 @@ public sealed partial class SessionWorkflowCoordinator
         var player = GetOrCreateSegmentPlayer();
         player.Load(audioPath);
         ActiveTtsSegmentId = segmentId;
-        Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play TTS for segment {segmentId}");
+        _ = Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play TTS for segment {segmentId}");
         return Task.CompletedTask;
     }
 
@@ -411,14 +411,8 @@ public sealed partial class SessionWorkflowCoordinator
     /// Stops any active TTS playback and resets the coordinator's TTS playback state.
     /// </summary>
     /// <remarks>
-    /// Attempts to pause the segment player; if the player has already been disposed, the method ignores that condition.
+    /// Attempts to pause the segment player; if the player has already been disposed, the method ignores that condition (race/shutdown case).
     /// After returning, <see cref="ActiveTtsSegmentId"/> is cleared and <see cref="PlaybackState"/> is set to <see cref="PlaybackState.Idle"/>.
-    /// <summary>
-    /// Stops any active TTS segment playback and resets related playback state.
-    /// </summary>
-    /// <remarks>
-    /// If a segment player exists, attempts to pause it and ignores an ObjectDisposedException (race/shutdown case).
-    /// Clears <c>ActiveTtsSegmentId</c> and sets <c>PlaybackState</c> to <c>Idle</c>.
     /// </remarks>
     public void StopTtsPlayback()
     {
