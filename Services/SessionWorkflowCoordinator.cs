@@ -570,7 +570,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         if (transcriptionProviderChanged) _transcriptionService = null;
         if (translationProviderChanged) _translationService = null;
-        if (ttsProviderChanged) _ttsService = null;
+        if (ttsProviderChanged)
+        {
+            (_ttsService as IDisposable)?.Dispose();
+            _ttsService = null;
+        }
 
         var invalidation = CheckSettingsInvalidation();
         _log.Info(
@@ -857,18 +861,13 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     /// <summary>
-    /// Advances the pipeline from its current stage through any remaining stages
-    /// (Transcribe → Translate → GenerateTts) that have not yet completed.
-    /// Stage-gating decisions live here, not in callers.
-    /// <summary>
-    /// Updates the snapshot's LastUpdatedAtUtc, sets it as the current session, and initiates background persistence of that snapshot.
+    /// Updates the snapshot's LastUpdatedAtUtc, sets it as the current session, and persists that snapshot.
     /// </summary>
     public void SaveCurrentSession()
     {
         var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
         CurrentSession = snapshot;
-        Task.Run(() => PersistSnapshot(snapshot, updateStatus: true))
-            .FireAndForgetAsync(_log, "SaveCurrentSession");
+        PersistSnapshot(snapshot, updateStatus: true);
     }
 
     /// <summary>

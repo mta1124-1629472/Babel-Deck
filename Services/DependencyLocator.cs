@@ -304,6 +304,6 @@ public static class DependencyLocator
             containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
         }
 
-        return coordinator;
+        return coordinator ?? throw new InvalidOperationException("Failed to initialize session coordinator after both primary and fallback initialization paths.");
     }
 }

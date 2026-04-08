@@ -20,7 +20,7 @@ namespace Babel.Player.Services;
 /// <see cref="DefaultVoiceId"/> (Rachel) — a pre-made ElevenLabs voice available
 /// on all subscription tiers. Future work can expose per-user voice ID selection.
 /// </summary>
-public sealed class ElevenLabsTtsProvider : ITtsProvider
+public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
 {
     /// <summary>
     /// ElevenLabs pre-made "Rachel" voice — available on all subscription tiers.
@@ -155,4 +155,10 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
             "eleven_flash_v2_5"       => "eleven_flash_v2_5",
             _                         => "eleven_multilingual_v2",
         };
+
+    public void Dispose()
+    {
+        if (_clientLazy.IsValueCreated)
+            _clientLazy.Value.Dispose();
+    }
 }
