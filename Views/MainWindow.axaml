@@ -702,7 +702,7 @@
                                     CornerRadius="21" Background="{DynamicResource ButtonBackgroundBrush}">
                                 <Button.Styles>
                                     <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                        <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
+                                        <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
                                     </Style>
                                     <Style Selector="Button:pressed /template/ ContentPresenter">
                                         <Setter Property="Background" Value="#252545" />
