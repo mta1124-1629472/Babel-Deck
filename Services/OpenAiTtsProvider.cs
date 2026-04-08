@@ -19,7 +19,7 @@ namespace Babel.Player.Services;
 /// character voice is fixed to a default for now ("alloy") to avoid introducing a new
 /// settings dimension in this milestone.
 /// </summary>
-public sealed class OpenAiTtsProvider : ITtsProvider
+public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
 {
     private readonly AppLog _log;
     private readonly string _apiKey;
@@ -131,4 +131,10 @@ public sealed class OpenAiTtsProvider : ITtsProvider
         "gpt-4o-mini-tts" => "gpt-4o-mini-tts",
         _ => "tts-1"
     };
+
+    public void Dispose()
+    {
+        if (_clientLazy.IsValueCreated)
+            _clientLazy.Value.Dispose();
+    }
 }

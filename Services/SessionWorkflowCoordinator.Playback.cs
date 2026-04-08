@@ -449,7 +449,7 @@ public sealed partial class SessionWorkflowCoordinator
         player.Load(CurrentSession.IngestedMediaPath);
         player.Seek((long)(target.StartSeconds * 1000));
         _log.Info($"Playing source media at segment {segmentId} ({target.StartSeconds:F1}s)");
-        Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play Source Media at segment {segmentId}");
+        _ = Task.Run(() => player.Play()).FireAndForgetAsync(_log, $"Play Source Media at segment {segmentId}");
     }
 
     /// <summary>
@@ -507,6 +507,7 @@ public sealed partial class SessionWorkflowCoordinator
             }
         }
 
+        (_ttsService as IDisposable)?.Dispose();
         _transportManager.Dispose();
     }
 }

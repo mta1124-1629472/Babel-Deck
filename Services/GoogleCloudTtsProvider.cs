@@ -18,7 +18,7 @@ namespace Babel.Player.Services;
 /// This keeps parity with existing provider-model UX where <see cref="TtsRequest.VoiceName"/>
 /// carries the selected model option.
 /// </summary>
-public sealed class GoogleCloudTtsProvider : ITtsProvider
+public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
 {
     private readonly AppLog _log;
     private readonly string _apiKey;
@@ -132,4 +132,10 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider
         "neural2" => "en-US-Neural2-D",
         _ => "en-US-Standard-C"
     };
+
+    public void Dispose()
+    {
+        if (_clientLazy.IsValueCreated)
+            _clientLazy.Value.Dispose();
+    }
 }
