@@ -411,14 +411,8 @@ public sealed partial class SessionWorkflowCoordinator
     /// Stops any active TTS playback and resets the coordinator's TTS playback state.
     /// </summary>
     /// <remarks>
-    /// Attempts to pause the segment player; if the player has already been disposed, the method ignores that condition.
-    /// After returning, <see cref="ActiveTtsSegmentId"/> is cleared and <see cref="PlaybackState"/> is set to <see cref="PlaybackState.Idle"/>.
-    /// <summary>
-    /// Stops any active TTS segment playback and resets related playback state.
-    /// </summary>
-    /// <remarks>
     /// If a segment player exists, attempts to pause it and ignores an ObjectDisposedException (race/shutdown case).
-    /// Clears <c>ActiveTtsSegmentId</c> and sets <c>PlaybackState</c> to <c>Idle</c>.
+    /// After returning, <see cref="ActiveTtsSegmentId"/> is cleared and <see cref="PlaybackState"/> is set to <see cref="PlaybackState.Idle"/>.
     /// </remarks>
     public void StopTtsPlayback()
     {
