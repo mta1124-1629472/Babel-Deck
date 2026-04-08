@@ -77,28 +77,13 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
     }
 
     /// <summary>
-    /// Generates speech for all translated segments combined into one audio file.
-    /// <paramref name="request.VoiceName"/> maps to the ElevenLabs model ID
-    /// (quality tier); <see cref="DefaultVoiceId"/> is used for character voice.
-    /// <summary>
-    /// Generate a single combined audio file by synthesizing all non-empty translated segments from the translation artifact.
+    /// Combined TTS generation is not implemented in this provider.
+    /// Use <see cref="GenerateSegmentTtsAsync"/> for per-segment synthesis;
+    /// the coordinator is responsible for stitching segments into a combined file.
     /// </summary>
-    /// <param name="request">Request containing the path to the translation JSON (TranslationJsonPath), desired output audio path (OutputAudioPath), and VoiceName to select the ElevenLabs model.</param>
-    /// <returns>A TtsResult describing the output path, selected voice name, byte length, and success state.</returns>
-    /// <exception cref="FileNotFoundException">Thrown when the translation JSON file at <c>request.TranslationJsonPath</c> does not exist.</exception>
-    /// <summary>
-    /// Generates a single combined audio file from all non-empty translated segments in a translation artifact and writes it to the specified output path.
-    /// </summary>
-    /// <param name="request">TTS request containing at least TranslationJsonPath, OutputAudioPath, and VoiceName.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A <see cref="TtsResult"/> describing the generated audio file and its metadata.</returns>
-    /// <exception cref="FileNotFoundException">Thrown when the translation file at <paramref name="request"/>.TranslationJsonPath does not exist.</exception>
-    /// <summary>
-    /// Generates speech audio for the provided TtsRequest, writes the resulting audio to the request's OutputAudioPath, and returns a TtsResult describing the outcome.
-    /// </summary>
-    /// <param name="request">The TTS request containing source text or a translation artifact, the desired output path, and voice/model selection.</param>
-    /// <param name="cancellationToken">A token to observe while waiting for the operation to complete.</param>
-    /// <returns>A TtsResult describing success, the output file path, the selected voice name, and the length of the generated audio in bytes.</returns>
+    /// <param name="request">Not used.</param>
+    /// <param name="cancellationToken">Not used.</param>
+    /// <exception cref="NotImplementedException">Always thrown. Combined generation is delegated to the coordinator.</exception>
     public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)

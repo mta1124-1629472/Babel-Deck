@@ -469,7 +469,7 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void TtsRegistry_GetAvailableProviders_GpuShowsXttsContainerAndQwen()
+    public void TtsRegistry_GetAvailableProviders_GpuShowsOnlyQwen()
     {
         var providers = _ttsRegistry.GetAvailableProviders(ComputeProfile.Gpu);
 

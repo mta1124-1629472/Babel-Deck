@@ -435,6 +435,10 @@ public sealed partial class SessionWorkflowCoordinator
                 }
             }
 
+            if (orderedPaths.Count == 0)
+                throw new InvalidOperationException(
+                    "No eligible segment audio files were produced. Stitching cannot proceed. Check provider configuration and logs.");
+
             _log.Info($"Stitching {orderedPaths.Count} segment clips into combined dub file...");
             ReportStage(
                 stageContext,
@@ -443,12 +447,18 @@ public sealed partial class SessionWorkflowCoordinator
                 isIndeterminate: true);
                 
             await AudioConcatUtility.CombineAudioSegmentsAsync(orderedPaths, ttsPath, cancellationToken);
+
+            if (!File.Exists(ttsPath))
+                throw new InvalidOperationException(
+                    $"Stitching completed but combined dub file was not created at '{ttsPath}'. Check ffmpeg output and disk permissions.");
+
             _log.Info($"TTS combined complete: {ttsPath}");
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _log.Error($"Error generating per-segment TTS: {ex.Message}", ex);
+            _log.Error($"TTS stage failed: {ex.Message}", ex);
+            throw;
         }
 
         int succeeded = segmentAudioPaths.Count;

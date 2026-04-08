@@ -61,26 +61,13 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     }
 
     /// <summary>
-    /// Generates a single audio file by concatenating translated segments from a translation artifact and synthesizing speech using the OpenAI TTS model.
+    /// Combined TTS generation is not implemented in this provider.
+    /// Use <see cref="GenerateSegmentTtsAsync"/> for per-segment synthesis;
+    /// the coordinator is responsible for stitching segments into a combined file.
     /// </summary>
-    /// <param name="request">Parameters for generation, including the translation JSON path, output audio path, and voice name.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A <see cref="TtsResult"/> representing the generated audio file and its metadata (output path, voice, byte length).</returns>
-    /// <exception cref="FileNotFoundException">Thrown when the translation JSON file specified by <paramref name="request"/> does not exist.</exception>
-    /// <summary>
-    /// Synthesizes speech for an entire translation artifact and writes the resulting audio file to the requested path.
-    /// </summary>
-    /// <param name="request">Request describing the translation artifact location, target output audio path, and voice to use.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A TtsResult with success status, the output audio path, selected voice name, and the generated audio byte length.</returns>
-    /// <exception cref="FileNotFoundException">Thrown when the translation JSON file at <paramref name="request"/>.TranslationJsonPath does not exist.</exception>
-    /// <summary>
-    /// Generates speech audio for a combined TTS request.
-    /// </summary>
-    /// <param name="request">The combined TTS request containing input source(s), output path, and voice selection.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A <see cref="TtsResult"/> describing the generated audio file path, selected voice, and output size in bytes.</returns>
-    /// <exception cref="NotImplementedException">Thrown because combined generation is delegated to an external coordinator in this implementation.</exception>
+    /// <param name="request">Not used.</param>
+    /// <param name="cancellationToken">Not used.</param>
+    /// <exception cref="NotImplementedException">Always thrown. Combined generation is delegated to the coordinator.</exception>
     public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)

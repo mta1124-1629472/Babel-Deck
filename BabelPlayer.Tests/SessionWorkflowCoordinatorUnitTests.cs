@@ -653,7 +653,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
     }
 
     [Fact]
-    public async Task RegenerateSegmentTts_SingleSpeakerXtts_UsesDefaultReferenceClip()
+    public async Task RegenerateSegmentTts_SingleSpeakerQwen_UsesDefaultReferenceClip()
     {
         var fakeTts = new FakeTtsProvider();
         var fakeTtsRegistry = new FakeTtsRegistry(fakeTts);
@@ -686,7 +686,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
           ]
         }
         """);
-        var defaultRefPath = Path.Combine(_dir, "xtts-single-ref.wav");
+        var defaultRefPath = Path.Combine(_dir, "qwen-single-ref.wav");
         await File.WriteAllBytesAsync(defaultRefPath, [1, 2, 3]);
 
         coord.CurrentSession = coord.CurrentSession with
