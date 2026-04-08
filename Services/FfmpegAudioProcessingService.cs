@@ -49,7 +49,7 @@ public sealed class FfmpegAudioProcessingService : IAudioProcessingService
             Environment.NewLine,
             segmentAudioPaths.Select(path => $"file '{EscapeConcatListPath(path)}'"));
 
-        await File.WriteAllTextAsync(concatListPath, concatFile, cancellationToken);
+        await File.WriteAllTextAsync(concatListPath, concatFile, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -79,11 +79,24 @@ public sealed class FfmpegAudioProcessingService : IAudioProcessingService
             using var process = Process.Start(psi)
                 ?? throw new InvalidOperationException("Failed to start ffmpeg for segment concatenation.");
 
+            using var registration = cancellationToken.Register(() =>
+            {
+                try
+                {
+                    if (!process.HasExited)
+                        process.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    // Best-effort termination
+                }
+            });
+
             var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
-            var stdout = await stdoutTask;
-            var stderr = await stderrTask;
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            var stderr = await stderrTask.ConfigureAwait(false);
 
             if (process.ExitCode != 0)
             {
