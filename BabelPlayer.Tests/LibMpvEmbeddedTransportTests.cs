@@ -33,7 +33,7 @@ public sealed class LibMpvEmbeddedTransportTests
         Assert.Equal("apply", plan.Reason);
         Assert.Equal(3.0, plan.Scale);
         Assert.NotNull(plan.FilterChain);
-        Assert.Contains("@vsr:d3d11vpp", plan.FilterChain);
+        Assert.Contains("@vsr:d3d11vpp=", plan.FilterChain);
         Assert.Contains("scale=3.0", plan.FilterChain);
     }
 
