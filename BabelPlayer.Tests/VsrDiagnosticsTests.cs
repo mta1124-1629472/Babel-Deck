@@ -138,7 +138,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
         Assert.Contains("gpu-next is enabled", settingsVm.VsrRequestedStateText, StringComparison.Ordinal);
         Assert.Contains("libmpv rejected the filter command", settingsVm.VsrResolvedStateText, StringComparison.Ordinal);
         Assert.Contains("result -12", settingsVm.VsrReasonText, StringComparison.Ordinal);
-        Assert.Contains("d3d11vpp:scaling-mode=nvidia", settingsVm.VsrFilterText, StringComparison.Ordinal);
+        Assert.Contains("d3d11vpp=scaling-mode=nvidia", settingsVm.VsrFilterText, StringComparison.Ordinal);
     }
 
     private SessionWorkflowCoordinator CreateCoordinator(AppSettings settings)
