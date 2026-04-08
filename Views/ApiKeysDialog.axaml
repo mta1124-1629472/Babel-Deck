@@ -64,7 +64,7 @@
                                                 Command="{Binding ToggleRevealCommand}"
                                                 Content="{Binding RevealIcon}"
                                                 Padding="8,6" Margin="6,0,0,0"
-                                                Background="{DynamicResource ButtonBackgroundBrush}" Foreground="#8080A0"
+                                                Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
                                                 CornerRadius="4" FontSize="13"
                                                 ToolTip.Tip="Show / hide key" />
 
