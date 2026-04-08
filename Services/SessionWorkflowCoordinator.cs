@@ -199,6 +199,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     public ManagedCpuRuntimeManager CpuRuntimeManager => _cpuRuntimeManager;
 
+    /// <summary>
+    /// Loads persisted coordinator state (if any), initializes the current session and bootstrap diagnostics, and prepares any required media reload and persistence state.
+    /// </summary>
+    /// <remarks>
+    /// If a saved snapshot is present, artifacts are validated and the session may be downgraded; the validated snapshot becomes the active CurrentSession (with LastUpdatedAtUtc updated and an appropriate StatusMessage). If no snapshot is found, a new foundation session is created. The method also sets SessionSource and PersistenceStatus, loads RecentSessions, caches the session's media snapshot when applicable, queues a media reload request when the session has media, and persists the current session.
+    /// </remarks>
     public void Initialize()
     {
         // Heavy bootstrap probes and per-session snapshot preloading are warmed in background.
@@ -310,6 +316,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         return InferenceMode.SubprocessCpu;
     }
 
+    /// <summary>
+    /// Loads the specified media file into the workflow, restoring a previously cached session for that media when available or creating a new session otherwise.
+    /// </summary>
+    /// <param name="sourceMediaPath">Absolute or relative path to the source media file to load.</param>
+    /// <exception cref="FileNotFoundException">Thrown when <paramref name="sourceMediaPath"/> does not exist.</exception>
+    /// <remarks>
+    /// As a result of this call the coordinator copies the media into the session's artifact directory, updates <c>CurrentSession</c> (session id, stage, artifact paths, timestamps, and status message), queues a media reload request, and persists the session snapshot.
+    /// </remarks>
     public void LoadMedia(string sourceMediaPath)
     {
         if (!File.Exists(sourceMediaPath))
@@ -410,7 +424,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         FlushPendingSave();
     }
 
-    internal static string MediaKey(string path) => Path.GetFullPath(path);
+    /// <summary>
+/// Produce the absolute filesystem path for a media file.
+/// </summary>
+/// <param name="path">A relative or absolute path to the media file.</param>
+/// <returns>The absolute path corresponding to the provided path.</returns>
+internal static string MediaKey(string path) => Path.GetFullPath(path);
 
     private const int MediaSnapshotCacheLimit = 20;
 
@@ -520,6 +539,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         SaveCurrentSession();
     }
 
+    /// <summary>
+    /// Apply a new pipeline settings selection (transcription, translation, TTS providers/models/profiles and optional target language) and update pipeline state, provider instances, and persistence as needed.
+    /// </summary>
+    /// <param name="selection">The chosen provider/model/profile/voice and optional target language to apply to the pipeline.</param>
+    /// <returns>
+    /// A <see cref="PipelineSettingsApplyResult"/> describing which pipeline stage (if any) was invalidated, the resulting session stage, whether settings were applied, and a status message.
+    /// </returns>
+    /// <exception cref="ArgumentException">Thrown when any required field on <paramref name="selection"/> (transcription provider/model, translation provider/model, TTS provider/voice) is null, empty, or whitespace.</exception>
     public PipelineSettingsApplyResult ApplyPipelineSettings(PipelineSettingsSelection selection)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -624,6 +651,15 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
             statusMessage);
     }
 
+    /// <summary>
+    /// Regenerates the TTS audio for a single translated segment and updates the current session with the generated audio path.
+    /// </summary>
+    /// <param name="segmentId">The identifier of the segment to regenerate (for example, "segment_0.0").</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no translation is available, the specified segment cannot be found in the translation, or TTS generation fails.
+    /// </exception>
+    /// <exception cref="FileNotFoundException">Thrown when the session's translation file is missing on disk.</exception>
+    /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider is not ready for execution and no model download is required.</exception>
     public async Task RegenerateSegmentTtsAsync(string segmentId)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
@@ -713,6 +749,14 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// </summary>
     /// <param name="segmentId">The identifier of the segment to retranslate (e.g., "segment_0.0").</param>
     /// <exception cref="InvalidOperationException">Thrown when no translation exists for the current session, the source text for the segment is missing, or the session's source/target language is not set.</exception>
+    /// <summary>
+    /// Regenerates the translation for a single segment and updates the current session's status.
+    /// </summary>
+    /// <param name="segmentId">The identifier of the segment to regenerate (e.g., "segment_0.0").</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when there is no translation available for the current session, when the source text for the specified segment is missing,
+    /// when the session's source or target language is not set, or when the translation operation fails.
+    /// </exception>
     /// <exception cref="FileNotFoundException">Thrown when the current session's translation file cannot be found on disk.</exception>
     public async Task RegenerateSegmentTranslationAsync(string segmentId)
     {
@@ -847,7 +891,10 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// Compares the current session's recorded provider/model settings against the
     /// active <see cref="CurrentSettings"/> to determine what has been invalidated.
     /// Callers use the result to decide which pipeline reset to apply before running.
+    /// <summary>
+    /// Computes which pipeline stages must be invalidated based on the current session's artifacts and the active pipeline settings.
     /// </summary>
+    /// <returns>A <see cref="PipelineInvalidation"/> value that indicates which pipeline stages (if any) require reset.</returns>
     public PipelineInvalidation CheckSettingsInvalidation()
     {
         var cs = CurrentSession;
@@ -863,7 +910,12 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
     /// <summary>
     /// Updates the snapshot's LastUpdatedAtUtc, sets it as the current session, and persists that snapshot.
+    /// <summary>
+    /// Update the current session's LastUpdatedAtUtc to now and persist the session snapshot.
     /// </summary>
+    /// <remarks>
+    /// Sets <c>CurrentSession</c> to a copy with an updated <c>LastUpdatedAtUtc</c> and saves that snapshot to the configured persistence stores.
+    /// </remarks>
     public void SaveCurrentSession()
     {
         var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
@@ -876,6 +928,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     /// </summary>
     /// <remarks>
     /// Updates the in-memory <c>CurrentSession</c> with the current UTC <c>LastUpdatedAtUtc</c> timestamp and then synchronously saves that snapshot to the underlying stores.
+    /// <summary>
+    /// Immediately persists the current session snapshot and updates its last-updated timestamp.
+    /// </summary>
+    /// <remarks>
+    /// Updates CurrentSession.LastUpdatedAtUtc to the current UTC time, assigns the updated snapshot to CurrentSession, and synchronously saves the snapshot to all configured stores so the persistence status is updated immediately.
     /// </remarks>
     public void FlushPendingSave()
     {
