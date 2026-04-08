@@ -131,8 +131,10 @@ public sealed class OpenAiTtsProviderTests : IDisposable
         var translationPath = WriteTranslationJson("Hello world");
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
-        await Assert.ThrowsAsync<NotImplementedException>(() =>
+        var exception = await Assert.ThrowsAsync<NotImplementedException>(() =>
             provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "tts-1")));
+
+        Assert.Contains("PLACEHOLDER", exception.Message);
     }
 
     [Fact]

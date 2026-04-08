@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -77,18 +78,83 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
     }
 
     /// <summary>
-    /// Combined TTS generation is not implemented in this provider.
-    /// Use <see cref="GenerateSegmentTtsAsync"/> for per-segment synthesis;
-    /// the coordinator is responsible for stitching segments into a combined file.
+    /// Generates combined TTS audio from all segments in a translation JSON file.
+    /// Reads the translation, generates TTS for each segment, then stitches them together.
     /// </summary>
-    /// <param name="request">Not used.</param>
-    /// <param name="cancellationToken">Not used.</param>
-    /// <exception cref="NotImplementedException">Always thrown. Combined generation is delegated to the coordinator.</exception>
-    public Task<TtsResult> GenerateTtsAsync(
+    /// <param name="request">TTS request containing translation JSON path, output audio path, and voice name.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A TtsResult describing the combined audio output.</returns>
+    public async Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException("PLACEHOLDER: Combined generation is now handled by the coordinator.");
+        if (string.IsNullOrWhiteSpace(request.TranslationJsonPath))
+            throw new ArgumentException("Translation JSON path cannot be null or empty.", nameof(request));
+        if (!File.Exists(request.TranslationJsonPath))
+            throw new FileNotFoundException($"Translation file not found: {request.TranslationJsonPath}");
+        if (string.IsNullOrWhiteSpace(request.OutputAudioPath))
+            throw new ArgumentException("Output audio path cannot be null or empty.", nameof(request));
+
+        _log.Info($"[ElevenLabsTTS] Starting combined TTS generation from {request.TranslationJsonPath}");
+
+        var translationData = await ArtifactJson.LoadTranslationAsync(request.TranslationJsonPath, cancellationToken);
+        var candidateSegments = translationData.Segments?
+            .Where(seg => !string.IsNullOrWhiteSpace(seg.Id) && !string.IsNullOrWhiteSpace(seg.TranslatedText))
+            .ToList()
+            ?? [];
+
+        if (candidateSegments.Count == 0)
+            throw new InvalidOperationException($"No valid segments with translated text found in {request.TranslationJsonPath}");
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"babel-elevenlabs-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var segmentPaths = new List<string>();
+
+            for (int i = 0; i < candidateSegments.Count; i++)
+            {
+                var seg = candidateSegments[i];
+                var segmentPath = Path.Combine(tempDir, $"{seg.Id}.mp3");
+
+                var segResult = await GenerateSegmentTtsAsync(
+                    new SingleSegmentTtsRequest(seg.TranslatedText!, segmentPath, request.VoiceName),
+                    cancellationToken);
+
+                if (segResult.Success && File.Exists(segmentPath))
+                {
+                    segmentPaths.Add(segmentPath);
+                    _log.Info($"[ElevenLabsTTS] Generated segment {i + 1}/{candidateSegments.Count}: {seg.Id}");
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Failed to generate TTS for segment {seg.Id}");
+                }
+            }
+
+            await AudioConcatUtility.CombineAudioSegmentsAsync(segmentPaths, request.OutputAudioPath, cancellationToken);
+
+            if (!File.Exists(request.OutputAudioPath))
+                throw new InvalidOperationException($"Combined audio file was not created at {request.OutputAudioPath}");
+
+            var fileSize = new FileInfo(request.OutputAudioPath).Length;
+            _log.Info($"[ElevenLabsTTS] Combined TTS generation complete: {request.OutputAudioPath} ({fileSize} bytes)");
+
+            return new TtsResult(true, request.OutputAudioPath, request.VoiceName, fileSize, null);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+            catch
+            {
+                // Best-effort cleanup
+            }
+        }
     }
 
     /// <summary>

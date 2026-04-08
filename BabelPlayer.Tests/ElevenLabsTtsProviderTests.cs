@@ -125,14 +125,17 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task GenerateTtsAsync_ThrowsNotImplementedException()
+    public async Task GenerateTtsAsync_GeneratesCombinedAudio()
     {
         using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
         var translationPath = WriteTranslationJson("Hello world");
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
-        await Assert.ThrowsAsync<NotImplementedException>(() =>
-            provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "eleven_multilingual_v2")));
+        var result = await provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "eleven_multilingual_v2"));
+
+        Assert.True(result.Success);
+        Assert.Equal(outputPath, result.AudioPath);
+        Assert.True(File.Exists(outputPath));
     }
 
     [Fact]
