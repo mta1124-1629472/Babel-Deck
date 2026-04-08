@@ -691,7 +691,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         var regenVoice = targetSegment is not null
             ? ResolveVoiceForSegment(targetSegment, CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice)
             : CurrentSession.TtsVoice ?? CurrentSettings.TtsVoice;
-                await EnsureSingleSpeakerQwenReferenceClipAsync();
+        await EnsureSingleSpeakerQwenReferenceClipAsync();
         var referenceAudioPath = targetSegment is not null
             ? ResolveReferenceAudioForSegment(targetSegment)
             : null;

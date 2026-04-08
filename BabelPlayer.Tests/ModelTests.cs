@@ -461,10 +461,10 @@ public sealed class ModelTests
     private sealed class MinimalTtsProvider : ITtsProvider
     {
         public Task<TtsResult> GenerateTtsAsync(TtsRequest request, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+            throw new NotImplementedException("PLACEHOLDER: MinimalTtsProvider.GenerateTtsAsync is only used to exercise ITtsProvider defaults in tests.");
 
         public Task<TtsResult> GenerateSegmentTtsAsync(SingleSegmentTtsRequest request, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+            throw new NotImplementedException("PLACEHOLDER: MinimalTtsProvider.GenerateSegmentTtsAsync is only used to exercise ITtsProvider defaults in tests.");
     }
 
     // ── TranscriptArtifact ────────────────────────────────────────────────────
