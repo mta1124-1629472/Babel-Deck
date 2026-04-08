@@ -16,6 +16,8 @@ public sealed class SessionSwitchService
     private readonly PerSessionSnapshotStore _perSessionStore;
     private readonly RecentSessionsStore _recentStore;
     private readonly AppLog _log;
+    private readonly object _cacheOrderLock = new();
+    private readonly Queue<string> _cacheInsertionOrder = new();
 
     public SessionSwitchService(
         PerSessionSnapshotStore perSessionStore,
@@ -118,14 +120,25 @@ public sealed class SessionSwitchService
         WorkflowSessionSnapshot snapshot,
         int cacheLimit)
     {
-        cache[key] = snapshot;
-        if (cache.Count <= cacheLimit)
-            return;
-
-        var oldest = cache.Keys.FirstOrDefault();
-        if (oldest != null && cache.TryRemove(oldest, out _))
+        lock (_cacheOrderLock)
         {
-            _log.Info($"Evicted cached session for media key '{oldest}' to keep cache bounded.");
+            bool isNew = !cache.ContainsKey(key);
+            cache[key] = snapshot;
+            
+            if (isNew)
+            {
+                _cacheInsertionOrder.Enqueue(key);
+            }
+            
+            // Evict oldest entries if we exceed the limit
+            while (cache.Count > cacheLimit && _cacheInsertionOrder.Count > 0)
+            {
+                var oldestKey = _cacheInsertionOrder.Dequeue();
+                if (cache.TryRemove(oldestKey, out _))
+                {
+                    _log.Info($"Evicted cached session for media key '{oldestKey}' to keep cache bounded.");
+                }
+            }
         }
     }
 }
