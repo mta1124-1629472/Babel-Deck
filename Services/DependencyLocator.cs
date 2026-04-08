@@ -246,11 +246,16 @@ public static class DependencyLocator
     /// <summary>
     /// Constructs and initializes a SessionWorkflowCoordinator wired with host managers, registries, stores, and containerized probes; if primary initialization fails, performs a fallback initialization and continues with an empty session state.
     /// </summary>
-    /// <param name="appDataRoot">Root application data directory where the session snapshot is stored (the snapshot file is placed at {appDataRoot}/state/current-session.json).</param>
-    /// <param name="startupLog">Optional logger used to record initialization failures encountered during the primary initialization path.</param>
-    /// <param name="primaryGpuManager">Outputs the ManagedVenvHostManager selected as the primary GPU-capable host manager (may be null if initialization fails before manager creation).</param>
+    /// <param name="appLog">Application logger.</param>
+    /// <param name="appSettings">Application settings.</param>
+    /// <param name="perSessionStore">Per-session snapshot store.</param>
+    /// <param name="recentStore">Recent sessions store.</param>
+    /// <param name="apiKeyStore">API key store.</param>
+    /// <param name="transportManager">Media transport manager.</param>
+    /// <param name="appDataRoot">Root application data directory where the session snapshot is stored.</param>
+    /// <param name="startupLog">Optional logger used to record initialization failures during the primary path.</param>
+    /// <param name="primaryGpuManager">Outputs the selected managed GPU host manager.</param>
     /// <returns>The initialized SessionWorkflowCoordinator.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if both primary and fallback initialization paths fail to produce a coordinator.</exception>
     public static SessionWorkflowCoordinator CreateSessionCoordinator(
         AppLog appLog,
         AppSettings appSettings,
@@ -262,61 +267,66 @@ public static class DependencyLocator
         AppLog? startupLog,
         out ManagedVenvHostManager? primaryGpuManager)
     {
-        SessionWorkflowCoordinator? coordinator = null;
-        primaryGpuManager = null;
-
         try
         {
             appLog.Info("App startup: initializing session coordinator.");
-            var containerizedProbe = new ContainerizedServiceProbe(appLog);
-            var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
-            primaryGpuManager = managedHostManager;
-            var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
-            var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
-            
-            var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
-            var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
-            var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
-            
-            var store = new SessionSnapshotStore(Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
-            
-            coordinator = new SessionWorkflowCoordinator(
-                store, appLog, appSettings, perSessionStore, recentStore, 
-                transcriptionRegistry, translationRegistry, ttsRegistry, 
-                transportManager: transportManager, keyStore: apiKeyStore, 
-                containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
+            var coordinator = CreateCoordinatorInstance(
+                appLog, appSettings, perSessionStore, recentStore, apiKeyStore, 
+                transportManager, appDataRoot, out primaryGpuManager);
             
             coordinator.Initialize();
-            containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
+            
+            // Request autostart for containerized services if configured
+            coordinator.ContainerizedInferenceManager?.RequestEnsureStarted(
+                appSettings, ContainerizedStartupTrigger.AppStartup);
+                
             appLog.Info("App startup: session coordinator ready.");
+            return coordinator;
         }
         catch (Exception ex)
         {
-            startupLog?.Error("App startup: session initialization failed. Continuing with empty session.", ex);
+            startupLog?.Error("App startup: primary initialization failed (likely corrupt state). Retrying with empty session.", ex);
             
-            // Fallback initialization
-            var containerizedProbe = new ContainerizedServiceProbe(appLog);
-            var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
-            primaryGpuManager = managedHostManager;
-            var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
-            var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
+            var coordinator = CreateCoordinatorInstance(
+                appLog, appSettings, perSessionStore, recentStore, apiKeyStore, 
+                transportManager, appDataRoot, out primaryGpuManager);
             
-            var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
-            var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
-            var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
-            
-            var fallbackStore = new SessionSnapshotStore(
-                Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
-            
-            coordinator = new SessionWorkflowCoordinator(
-                fallbackStore, appLog, appSettings, perSessionStore, recentStore, 
-                transcriptionRegistry, translationRegistry, ttsRegistry, 
-                transportManager: transportManager, keyStore: apiKeyStore, 
-                containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
-            
-            containerizedManager.RequestEnsureStarted(appSettings, ContainerizedStartupTrigger.AppStartup);
+            // Skip Initialize() to start with an empty session rather than crashing on corrupt state.
+            // Still request containerized autostart.
+            coordinator.ContainerizedInferenceManager?.RequestEnsureStarted(
+                appSettings, ContainerizedStartupTrigger.AppStartup);
+                
+            return coordinator;
         }
-
-        return coordinator ?? throw new InvalidOperationException("Failed to initialize session coordinator after both primary and fallback initialization paths.");
     }
-}
+
+    private static SessionWorkflowCoordinator CreateCoordinatorInstance(
+        AppLog appLog,
+        AppSettings appSettings,
+        PerSessionSnapshotStore perSessionStore,
+        RecentSessionsStore recentStore,
+        ApiKeyStore apiKeyStore,
+        IMediaTransportManager transportManager,
+        string appDataRoot,
+        out ManagedVenvHostManager primaryGpuManager)
+    {
+        var containerizedProbe = new ContainerizedServiceProbe(appLog);
+        var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+        primaryGpuManager = managedHostManager;
+        var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
+        var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
+        
+        var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
+        var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
+        var ttsRegistry = new TtsRegistry(appLog, containerizedProbe);
+        
+        var snapshotStore = new SessionSnapshotStore(
+            Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
+        
+        return new SessionWorkflowCoordinator(
+            snapshotStore, appLog, appSettings, perSessionStore, recentStore, 
+            transcriptionRegistry, translationRegistry, ttsRegistry, 
+            transportManager: transportManager, keyStore: apiKeyStore, 
+            containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
+    }
+}
