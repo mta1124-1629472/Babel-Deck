@@ -165,9 +165,22 @@ public sealed class FfmpegAudioProcessingService : IAudioProcessingService
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start ffmpeg for audio extraction.");
 
+        using var registration = cancellationToken.Register(() =>
+        {
+            try
+            {
+                if (!proc.HasExited)
+                    proc.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+                // Best-effort termination
+            }
+        });
+
         var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
-        await proc.WaitForExitAsync(cancellationToken);
-        var stderr = await stderrTask;
+        await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
 
         if (proc.ExitCode != 0 || !File.Exists(outputPath))
         {
