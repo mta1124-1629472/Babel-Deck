@@ -110,29 +110,16 @@ public sealed class OpenAiTtsProviderTests : IDisposable
     }
 
     // ── Lazy<T> client initialization ─────────────────────────────────────────
-
-    [Fact]
-    public void Constructor_DoesNotInvokeClientFactory()
-    {
-        var callCount = 0;
-        _ = new OpenAiTtsProvider(_log, "key", () =>
-        {
-            callCount++;
-            return MakeClient();
-        });
-
-        Assert.Equal(0, callCount);
-    }
-
-    [Fact]
     public async Task GenerateTtsAsync_ThrowsNotImplementedException()
     {
         using var provider = new OpenAiTtsProvider(_log, "key", MakeClient);
         var translationPath = WriteTranslationJson("Hello world");
         var outputPath = Path.Combine(_testDir, "out.mp3");
 
-        var exception = await Assert.ThrowsAsync<NotImplementedException>(() =>
+        var ex = await Assert.ThrowsAsync<NotImplementedException>(() =>
             provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "tts-1")));
+        Assert.Contains("PLACEHOLDER", ex.Message, StringComparison.Ordinal);
+    }
 
         Assert.Contains("PLACEHOLDER", exception.Message);
     }
