@@ -33,12 +33,17 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Performs application startup initialization: wires global exception handlers, configures logging and settings, constructs core services and UI, and starts background probes.
+    /// Performs global application initialization: configures logging, settings, secure credential storage, media/transport components, the session workflow coordinator, the main window and UI theme, global crash handlers, and background startup probes.
     /// </summary>
     /// <remarks>
-    /// Subscribes to unhandled exception events, initializes application directories, logging, settings, credential and session stores, media transport, and the session workflow coordinator.  
-    /// Builds and assigns the main window view model and error dialog service, configures shutdown behavior, and wires GPU bootstrap progress into the UI.  
-    /// Starts non-blocking background tasks to gather bootstrap warmup data and run a hardware snapshot, posting results to the UI thread when available.
+    /// Side effects:
+    /// - Subscribes to AppDomain.CurrentDomain.UnhandledException and TaskScheduler.UnobservedTaskException.
+    /// - Initializes application data directories, log file, and SettingsService.
+    /// - Chooses and configures an ISecureCredentialProvider and creates the ApiKeyStore.
+    /// - Creates media/transport components and the session workflow coordinator via DependencyLocator.
+    /// - Creates and shows the main window with its view model and sets application shutdown behavior.
+    /// - Wires GPU bootstrap progress into the UI status bar (debounced) when a primary GPU manager is available.
+    /// - Starts background tasks to gather bootstrap warmup data and detect hardware, posting results to the UI thread.
     /// </remarks>
     public override void OnFrameworkInitializationCompleted()
     {

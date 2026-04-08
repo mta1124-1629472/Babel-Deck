@@ -20,7 +20,7 @@ namespace Babel.Player.Services;
 /// <see cref="DefaultVoiceId"/> (Rachel) — a pre-made ElevenLabs voice available
 /// on all subscription tiers. Future work can expose per-user voice ID selection.
 /// </summary>
-public sealed class ElevenLabsTtsProvider : ITtsProvider
+public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
 {
     /// <summary>
     /// ElevenLabs pre-made "Rachel" voice — available on all subscription tiers.
@@ -33,11 +33,11 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
     private readonly Lazy<ElevenLabsApiClient> _clientLazy;
 
     /// <summary>
-    /// Initializes a new <see cref="ElevenLabsTtsProvider"/> and prepares a lazily constructed ElevenLabs API client used for text-to-speech requests.
+    /// Creates a new ElevenLabsTtsProvider and configures a lazily initialized ElevenLabsApiClient.
     /// </summary>
-    /// <param name="log">Application logger used for informational and diagnostic messages.</param>
-    /// <param name="apiKey">API key for the ElevenLabs service.</param>
-    /// <param name="clientFactory">Optional factory to create an <see cref="ElevenLabsApiClient"/>; if null, a client will be created using the provided <paramref name="apiKey"/>.</param>
+    /// <param name="log">Application logger used for provider diagnostics.</param>
+    /// <param name="apiKey">ElevenLabs API key used to authenticate requests.</param>
+    /// <param name="clientFactory">Optional factory to create an ElevenLabsApiClient; if null a default factory that uses <paramref name="apiKey"/> will be used and the client instance will be created on first use.</param>
     public ElevenLabsTtsProvider(
         AppLog log,
         string apiKey,
@@ -49,11 +49,11 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
     }
 
     /// <summary>
-    /// Checks whether the provider has the ElevenLabs API key configured.
+    /// Determines whether the ElevenLabs TTS provider is configured and ready to use.
     /// </summary>
-    /// <param name="settings">Application settings (not used by this provider).</param>
-    /// <param name="keyStore">Optional API key store (not used by this provider).</param>
-    /// <returns>A ProviderReadiness indicating readiness. If the configured ElevenLabs API key is missing or whitespace, the readiness is not ready and contains an explanatory message.</returns>
+    /// <returns>
+    /// `ProviderReadiness.Ready` if an ElevenLabs API key is configured; otherwise a `ProviderReadiness` with `Success = false` and an explanatory message.
+    /// </returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
@@ -67,11 +67,12 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
     /// <paramref name="request.VoiceName"/> maps to the ElevenLabs model ID
     /// (quality tier); <see cref="DefaultVoiceId"/> is used for character voice.
     /// <summary>
-    /// Generates a single audio file by combining all translated segments from a translation artifact.
+    /// Generate a single combined audio file by synthesizing all non-empty translated segments from the translation artifact.
     /// </summary>
-    /// <param name="request">Request containing the path to the translation JSON (TranslationJsonPath), the desired output audio path (OutputAudioPath), and the VoiceName used to select the ElevenLabs model.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A TtsResult with success=true, the output audio path, the voice name, the generated audio byte length, and null error on success.</returns>
+    /// <param name="request">Request containing the path to the translation JSON (TranslationJsonPath), desired output audio path (OutputAudioPath), and VoiceName to select the ElevenLabs model.</param>
+    /// <returns>A TtsResult describing the output path, selected voice name, byte length, and success state.</returns>
+    /// <exception cref="FileNotFoundException">Thrown when the translation JSON file at <c>request.TranslationJsonPath</c> does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the translation artifact contains no non-empty translated text segments.</exception>
     public async Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)
@@ -112,12 +113,12 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
     /// <paramref name="request.VoiceName"/> maps to the ElevenLabs model ID;
     /// <see cref="DefaultVoiceId"/> is used for character voice.
     /// <summary>
-    /// Generates TTS audio for a single translated segment and writes the resulting audio file to disk.
+    /// Generates speech audio for a single translated segment and writes the resulting audio file to the request's output path.
     /// </summary>
-    /// <param name="request">Single segment TTS request containing the text to synthesize, the target output file path, and the desired voice name.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A TtsResult containing success state, the output audio path, the voice name used, and the number of bytes written.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="request"/>.Text is null, empty, or consists only of whitespace.</exception>
+    /// <param name="request">Single-segment TTS request. `request.Text` must be non-empty; `request.OutputAudioPath` is the file path to write; `request.VoiceName` selects the synthesis model.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>A TtsResult describing the operation: success flag, output path, voice name, byte length of the written audio, and any error (null on success).</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="request"/> has an empty or whitespace <c>Text</c> value.</exception>
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default)
@@ -154,4 +155,10 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider
             "eleven_flash_v2_5"       => "eleven_flash_v2_5",
             _                         => "eleven_multilingual_v2",
         };
+
+    public void Dispose()
+    {
+        if (_clientLazy.IsValueCreated)
+            _clientLazy.Value.Dispose();
+    }
 }

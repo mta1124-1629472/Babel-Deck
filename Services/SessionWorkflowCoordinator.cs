@@ -238,6 +238,33 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
                             ? "Resumed session with media. Ready for transcription."
                             : "Resumed saved foundation session. Workflow not yet started.";
 
+            // If we have MediaLoaded stage but missing IngestedMediaPath, regenerate it
+            if (validated.Stage >= SessionWorkflowStage.MediaLoaded && 
+                !string.IsNullOrEmpty(validated.SourceMediaPath) && 
+                string.IsNullOrEmpty(validated.IngestedMediaPath))
+            {
+                var sessionDir = _sessionSwitchService.GetSessionDirectory(validated.SessionId);
+                var mediaDir = Path.Combine(sessionDir, "media");
+                Directory.CreateDirectory(mediaDir);
+                var ingestedPath = Path.Combine(mediaDir, Path.GetFileName(validated.SourceMediaPath));
+                File.Copy(validated.SourceMediaPath, ingestedPath, overwrite: true);
+                _log.Info($"Regenerated ingested media on load: {ingestedPath}");
+                
+                validated = validated with
+                {
+                    IngestedMediaPath = ingestedPath,
+                    MediaLoadedAtUtc = validated.MediaLoadedAtUtc ?? nowUtc,
+                };
+                
+                statusMessage = validated.Stage >= SessionWorkflowStage.TtsGenerated
+                    ? "Resumed session with TTS. Dubbing complete."
+                    : validated.Stage >= SessionWorkflowStage.Translated
+                        ? "Resumed session with translation. Ready for TTS/dubbing."
+                        : validated.Stage >= SessionWorkflowStage.Transcribed
+                            ? "Resumed session with transcript. Ready for translation."
+                            : "Resumed session with media. Ready for transcription.";
+            }
+
             CurrentSession = validated with
             {
                 LastUpdatedAtUtc = nowUtc,
@@ -406,7 +433,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
         }
 
         QueueMediaReloadRequest(autoPlay: false, "media-switch");
-        SaveCurrentSession();
+        FlushPendingSave();
     }
 
     internal static string MediaKey(string path) => Path.GetFullPath(path);
@@ -570,7 +597,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
 
         if (transcriptionProviderChanged) _transcriptionService = null;
         if (translationProviderChanged) _translationService = null;
-        if (ttsProviderChanged) _ttsService = null;
+        if (ttsProviderChanged)
+        {
+            (_ttsService as IDisposable)?.Dispose();
+            _ttsService = null;
+        }
 
         var invalidation = CheckSettingsInvalidation();
         _log.Info(
@@ -704,11 +735,11 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     /// <summary>
-    /// Regenerates the translation for the specified segment and updates the current session's status.
+    /// Regenerates the translation for a single segment identified by its segment ID and updates the current session snapshot.
     /// </summary>
-    /// <param name="segmentId">Stable identifier of the segment to regenerate (for example, "segment_0.0").</param>
-    /// <exception cref="InvalidOperationException">Thrown when no translation is available, the segment's source text is missing, required source or target languages are not set, or the translation provider reports a failure.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the current session does not exist.</exception>
+    /// <param name="segmentId">The identifier of the segment to retranslate (e.g., "segment_0.0").</param>
+    /// <exception cref="InvalidOperationException">Thrown when no translation exists for the current session, the source text for the segment is missing, or the session's source/target language is not set.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the current session's translation file cannot be found on disk.</exception>
     public async Task RegenerateSegmentTranslationAsync(string segmentId)
     {
         if (string.IsNullOrEmpty(CurrentSession.TranslationPath))
@@ -857,25 +888,20 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     }
 
     /// <summary>
-    /// Advances the pipeline from its current stage through any remaining stages
-    /// (Transcribe → Translate → GenerateTts) that have not yet completed.
-    /// Stage-gating decisions live here, not in callers.
-    /// <summary>
-    /// Updates the current session's LastUpdatedAtUtc to now, assigns the updated snapshot to <c>CurrentSession</c>, and schedules asynchronous persistence of the snapshot.
+    /// Updates the snapshot's LastUpdatedAtUtc, sets it as the current session, and persists that snapshot.
     /// </summary>
     public void SaveCurrentSession()
     {
         var snapshot = CurrentSession with { LastUpdatedAtUtc = DateTimeOffset.UtcNow };
         CurrentSession = snapshot;
-        Task.Run(() => PersistSnapshot(snapshot, updateStatus: true))
-            .FireAndForgetAsync(_log, "SaveCurrentSession");
+        PersistSnapshot(snapshot, updateStatus: true);
     }
 
     /// <summary>
-    /// Immediately persists the current session snapshot to durable stores.
+    /// Immediately persists the current session snapshot to persistent stores after updating LastUpdatedAtUtc.
     /// </summary>
     /// <remarks>
-    /// Updates CurrentSession.LastUpdatedAtUtc to the current UTC time, assigns the updated snapshot to CurrentSession, and performs a synchronous save of the snapshot to the configured persistent stores.
+    /// Updates the in-memory <c>CurrentSession</c> with the current UTC <c>LastUpdatedAtUtc</c> timestamp and then synchronously saves that snapshot to the underlying stores.
     /// </remarks>
     public void FlushPendingSave()
     {

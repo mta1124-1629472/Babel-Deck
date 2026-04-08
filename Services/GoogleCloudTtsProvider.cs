@@ -18,18 +18,18 @@ namespace Babel.Player.Services;
 /// This keeps parity with existing provider-model UX where <see cref="TtsRequest.VoiceName"/>
 /// carries the selected model option.
 /// </summary>
-public sealed class GoogleCloudTtsProvider : ITtsProvider
+public sealed class GoogleCloudTtsProvider : ITtsProvider, IDisposable
 {
     private readonly AppLog _log;
     private readonly string _apiKey;
     private readonly Lazy<GoogleApiClient> _clientLazy;
 
     /// <summary>
-    /// Initializes a GoogleCloudTtsProvider with the specified logger, API key, and an optional Google API client factory.
+    /// Initializes a new instance of <see cref="GoogleCloudTtsProvider"/> with the specified logger, API key, and an optional factory for the Google API client.
     /// </summary>
-    /// <param name="log">Application logger used for informational messages.</param>
-    /// <param name="apiKey">Google Cloud Text-to-Speech API key used for authenticating requests.</param>
-    /// <param name="clientFactory">Optional factory to create a <see cref="GoogleApiClient"/>; when null a default client will be created and instantiated lazily.</param>
+    /// <param name="log">Application logger used for informational messages about TTS operations.</param>
+    /// <param name="apiKey">API key used to construct the Google API client.</param>
+    /// <param name="clientFactory">Optional factory that produces a <see cref="GoogleApiClient"/>; if null, a default factory that calls <c>new GoogleApiClient(apiKey)</c> is used. The client is created lazily and cached using thread-safe initialization.</param>
     public GoogleCloudTtsProvider(
         AppLog log,
         string apiKey,
@@ -41,11 +41,13 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider
     }
 
     /// <summary>
-    /// Checks whether the provider is ready by verifying the configured Google Cloud API key.
+    /// Verifies that the provider has a configured API key and reports readiness.
     /// </summary>
-    /// <param name="settings">Application settings (not used by this provider).</param>
-    /// <param name="keyStore">Optional API key store (not used by this provider).</param>
-    /// <returns>A <see cref="ProviderReadiness"/> indicating readiness; returns not ready when the API key is missing, ready otherwise.</returns>
+    /// <param name="settings">Unused by this provider.</param>
+    /// <param name="keyStore">Unused by this provider.</param>
+    /// <returns>
+    /// A <see cref="ProviderReadiness"/> that is ready when an API key is present; otherwise not ready with an explanatory message.
+    /// </returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
@@ -55,12 +57,13 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider
     }
 
     /// <summary>
-    /// Synthesizes speech from the translated segments in a translation artifact and writes the combined audio to the requested output path.
+    /// Synthesizes speech for a translation artifact by concatenating translated segments, generating audio via Google Cloud TTS, and writing the resulting audio file to disk.
     /// </summary>
-    /// <param name="request">Request containing the translation JSON path, desired output audio path, and optional voice name.</param>
-    /// <returns>A <see cref="TtsResult"/> representing the successful generation: output path, voice name, and produced byte length.</returns>
-    /// <exception cref="FileNotFoundException">If the translation JSON file specified by <paramref name="request"/> does not exist.</exception>
-    /// <exception cref="InvalidOperationException">If the translation artifact contains no translated text to synthesize.</exception>
+    /// <param name="request">Parameters including TranslationJsonPath, OutputAudioPath, and VoiceName used for synthesis and output.</param>
+    /// <param name="cancellationToken">Token to cancel asynchronous operations.</param>
+    /// <returns>A TtsResult describing the generated audio file path, requested voice, byte length, and success status.</returns>
+    /// <exception cref="FileNotFoundException">Thrown if <see cref="TtsRequest.TranslationJsonPath"/> does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if the translation artifact contains no translated text to synthesize.</exception>
     public async Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)
@@ -94,11 +97,11 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider
     }
 
     /// <summary>
-    /// Synthesizes speech for a single text segment and writes the resulting audio to the requested output path.
+    /// Synthesizes speech for a single text segment, writes the resulting audio to disk, and returns the generation result.
     /// </summary>
-    /// <param name="request">Request containing the segment text, target output audio path, and optional voice preference.</param>
+    /// <param name="request">Request containing the segment text, desired voice selection, and output audio path. Uses <see cref="SingleSegmentTtsRequest.Text"/>, <see cref="SingleSegmentTtsRequest.VoiceName"/>, and <see cref="SingleSegmentTtsRequest.OutputAudioPath"/>.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A <see cref="TtsResult"/> describing the produced audio file and its length in bytes.</returns>
+    /// <returns>A <see cref="TtsResult"/> describing the generated audio file path, voice, and byte length.</returns>
     /// <exception cref="ArgumentException">Thrown when <see cref="SingleSegmentTtsRequest.Text"/> is null, empty, or whitespace.</exception>
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
@@ -129,4 +132,10 @@ public sealed class GoogleCloudTtsProvider : ITtsProvider
         "neural2" => "en-US-Neural2-D",
         _ => "en-US-Standard-C"
     };
+
+    public void Dispose()
+    {
+        if (_clientLazy.IsValueCreated)
+            _clientLazy.Value.Dispose();
+    }
 }

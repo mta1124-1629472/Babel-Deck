@@ -392,12 +392,12 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Download a TTS audio artifact from the inference service and save it to the given local file path.
+    /// Downloads a synthesized TTS audio file from the inference service and saves it to the specified local path.
     /// </summary>
-    /// <param name="filename">The remote TTS audio filename or identifier to request from the service.</param>
-    /// <param name="localOutputPath">The local filesystem path to create or overwrite with the downloaded audio.</param>
+    /// <param name="filename">The remote TTS audio filename on the service to download (will be URL-escaped).</param>
+    /// <param name="localOutputPath">The local file path where the downloaded audio will be created or overwritten.</param>
     /// <param name="cancellationToken">Token to cancel the download operation.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the inference service responds with a non-success status; the exception message contains the response body.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the service responds with a non-success status; the exception message contains the response body.</exception>
     public async Task DownloadTtsAudioAsync(
         string filename,
         string localOutputPath,
@@ -415,16 +415,24 @@ public sealed class ContainerizedInferenceClient
         }
 
         using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var fileStream = File.Create(localOutputPath);
+        using var fileStream = new FileStream(
+            localOutputPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 81920,
+            useAsync: true);
         await contentStream.CopyToAsync(fileStream, cancellationToken);
     }
 
     /// <summary>
-    /// Checks the inference container's liveness and capability endpoints and produces a consolidated health status for the given service URL.
+    /// Performs staged health checks against the inference service: verifies liveness and probes capabilities.
     /// </summary>
-    /// <param name="serviceUrl">Base URL of the inference service (e.g., "http://host:port"); trailing slash is not required.</param>
+    /// <param name="httpClient">The HTTP client used to send probe requests.</param>
+    /// <param name="serviceUrl">The service base URL (should be normalized, without a trailing slash).</param>
+    /// <param name="cancellationToken">Token to cancel the probe operations.</param>
     /// <returns>
-    /// A <see cref="ContainerHealthStatus"/> describing availability, CUDA information, and reported capabilities. If any probe fails or the live endpoint reports a non-healthy status, an unavailable status is returned with the probe error message.
+    /// A ContainerHealthStatus describing service availability. If the liveness check fails or an exception occurs, an unavailable status is returned with the error message; otherwise the result includes CUDA information and a capabilities snapshot (which may contain a warmup-prefixed error detail if capability probing failed).
     /// </returns>
     private static async Task<ContainerHealthStatus> ProbeHealthAsync(
         HttpClient httpClient,
