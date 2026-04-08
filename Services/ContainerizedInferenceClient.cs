@@ -408,7 +408,13 @@ public sealed class ContainerizedInferenceClient
         }
 
         using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var fileStream = File.Create(localOutputPath);
+        using var fileStream = new FileStream(
+            localOutputPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 81920,
+            useAsync: true);
         await contentStream.CopyToAsync(fileStream, cancellationToken);
     }
 
