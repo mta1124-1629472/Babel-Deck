@@ -51,7 +51,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     public void StashCurrentSession_NoMediaPath_ReturnsCurrentRecentList()
     {
         var session = MakeSession(mediaPath: null);
-        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
 
         var result = _svc.StashCurrentSession(session, cache, cacheLimit: 5);
 
@@ -67,7 +67,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     {
         var mediaPath = Path.Combine(_dir, "video.mp4");
         var session = MakeSession(mediaPath: mediaPath);
-        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
 
         _svc.StashCurrentSession(session, cache, cacheLimit: 5);
 
@@ -79,7 +79,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     {
         var mediaPath = Path.Combine(_dir, "video.mp4");
         var session = MakeSession(mediaPath: mediaPath);
-        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
 
         _svc.StashCurrentSession(session, cache, cacheLimit: 5);
 
@@ -93,7 +93,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     {
         var mediaPath = Path.Combine(_dir, "video.mp4");
         var session = MakeSession(mediaPath: mediaPath);
-        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
 
         var recent = _svc.StashCurrentSession(session, cache, cacheLimit: 5);
 
@@ -106,7 +106,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     [Fact]
     public void StashCurrentSession_ExceedsCacheLimit_EvictsOldestEntry()
     {
-        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
 
         var firstPath = Path.Combine(_dir, "video0.mp4");
         var firstKey = Path.GetFullPath(firstPath);
@@ -141,7 +141,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     {
         var mediaPath = Path.Combine(_dir, "video.mp4");
         var session = MakeSession(mediaPath: mediaPath);
-        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
         _svc.StashCurrentSession(session, cache, cacheLimit: 5);
 
         var loaded = _svc.LoadSession(session.SessionId, cache);
@@ -156,7 +156,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
         var session = MakeSession(mediaPath: Path.Combine(_dir, "video.mp4"));
         _perSessionStore.Save(session);
 
-        var emptyCache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var emptyCache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
         var loaded = _svc.LoadSession(session.SessionId, emptyCache);
 
         Assert.NotNull(loaded);
@@ -166,7 +166,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     [Fact]
     public void LoadSession_UnknownSessionId_ReturnsNull()
     {
-        var emptyCache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var emptyCache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
         var result = _svc.LoadSession(Guid.NewGuid(), emptyCache);
         Assert.Null(result);
     }
@@ -178,7 +178,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     {
         var mediaPath = Path.Combine(_dir, "video.mp4");
         var session = MakeSession(mediaPath: mediaPath);
-        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
         _svc.StashCurrentSession(session, cache, cacheLimit: 5);
 
         var result = _svc.LoadSessionForMedia(mediaPath, cache);
@@ -190,7 +190,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     [Fact]
     public void LoadSessionForMedia_MediaPathNotInCache_ReturnsNull()
     {
-        var emptyCache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var emptyCache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
         var result = _svc.LoadSessionForMedia(Path.Combine(_dir, "not-loaded.mp4"), emptyCache);
         Assert.Null(result);
     }
@@ -202,7 +202,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     {
         var mediaPath = Path.Combine(_dir, "video.mp4");
         var session = MakeSession(mediaPath: mediaPath);
-        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
 
         _svc.CacheCurrentSession(mediaPath, session, cache, cacheLimit: 5);
 
@@ -214,7 +214,7 @@ public sealed class SessionSwitchServiceTests : IDisposable
     {
         var mediaPath = Path.Combine(_dir, "video.mp4");
         var original = MakeSession(mediaPath: mediaPath);
-        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>();
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
 
         _svc.CacheCurrentSession(mediaPath, original, cache, cacheLimit: 5);
 
