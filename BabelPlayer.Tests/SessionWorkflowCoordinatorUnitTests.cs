@@ -693,7 +693,7 @@ public sealed class SessionWorkflowCoordinatorUnitTests : IDisposable
         {
             Stage = SessionWorkflowStage.Translated,
             TranslationPath = translationPath,
-            TtsVoice = "xtts-v2",
+            TtsVoice = "qwen-tts",
             MultiSpeakerEnabled = false,
             SpeakerReferenceAudioPaths = new Dictionary<string, string>
             {
