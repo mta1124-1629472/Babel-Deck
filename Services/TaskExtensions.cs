@@ -8,8 +8,6 @@ internal static class TaskExtensions
     /// <summary>
     /// Safely executes a task in the background without awaiting it.
     /// Any unhandled exceptions are caught and explicitly routed to the application log.
-    /// <summary>
-    /// Starts the provided task without awaiting it and logs any unhandled exception that occurs.
     /// </summary>
     /// <param name="task">The task to run in the background.</param>
     /// <param name="log">Logger used to record unhandled exceptions from the task.</param>

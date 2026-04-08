@@ -237,10 +237,8 @@ public static class DependencyLocator
     }
 
     /// <summary>
-    /// Bootstraps the inference services, registries, and the session coordinator.
-    /// Handles fallback creation if the primary initialization fails (e.g., due to corrupt state files).
-    /// <summary>
     /// Bootstraps and returns a SessionWorkflowCoordinator by constructing and wiring host managers, registries, and a session snapshot store, and by requesting containerized services to start.
+    /// Handles fallback creation if the primary initialization fails (e.g., due to corrupt state files).
     /// </summary>
     /// <param name="appDataRoot">Filesystem root used to locate the session snapshot at '{appDataRoot}/state/current-session.json'.</param>
     /// <param name="startupLog">Optional logger that receives startup errors if primary initialization fails.</param>

@@ -124,15 +124,11 @@ public sealed class SessionSwitchService
     }
 
     /// <summary>
-        /// Get the filesystem directory path where the specified session's data is stored.
-        /// </summary>
-        /// <param name="sessionId">The identifier of the session.</param>
-        /// <summary>
-        /// Gets the filesystem directory path for the specified workflow session.
-        /// </summary>
-        /// <param name="sessionId">The unique identifier of the session.</param>
-        /// <returns>The directory path for the session.</returns>
-        public string GetSessionDirectory(Guid sessionId) =>
+    /// Get the filesystem directory path where the specified session's data is stored.
+    /// </summary>
+    /// <param name="sessionId">The identifier of the session.</param>
+    /// <returns>The directory path for the session.</returns>
+    public string GetSessionDirectory(Guid sessionId) =>
         _perSessionStore.GetSessionDirectory(sessionId);
 
     /// <summary>
