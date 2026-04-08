@@ -32,6 +32,7 @@ public sealed partial class SessionWorkflowCoordinator : ObservableObject, IDisp
     private ITranscriptionProvider? _transcriptionService;
     private ITranslationProvider? _translationService;
     private ITtsProvider? _ttsService;
+    private readonly ConcurrentBag<Task> _pendingTtsTasks = new();
 
     private readonly IMediaTransportManager _transportManager;
     private bool _subscribedToSegmentEvents;
@@ -715,7 +716,7 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
         _log.Info($"Regenerating TTS for segment {segmentId}: {segmentText.Substring(0, Math.Min(30, segmentText.Length))}...");
 
         var targetLanguage = CurrentSession.TargetLanguage ?? CurrentSettings.TargetLanguage;
-        var result = await _ttsService.GenerateSegmentTtsAsync(
+        var ttsTask = _ttsService.GenerateSegmentTtsAsync(
             new SingleSegmentTtsRequest(
                 segmentText,
                 segmentAudioPath,
@@ -723,6 +724,8 @@ internal static string MediaKey(string path) => Path.GetFullPath(path);
                 targetSegment?.SpeakerId,
                 referenceAudioPath,
                 Language: targetLanguage));
+        _pendingTtsTasks.Add(ttsTask);
+        var result = await ttsTask;
 
         if (!result.Success)
         {
