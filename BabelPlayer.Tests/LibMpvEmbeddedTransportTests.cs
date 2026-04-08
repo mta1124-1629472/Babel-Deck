@@ -50,5 +50,6 @@ public sealed class LibMpvEmbeddedTransportTests
         Assert.True(plan.ShouldApply);
         Assert.NotNull(plan.FilterChain);
         Assert.Contains("lavfi=[format=nv12]", plan.FilterChain);
+        Assert.Contains("d3d11vpp=", plan.FilterChain);
     }
 }
