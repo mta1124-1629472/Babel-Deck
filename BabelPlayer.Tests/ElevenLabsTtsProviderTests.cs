@@ -82,6 +82,26 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
         return path;
     }
 
+    // ── MaxConcurrency ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void MaxConcurrency_ReturnsExpectedValue()
+    {
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        Assert.Equal(10, provider.MaxConcurrency);
+    }
+
+    [Fact]
+    public void MaxConcurrency_IsHigherThanInterfaceDefault()
+    {
+        // ElevenLabs is a cloud provider and should allow more concurrency than local providers.
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        var interfaceDefault = Math.Max(1, Math.Min(4, Environment.ProcessorCount / 2));
+        Assert.True(provider.MaxConcurrency > interfaceDefault || provider.MaxConcurrency >= 1,
+            $"Expected MaxConcurrency={provider.MaxConcurrency} to be at least 1");
+        Assert.Equal(10, provider.MaxConcurrency);
+    }
+
     // ── CheckReadiness ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -197,6 +217,37 @@ public sealed class ElevenLabsTtsProviderTests : IDisposable
         provider.Dispose();
 
         Assert.True(disposed);
+    }
+
+    // ── GenerateTtsAsync validation ────────────────────────────────────────────
+
+    [Fact]
+    public async Task GenerateTtsAsync_FileNotFound_ThrowsFileNotFoundException()
+    {
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        var request = new TtsRequest("nonexistent.json", Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
+
+        await Assert.ThrowsAsync<FileNotFoundException>(() => provider.GenerateTtsAsync(request));
+    }
+
+    [Fact]
+    public async Task GenerateTtsAsync_EmptySegments_ThrowsInvalidOperationException()
+    {
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        var translationPath = WriteEmptySegmentsTranslationJson();
+        var request = new TtsRequest(translationPath, Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(request));
+    }
+
+    [Fact]
+    public async Task GenerateTtsAsync_AllSegmentsNullTranslatedText_ThrowsInvalidOperationException()
+    {
+        using var provider = new ElevenLabsTtsProvider(_log, "key", MakeClient);
+        var translationPath = WriteTranslationJson(translatedText: null);
+        var request = new TtsRequest(translationPath, Path.Combine(_testDir, "out.mp3"), "eleven_multilingual_v2");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GenerateTtsAsync(request));
     }
 
     // ── Request validation ─────────────────────────────────────────────────────

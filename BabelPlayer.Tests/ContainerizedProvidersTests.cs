@@ -370,6 +370,37 @@ public sealed class ContainerizedProvidersTests : IDisposable
     }
 
     [Fact]
+    public async Task QwenContainerTtsProvider_GenerateTtsAsync_ThrowsNotImplementedException()
+    {
+        // Combined generation is now delegated to the coordinator; provider must throw.
+        var client = CreateClient((_, _) =>
+            Json(HttpStatusCode.OK, "{\"success\":true}"));
+        var provider = new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log));
+        var request = new TtsRequest(
+            Path.Combine(_dir, "dummy.json"),
+            Path.Combine(_dir, "out.mp3"),
+            "Qwen/Qwen3-TTS-12Hz-1.7B-Base");
+
+        var ex = await Assert.ThrowsAsync<NotImplementedException>(
+            () => provider.GenerateTtsAsync(request));
+
+        Assert.Contains("PLACEHOLDER", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void QwenContainerTtsProvider_Constructor_AcceptsSimplifiedParameters()
+    {
+        // Verify the constructor no longer requires a combineAudioFunc parameter.
+        var client = CreateClient((_, _) =>
+            Json(HttpStatusCode.OK, "{\"success\":true}"));
+
+        var ex = Record.Exception(
+            () => new QwenContainerTtsProvider(client, _log, new TtsReferenceExtractor(_log)));
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
     public async Task ContainerizedTtsProvider_GenerateTtsAsync_CombinesSegmentsAndWritesOutput()
     {
         var translationPath = Path.Combine(_dir, "combined-translation.json");

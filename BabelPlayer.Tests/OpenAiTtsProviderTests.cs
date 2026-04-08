@@ -82,6 +82,24 @@ public sealed class OpenAiTtsProviderTests : IDisposable
         return path;
     }
 
+    // ── MaxConcurrency ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void MaxConcurrency_ReturnsExpectedValue()
+    {
+        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient);
+        Assert.Equal(12, provider.MaxConcurrency);
+    }
+
+    [Fact]
+    public void MaxConcurrency_IsHigherThanLocalDefault()
+    {
+        // OpenAI is a cloud provider and should allow more concurrency than local GPU providers.
+        using var provider = new OpenAiTtsProvider(_log, "key", MakeClient);
+        Assert.True(provider.MaxConcurrency > 4,
+            $"Cloud provider MaxConcurrency={provider.MaxConcurrency} should exceed local GPU limit of 4");
+    }
+
     // ── CheckReadiness ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -109,7 +127,9 @@ public sealed class OpenAiTtsProviderTests : IDisposable
         Assert.True(result.IsReady);
     }
 
-    // ── Lazy<T> client initialization ─────────────────────────────────────────
+    // ── GenerateTtsAsync behavior ──────────────────────────────────────────────
+
+    [Fact]
     public async Task GenerateTtsAsync_ThrowsNotImplementedException()
     {
         using var provider = new OpenAiTtsProvider(_log, "key", MakeClient);
@@ -119,9 +139,6 @@ public sealed class OpenAiTtsProviderTests : IDisposable
         var ex = await Assert.ThrowsAsync<NotImplementedException>(() =>
             provider.GenerateTtsAsync(new TtsRequest(translationPath, outputPath, "tts-1")));
         Assert.Contains("PLACEHOLDER", ex.Message, StringComparison.Ordinal);
-    }
-
-        Assert.Contains("PLACEHOLDER", exception.Message);
     }
 
     [Fact]
