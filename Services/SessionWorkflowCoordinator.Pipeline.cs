@@ -249,6 +249,18 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken cancellationToken = default) =>
         GenerateTtsAsync(progress, voice, cancellationToken, stageContext: null);
 
+    /// <summary>
+    /// Generate per-segment TTS clips for the current translation, stitch them into a combined dub audio file, and update the session state.
+    /// </summary>
+    /// <param name="progress">Optional overall progress reporter (0.0–1.0) used for stage updates.</param>
+    /// <param name="voice">Optional voice identifier to use; if null, the configured TTS voice is used.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation.</param>
+    /// <param name="stageContext">Optional context used to report pipeline stage messages and progress.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no translation is available, a required voice model download fails, or when zero segment clips were produced.
+    /// </exception>
+    /// <exception cref="FileNotFoundException">Thrown when the translation file referenced by the session cannot be found.</exception>
+    /// <exception cref="PipelineProviderException">Thrown when the configured TTS provider/runtime is not ready and cannot proceed.</exception>
     internal async Task GenerateTtsAsync(
         IProgress<double>? progress,
         string? voice,

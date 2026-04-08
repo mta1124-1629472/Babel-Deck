@@ -26,6 +26,9 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
     private readonly Dictionary<string, string> _referenceIdCache = new(StringComparer.Ordinal);
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of QwenContainerTtsProvider with the specified client, logger, and reference extractor.
+    /// </summary>
     public QwenContainerTtsProvider(
         ContainerizedInferenceClient client,
         AppLog log,
@@ -36,9 +39,23 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         _extractor = extractor;
     }
 
-    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
+    /// <summary>
+        /// Determines whether the containerized TTS provider is ready based on the given application settings.
+        /// </summary>
+        /// <param name="settings">Application settings used to evaluate TTS readiness.</param>
+        /// <param name="keyStore">Optional API key store used during readiness checks.</param>
+        /// <returns>A <see cref="ProviderReadiness"/> value indicating the provider's readiness status and any required configuration.</returns>
+        public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore = null) =>
         ContainerizedProviderReadiness.CheckTts(settings);
 
+    /// <summary>
+    /// Synthesizes speech for a single segment using Qwen3-TTS and saves the resulting audio to the requested output path.
+    /// </summary>
+    /// <param name="request">Parameters for segment synthesis. Must include non-empty Text and either ReferenceAudioPath or SourceVideoPath; OutputAudioPath is where the synthesized audio will be written.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting asynchronous operations.</param>
+    /// <returns>A <see cref="TtsResult"/> describing the synthesis outcome; its <c>AudioPath</c> is the final local output path specified by <paramref name="request"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown when <see cref="SingleSegmentTtsRequest.Text"/> is null, empty, or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no reference audio is available or when the TTS service reports a failure.</exception>
     public async Task<TtsResult> GenerateSegmentTtsAsync(
         SingleSegmentTtsRequest request,
         CancellationToken cancellationToken = default)
@@ -75,6 +92,11 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         return result with { AudioPath = request.OutputAudioPath };
     }
 
+    /// <summary>
+    /// Generates combined TTS audio for the provided TtsRequest and produces a single output audio result.
+    /// </summary>
+    /// <returns>The TtsResult describing the produced output audio path and related metadata.</returns>
+    /// <exception cref="NotImplementedException">Always thrown: combined generation is now handled by the coordinator.</exception>
     public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)
@@ -82,6 +104,13 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
         throw new NotImplementedException("PLACEHOLDER: Combined generation is now handled by the coordinator.");
     }
 
+    /// <summary>
+    /// Reset the provider's session state.
+    /// </summary>
+    /// <remarks>
+    /// Clears the in-memory reference ID cache and, if an auto-extracted reference audio path is present,
+    /// deletes that extracted file via the configured extractor and clears the cached path.
+    /// </remarks>
     public async Task ResetSessionAsync()
     {
         _log.Info("[QwenContainerTts] Resetting session state");
@@ -251,6 +280,11 @@ public sealed class QwenContainerTtsProvider : ITtsProvider, IAsyncDisposable
             ? voiceName.Trim()
             : "Qwen/Qwen3-TTS-12Hz-1.7B-Base";
 
+    /// <summary>
+    /// Sanitizes a string for use as a file name component by replacing characters invalid in file names with underscores.
+    /// </summary>
+    /// <param name="value">The input string to sanitize.</param>
+    /// <returns>The input string with every character invalid in file names replaced by '_' so it can be safely used as a file name component.</returns>
     private static string SanitizeFileComponent(string value)
     {
         var invalid = Path.GetInvalidFileNameChars();
