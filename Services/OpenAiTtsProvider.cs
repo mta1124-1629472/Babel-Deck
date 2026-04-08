@@ -74,7 +74,13 @@ public sealed class OpenAiTtsProvider : ITtsProvider, IDisposable
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A TtsResult with success status, the output audio path, selected voice name, and the generated audio byte length.</returns>
     /// <exception cref="FileNotFoundException">Thrown when the translation JSON file at <paramref name="request"/>.TranslationJsonPath does not exist.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the translation artifact contains no translated text to synthesize.</exception>
+    /// <summary>
+    /// Generates speech audio for a combined TTS request.
+    /// </summary>
+    /// <param name="request">The combined TTS request containing input source(s), output path, and voice selection.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A <see cref="TtsResult"/> describing the generated audio file path, selected voice, and output size in bytes.</returns>
+    /// <exception cref="NotImplementedException">Thrown because combined generation is delegated to an external coordinator in this implementation.</exception>
     public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)

@@ -93,7 +93,12 @@ public sealed class ElevenLabsTtsProvider : ITtsProvider, IDisposable
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A <see cref="TtsResult"/> describing the generated audio file and its metadata.</returns>
     /// <exception cref="FileNotFoundException">Thrown when the translation file at <paramref name="request"/>.TranslationJsonPath does not exist.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the translation artifact contains no non-empty translated text segments.</exception>
+    /// <summary>
+    /// Generates speech audio for the provided TtsRequest, writes the resulting audio to the request's OutputAudioPath, and returns a TtsResult describing the outcome.
+    /// </summary>
+    /// <param name="request">The TTS request containing source text or a translation artifact, the desired output path, and voice/model selection.</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the operation to complete.</param>
+    /// <returns>A TtsResult describing success, the output file path, the selected voice name, and the length of the generated audio in bytes.</returns>
     public Task<TtsResult> GenerateTtsAsync(
         TtsRequest request,
         CancellationToken cancellationToken = default)

@@ -10,6 +10,15 @@ namespace Babel.Player.Services;
 
 public static class AudioConcatUtility
 {
+    /// <summary>
+    /// Concatenates multiple audio segment files into a single output audio file.
+    /// </summary>
+    /// <param name="segmentAudioPaths">Ordered list of input audio file paths to concatenate. Must contain at least one entry.</param>
+    /// <param name="outputAudioPath">Path to write the resulting concatenated audio file. Existing file will be overwritten.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel file writes and process I/O waiting.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <paramref name="segmentAudioPaths"/> is empty; when ffmpeg cannot be located; when the ffmpeg process fails to start; or when ffmpeg exits with a non-zero exit code (message contains the captured stderr/stdout).
+    /// </exception>
     public static async Task CombineAudioSegmentsAsync(
         IReadOnlyList<string> segmentAudioPaths,
         string outputAudioPath,
@@ -88,7 +97,12 @@ public static class AudioConcatUtility
         }
     }
 
-    private static string EscapeConcatListPath(string path) =>
+    /// <summary>
+            /// Normalize and escape a filesystem path for inclusion in an ffmpeg concat list.
+            /// </summary>
+            /// <param name="path">The original file path.</param>
+            /// <returns>The path with backslashes replaced by forward slashes and single quotes escaped for concat-list usage.</returns>
+            private static string EscapeConcatListPath(string path) =>
         path.Replace("\\", "/", StringComparison.Ordinal)
             .Replace("'", "'\\''", StringComparison.Ordinal);
 }
