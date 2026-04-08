@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -8,18 +9,19 @@ using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
-public static class AudioConcatUtility
+/// <summary>
+/// A real implementation of IAudioProcessingService that uses ffmpeg.
+/// </summary>
+public sealed class FfmpegAudioProcessingService : IAudioProcessingService
 {
-    /// <summary>
-    /// Concatenates multiple audio segment files into a single output audio file.
-    /// </summary>
-    /// <param name="segmentAudioPaths">Ordered list of input audio file paths to concatenate. Must contain at least one entry.</param>
-    /// <param name="outputAudioPath">Path to write the resulting concatenated audio file. Existing file will be overwritten.</param>
-    /// <param name="cancellationToken">Cancellation token to cancel file writes and process I/O waiting.</param>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <paramref name="segmentAudioPaths"/> is empty; when ffmpeg cannot be located; when the ffmpeg process fails to start; or when ffmpeg exits with a non-zero exit code (message contains the captured stderr/stdout).
-    /// </exception>
-    public static async Task CombineAudioSegmentsAsync(
+    private readonly AppLog _log;
+
+    public FfmpegAudioProcessingService(AppLog log)
+    {
+        _log = log;
+    }
+
+    public async Task CombineAudioSegmentsAsync(
         IReadOnlyList<string> segmentAudioPaths,
         string outputAudioPath,
         CancellationToken cancellationToken)
@@ -39,6 +41,7 @@ public static class AudioConcatUtility
 
         var ffmpegPath = DependencyLocator.FindFfmpeg()
             ?? throw new InvalidOperationException("ffmpeg not found. Combined output requires ffmpeg.");
+
         var concatListDir = Path.Combine(Path.GetTempPath(), $"babel-concat-{Guid.NewGuid():N}");
         Directory.CreateDirectory(concatListDir);
         var concatListPath = Path.Combine(concatListDir, "inputs.txt");
@@ -97,16 +100,69 @@ public static class AudioConcatUtility
             }
             catch
             {
+                // ignored
             }
         }
     }
 
-    /// <summary>
-            /// Normalize and escape a filesystem path for inclusion in an ffmpeg concat list.
-            /// </summary>
-            /// <param name="path">The original file path.</param>
-            /// <returns>The path with backslashes replaced by forward slashes and single quotes escaped for concat-list usage.</returns>
-            private static string EscapeConcatListPath(string path) =>
+    public async Task ExtractAudioClipAsync(
+        string inputPath,
+        string outputPath,
+        double startTimeSeconds,
+        double durationSeconds,
+        CancellationToken cancellationToken)
+    {
+        var ffmpegPath = DependencyLocator.FindFfmpeg()
+            ?? throw new InvalidOperationException("ffmpeg not found. Audio extraction requires ffmpeg.");
+
+        var outputDir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDir))
+            Directory.CreateDirectory(outputDir);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffmpegPath,
+            RedirectStandardOutput = false,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        psi.ArgumentList.Add("-y");
+        
+        // Use -ss before -i for faster seeking
+        psi.ArgumentList.Add("-ss");
+        psi.ArgumentList.Add(startTimeSeconds.ToString("F3", CultureInfo.InvariantCulture));
+        
+        psi.ArgumentList.Add("-i");
+        psi.ArgumentList.Add(inputPath);
+        
+        psi.ArgumentList.Add("-t");
+        psi.ArgumentList.Add(durationSeconds.ToString("F3", CultureInfo.InvariantCulture));
+        
+        psi.ArgumentList.Add("-vn");
+        psi.ArgumentList.Add("-ac");
+        psi.ArgumentList.Add("1");
+        psi.ArgumentList.Add("-ar");
+        psi.ArgumentList.Add("16000"); // Standard for speech inference
+        psi.ArgumentList.Add("-sample_fmt");
+        psi.ArgumentList.Add("s16");
+        psi.ArgumentList.Add(outputPath);
+
+        using var proc = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start ffmpeg for audio extraction.");
+
+        var stderrTask = proc.StandardError.ReadToEndAsync(cancellationToken);
+        await proc.WaitForExitAsync(cancellationToken);
+        var stderr = await stderrTask;
+
+        if (proc.ExitCode != 0 || !File.Exists(outputPath))
+        {
+            throw new InvalidOperationException($"ffmpeg audio extraction failed with exit code {proc.ExitCode}: {stderr}");
+        }
+    }
+
+    private static string EscapeConcatListPath(string path) =>
         path.Replace("\\", "/", StringComparison.Ordinal)
             .Replace("'", "'\\''", StringComparison.Ordinal);
 }

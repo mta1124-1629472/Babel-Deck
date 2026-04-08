@@ -322,11 +322,15 @@ public static class DependencyLocator
         
         var snapshotStore = new SessionSnapshotStore(
             Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
+
+        var audioProcessingService = new FfmpegAudioProcessingService(appLog);
         
         return new SessionWorkflowCoordinator(
             snapshotStore, appLog, appSettings, perSessionStore, recentStore, 
             transcriptionRegistry, translationRegistry, ttsRegistry, 
             transportManager: transportManager, keyStore: apiKeyStore, 
-            containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager);
+            containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager,
+            audioProcessingService: audioProcessingService);
     }
-}
+}
+

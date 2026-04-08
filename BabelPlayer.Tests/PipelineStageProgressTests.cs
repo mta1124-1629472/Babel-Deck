@@ -194,7 +194,9 @@ public sealed class PipelineStageProgressTests : IDisposable
             recentStore,
             transcriptionRegistry,
             translationRegistry,
-            ttsRegistry);
+            ttsRegistry,
+            audioProcessingService: new StubAudioProcessingService());
+
     }
 
     private static AppSettings CreateSettings() =>
@@ -484,6 +486,21 @@ public sealed class PipelineStageProgressTests : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(request.OutputAudioPath)!);
             File.WriteAllText(request.OutputAudioPath, request.Text);
             return Task.FromResult(new TtsResult(true, request.OutputAudioPath, request.VoiceName, new FileInfo(request.OutputAudioPath).Length, null));
+        }
+    }
+    private class StubAudioProcessingService : IAudioProcessingService
+    {
+        public Task CombineAudioSegmentsAsync(IReadOnlyList<string> segmentAudioPaths, string outputPath, CancellationToken cancellationToken)
+        {
+            File.WriteAllText(outputPath, "fake combined audio");
+            return Task.CompletedTask;
+        }
+
+
+        public Task ExtractAudioClipAsync(string sourcePath, string outputPath, double startTimeSeconds, double durationSeconds, CancellationToken cancellationToken)
+        {
+            File.WriteAllText(outputPath, "fake extracted clip");
+            return Task.CompletedTask;
         }
     }
 }

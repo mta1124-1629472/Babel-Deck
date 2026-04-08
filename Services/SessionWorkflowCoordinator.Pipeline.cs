@@ -446,7 +446,15 @@ public sealed partial class SessionWorkflowCoordinator
                 progress01: 1,
                 isIndeterminate: true);
                 
-            await AudioConcatUtility.CombineAudioSegmentsAsync(orderedPaths, ttsPath, cancellationToken);
+            if (_audioProcessingService is not null)
+            {
+                await _audioProcessingService.CombineAudioSegmentsAsync(orderedPaths, ttsPath, cancellationToken);
+            }
+            else
+            {
+                _log.Warning("Audio processing service unavailable. Skipping audio concatenation.");
+            }
+
 
             if (!File.Exists(ttsPath))
                 throw new InvalidOperationException(
