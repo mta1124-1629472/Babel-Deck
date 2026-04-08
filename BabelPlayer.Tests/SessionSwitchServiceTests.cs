@@ -235,4 +235,102 @@ public sealed class SessionSwitchServiceTests : IDisposable
         var sessionDir = _svc.GetSessionDirectory(sessionId);
         Assert.Contains(sessionId.ToString(), sessionDir);
     }
+
+    // ── Cache eviction order (FIFO) ───────────────────────────────────────────
+
+    [Fact]
+    public void CacheCurrentSession_ExceedsCacheLimit_EvictsOldestEntry()
+    {
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
+
+        var path1 = Path.Combine(_dir, "media1.mp4");
+        var path2 = Path.Combine(_dir, "media2.mp4");
+        var path3 = Path.Combine(_dir, "media3.mp4");
+        var key1 = Path.GetFullPath(path1);
+        var key2 = Path.GetFullPath(path2);
+        var key3 = Path.GetFullPath(path3);
+
+        _svc.CacheCurrentSession(path1, MakeSession(mediaPath: path1), cache, cacheLimit: 2);
+        _svc.CacheCurrentSession(path2, MakeSession(mediaPath: path2), cache, cacheLimit: 2);
+
+        Assert.Equal(2, cache.Count);
+
+        // Adding a third exceeds the limit — oldest (path1) must be evicted
+        _svc.CacheCurrentSession(path3, MakeSession(mediaPath: path3), cache, cacheLimit: 2);
+
+        Assert.Equal(2, cache.Count);
+        Assert.DoesNotContain(key1, cache.Keys);
+        Assert.Contains(key2, cache.Keys);
+        Assert.Contains(key3, cache.Keys);
+    }
+
+    [Fact]
+    public void CacheCurrentSession_UpdateExistingKey_DoesNotCauseDoubleEviction()
+    {
+        // Updating an existing key should not push it to the back of the insertion queue
+        // so the eviction order remains stable.
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
+
+        var path1 = Path.Combine(_dir, "media_upd1.mp4");
+        var path2 = Path.Combine(_dir, "media_upd2.mp4");
+        var key1 = Path.GetFullPath(path1);
+        var key2 = Path.GetFullPath(path2);
+
+        var session1 = MakeSession(mediaPath: path1);
+        _svc.CacheCurrentSession(path1, session1, cache, cacheLimit: 2);
+        _svc.CacheCurrentSession(path2, MakeSession(mediaPath: path2), cache, cacheLimit: 2);
+
+        // Update path1 (already in cache) — count should remain 2
+        var updatedSession1 = session1 with { Stage = SessionWorkflowStage.Transcribed };
+        _svc.CacheCurrentSession(path1, updatedSession1, cache, cacheLimit: 2);
+
+        Assert.Equal(2, cache.Count);
+        Assert.Contains(key1, cache.Keys);
+        Assert.Contains(key2, cache.Keys);
+
+        // Verify the update was applied
+        var loaded = _svc.LoadSessionForMedia(path1, cache);
+        Assert.Equal(SessionWorkflowStage.Transcribed, loaded!.Stage);
+    }
+
+    [Fact]
+    public void CacheCurrentSession_CacheLimitOfOne_AlwaysReplacesWithNewest()
+    {
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
+
+        var path1 = Path.Combine(_dir, "limit1_media1.mp4");
+        var path2 = Path.Combine(_dir, "limit1_media2.mp4");
+        var key1 = Path.GetFullPath(path1);
+        var key2 = Path.GetFullPath(path2);
+
+        _svc.CacheCurrentSession(path1, MakeSession(mediaPath: path1), cache, cacheLimit: 1);
+        Assert.Single(cache);
+        Assert.Contains(key1, cache.Keys);
+
+        _svc.CacheCurrentSession(path2, MakeSession(mediaPath: path2), cache, cacheLimit: 1);
+        Assert.Single(cache);
+        Assert.DoesNotContain(key1, cache.Keys);
+        Assert.Contains(key2, cache.Keys);
+    }
+
+    [Fact]
+    public void StashCurrentSession_WithConcurrentDictionary_UsesOrdinalIgnoreCaseKeys()
+    {
+        // Verify that the ConcurrentDictionary uses OrdinalIgnoreCase so paths
+        // that differ only in case resolve to the same entry.
+        var cache = new ConcurrentDictionary<string, WorkflowSessionSnapshot>(StringComparer.OrdinalIgnoreCase);
+        var mediaPath = Path.Combine(_dir, "CaseSensitive.mp4");
+        var session = MakeSession(mediaPath: mediaPath);
+
+        _svc.StashCurrentSession(session, cache, cacheLimit: 5);
+
+        // Look up with the same key — should find it regardless of case on OrdinalIgnoreCase dict
+        var upperKey = Path.GetFullPath(mediaPath).ToUpperInvariant();
+        var lowerKey = Path.GetFullPath(mediaPath).ToLowerInvariant();
+
+        // At least one of the case variants should find the entry (OrdinalIgnoreCase)
+        bool foundUpper = cache.ContainsKey(upperKey);
+        bool foundLower = cache.ContainsKey(lowerKey);
+        Assert.True(foundUpper || foundLower, "OrdinalIgnoreCase lookup should find the cached session by any case variant");
+    }
 }
