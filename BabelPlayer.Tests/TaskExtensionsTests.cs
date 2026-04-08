@@ -32,17 +32,17 @@ public sealed class TaskExtensionsTests : IDisposable
     // ── Null argument checks ───────────────────────────────────────────────────
 
     [Fact]
-    public void FireAndForgetAsync_NullTask_ThrowsArgumentNullException()
+    public async Task FireAndForgetAsync_NullTask_ThrowsArgumentNullException()
     {
         Task? nullTask = null;
-        Assert.Throws<ArgumentNullException>(() => nullTask!.FireAndForgetAsync(_log));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => nullTask!.FireAndForgetAsync(_log));
     }
 
     [Fact]
-    public void FireAndForgetAsync_NullLog_ThrowsArgumentNullException()
+    public async Task FireAndForgetAsync_NullLog_ThrowsArgumentNullException()
     {
         var task = Task.CompletedTask;
-        Assert.Throws<ArgumentNullException>(() => task.FireAndForgetAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => task.FireAndForgetAsync(null!));
     }
 
     // ── Return value ───────────────────────────────────────────────────────────
