@@ -16,7 +16,6 @@ transformers==4.57.3
 sentencepiece==0.2.0
 safetensors==0.6.2
 accelerate==1.12.0
-TTS==0.22.0
 pydub==0.25.1
 qwen-tts>=0.1.1
 soundfile>=0.12.1
