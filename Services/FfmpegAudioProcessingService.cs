@@ -98,10 +98,10 @@ public sealed class FfmpegAudioProcessingService : IAudioProcessingService
             var stdout = await stdoutTask.ConfigureAwait(false);
             var stderr = await stderrTask.ConfigureAwait(false);
 
-            if (process.ExitCode != 0)
+            if (process.ExitCode != 0 || !File.Exists(outputAudioPath))
             {
                 throw new InvalidOperationException(
-                    $"ffmpeg concatenation failed with exit code {process.ExitCode}: {stderr} {stdout}".Trim());
+                    $"ffmpeg concatenation failed or produced no output file (exit code {process.ExitCode}): {stderr} {stdout}".Trim());
             }
         }
         finally
