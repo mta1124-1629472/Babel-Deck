@@ -199,10 +199,10 @@ public sealed class AppSettings
     public bool VideoVsrEnabled { get; set; } = false;
 
     /// <summary>
-    /// Enable the mpv HDR output pipeline (target-colorspace-hint + tone-mapping).
+    /// Enable mpv HDR passthrough (target-colorspace-hint + tone-mapping).
     /// Requests an HDR-capable mpv output path for the OS/display pipeline.
-    /// Pair with NVIDIA RTX HDR in NVIDIA Control Panel when the playback surface
-    /// is one NVIDIA supports for driver-level SDR-to-HDR conversion.
+    /// This is separate from NVIDIA RTX Auto HDR, which remains a driver-level
+    /// SDR-to-HDR feature configured in NVIDIA Control Panel.
     /// Requires an HDR-capable display with Windows HDR enabled.
     /// Takes effect on app restart.
     /// </summary>

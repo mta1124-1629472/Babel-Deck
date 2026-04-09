@@ -811,7 +811,7 @@ public sealed class ManagedVenvHostManagerTests : IDisposable
             IsRtxCapable: hasCuda,
             IsVsrDriverSufficient: hasCuda,
             NvidiaDriverVersion: hasCuda ? "552.00" : null,
-            IsHdrDisplayAvailable: false);
+            IsHdrDisplayActive: false);
 
     private static Func<string, TimeSpan, CancellationToken, Task<ContainerHealthStatus>> AlwaysUnavailableHealthCheck(
         string errorMessage = "offline") =>

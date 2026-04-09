@@ -218,6 +218,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HdrSettingsAvailable))]
+    [NotifyPropertyChangedFor(nameof(HdrAvailabilityHintText))]
+    [NotifyPropertyChangedFor(nameof(HasHdrAvailabilityHint))]
     private bool _videoUseGpuNext;
 
     public string[] HwdecOptions { get; } =
@@ -233,7 +235,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         ["auto", "h264_nvenc", "hevc_nvenc", "h264_amf", "hevc_amf",
          "h264_qsv", "hevc_qsv", "libx264", "libx265"];
 
-    // ── RTX Video Enhancement settings ────────────────────────────────────────
+    // ── Video enhancement settings ────────────────────────────────────────────
 
     [ObservableProperty]
     private bool _videoVsrEnabled;
@@ -258,14 +260,24 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public string VsrReasonText => _coordinator.VideoEnhancementDiagnostics.LastReasonText;
     public string VsrFilterText => _coordinator.VideoEnhancementDiagnostics.LastFilterText;
 
-    /// <summary>True when the current display is detected as HDR-capable.</summary>
-    public bool IsHdrCapable => _coordinator.HardwareSnapshot.IsHdrDisplayAvailable;
+    /// <summary>True when Windows HDR is currently active for at least one desktop output.</summary>
+    public bool IsHdrDisplayActive => _coordinator.HardwareSnapshot.IsHdrDisplayActive;
 
     /// <summary>
-    /// HDR Output Pipeline settings are only meaningful when gpu-next is enabled
-    /// AND an HDR-capable display is detected.
+    /// HDR passthrough is only available when gpu-next is enabled and Windows HDR
+    /// is currently active on the display pipeline.
     /// </summary>
-    public bool HdrSettingsAvailable => VideoUseGpuNext && IsHdrCapable;
+    public bool HdrSettingsAvailable => VideoUseGpuNext && IsHdrDisplayActive;
+
+    public string HdrAvailabilityHintText =>
+        VideoUseGpuNext && !IsHdrDisplayActive
+            ? "Enable HDR in Windows Display Settings to use HDR passthrough."
+            : string.Empty;
+
+    public bool HasHdrAvailabilityHint => !string.IsNullOrWhiteSpace(HdrAvailabilityHintText);
+
+    public static string HdrDriverFeatureHintText =>
+        "RTX Auto HDR (SDR→HDR) is a separate driver feature — enable it in NVIDIA Control Panel.";
 
     // ── Hotkeys ───────────────────────────────────────────────────────────────
 
@@ -386,14 +398,22 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics))
-            return;
+        if (e.PropertyName == nameof(SessionWorkflowCoordinator.VideoEnhancementDiagnostics))
+        {
+            OnPropertyChanged(nameof(VsrSupportHintText));
+            OnPropertyChanged(nameof(VsrRequestedStateText));
+            OnPropertyChanged(nameof(VsrResolvedStateText));
+            OnPropertyChanged(nameof(VsrReasonText));
+            OnPropertyChanged(nameof(VsrFilterText));
+        }
 
-        OnPropertyChanged(nameof(VsrSupportHintText));
-        OnPropertyChanged(nameof(VsrRequestedStateText));
-        OnPropertyChanged(nameof(VsrResolvedStateText));
-        OnPropertyChanged(nameof(VsrReasonText));
-        OnPropertyChanged(nameof(VsrFilterText));
+        if (e.PropertyName == nameof(SessionWorkflowCoordinator.HardwareSnapshot))
+        {
+            OnPropertyChanged(nameof(IsHdrDisplayActive));
+            OnPropertyChanged(nameof(HdrSettingsAvailable));
+            OnPropertyChanged(nameof(HdrAvailabilityHintText));
+            OnPropertyChanged(nameof(HasHdrAvailabilityHint));
+        }
     }
 
     // ── Null-object for tests / design-time ───────────────────────────────────
