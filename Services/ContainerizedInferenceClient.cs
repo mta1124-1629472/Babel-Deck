@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Babel.Player.Models;
 
 namespace Babel.Player.Services;
 
@@ -237,7 +238,7 @@ public sealed class ContainerizedInferenceClient
     /// Performs speaker diarization on the given audio file using the containerized inference service.
     /// </summary>
     /// <param name="audioFilePath">Path to the audio file to diarize.</param>
-    /// <param name="engine">Requested diarization engine identifier (for example, "wespeaker" or other engine names).</param>
+    /// <param name="engine">Requested diarization engine identifier (for example, <see cref="ProviderNames.WeSpeakerLocal"/> or its legacy alias).</param>
     /// <param name="minSpeakers">Optional hint for the minimum number of speakers to detect.</param>
     /// <param name="maxSpeakers">Optional hint for the maximum number of speakers to detect.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
@@ -257,7 +258,7 @@ public sealed class ContainerizedInferenceClient
                 throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
 
             var normalizedEngine = NormalizeDiarizationEngine(engine);
-            var endpoint = normalizedEngine == "wespeaker" ? "/diarize/wespeaker" : "/diarize";
+            var endpoint = normalizedEngine == ProviderNames.WeSpeakerLocal ? "/diarize/wespeaker" : "/diarize";
             _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
 
             using var content = new MultipartFormDataContent();
@@ -711,12 +712,13 @@ public sealed class ContainerizedInferenceClient
     /// <summary>
     /// Normalize a diarization engine identifier to a supported canonical provider id.
     /// </summary>
-    /// <param name="engine">The input engine identifier; compared exactly to "wespeaker".</param>
-    /// <returns>`"wespeaker"` if <paramref name="engine"/> equals `"wespeaker"`, otherwise `"nemo"`.</returns>
-    private static string NormalizeDiarizationEngine(string engine) => engine switch
+    /// <param name="engine">The input engine identifier; accepted values include legacy aliases and canonical provider IDs.</param>
+    /// <returns><see cref="ProviderNames.WeSpeakerLocal"/> when the input resolves to WeSpeaker; otherwise <see cref="ProviderNames.NemoLocal"/>.</returns>
+    private static string NormalizeDiarizationEngine(string engine) =>
+        InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(engine) switch
     {
-        "wespeaker" => "wespeaker",
-        _ => "nemo",
+        ProviderNames.WeSpeakerLocal => ProviderNames.WeSpeakerLocal,
+        _ => ProviderNames.NemoLocal,
     };
 
     /// <summary>
@@ -796,9 +798,9 @@ public sealed class ContainerizedInferenceClient
     /// <summary>
     /// Normalize a raw speaker identifier into a consistent "spk_{NN}" label and record the mapping.
     /// </summary>
-    /// <param name="rawSpeakerId">The raw speaker identifier which may be null, blank, already normalized, or contain digits.</param>
+    /// <param name="rawSpeakerId">The raw speaker identifier which may be null, blank, or already normalized.</param>
     /// <param name="assignedLabels">A mapping of original keys to normalized speaker labels; this dictionary is updated with a new entry when a normalization is created.</param>
-    /// <returns>The normalized speaker id in the form "spk_{NN}" where NN is a two-digit index.</returns>
+    /// <returns>The normalized speaker id in the form "spk_{NN}" where NN is a two-digit zero-based index.</returns>
     private static string NormalizeSpeakerId(string? rawSpeakerId, IDictionary<string, string> assignedLabels)
     {
         var key = string.IsNullOrWhiteSpace(rawSpeakerId)
@@ -808,19 +810,16 @@ public sealed class ContainerizedInferenceClient
         if (assignedLabels.TryGetValue(key, out var existing))
             return existing;
 
-        if (key.StartsWith("spk_", StringComparison.OrdinalIgnoreCase)
-            && int.TryParse(key[4..], out var normalizedIndex))
+        var usedLabels = new HashSet<string>(assignedLabels.Values, StringComparer.Ordinal);
+        var speakerIndex = assignedLabels.Count;
+        string speakerId;
+        do
         {
-            var normalized = $"spk_{normalizedIndex:D2}";
-            assignedLabels[key] = normalized;
-            return normalized;
+            speakerId = $"spk_{speakerIndex:D2}";
+            speakerIndex++;
         }
+        while (usedLabels.Contains(speakerId));
 
-        var digits = new string([.. key.Where(char.IsDigit)]);
-        var speakerIndex = int.TryParse(digits, out var parsedIndex)
-            ? parsedIndex
-            : assignedLabels.Count;
-        var speakerId = $"spk_{speakerIndex:D2}";
         assignedLabels[key] = speakerId;
         return speakerId;
     }

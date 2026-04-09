@@ -74,20 +74,20 @@ public static class InferenceRuntimeCatalog
         DefaultTranslationProvider(MapLegacyRuntimeToProfile(runtime));
 
     /// <summary>
-        /// Selects the default TTS provider identifier for a legacy inference runtime.
-        /// </summary>
-        /// <param name="runtime">The legacy <see cref="InferenceRuntime"/> used to determine the compute profile.</param>
-        /// <returns>
-        /// The provider identifier to use by default: <see cref="ProviderNames.Piper"/> when the runtime maps to a CPU profile, <see cref="ProviderNames.Qwen"/> when it maps to a GPU profile, and <see cref="ProviderNames.EdgeTts"/> otherwise.
-        /// </returns>
-        public static string DefaultTtsProvider(InferenceRuntime runtime) =>
+    /// Selects the default TTS provider identifier for a legacy inference runtime.
+    /// </summary>
+    /// <param name="runtime">The legacy <see cref="InferenceRuntime"/> used to determine the compute profile.</param>
+    /// <returns>
+    /// The provider identifier to use by default: <see cref="ProviderNames.Piper"/> when the runtime maps to a CPU profile, <see cref="ProviderNames.Qwen"/> when it maps to a GPU profile, and <see cref="ProviderNames.EdgeTts"/> otherwise.
+    /// </returns>
+    public static string DefaultTtsProvider(InferenceRuntime runtime) =>
         DefaultTtsProvider(MapLegacyRuntimeToProfile(runtime));
 
     /// <summary>
-/// Gets the default diarization provider identifier.
-/// </summary>
-/// <returns>The provider ID for the default diarization provider: <c>ProviderNames.NemoLocal</c>.</returns>
-public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
+    /// Gets the default diarization provider identifier.
+    /// </summary>
+    /// <returns>The provider ID for the default diarization provider: <c>ProviderNames.NemoLocal</c>.</returns>
+    public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
 
     /// <summary>
     /// Normalizes a transcription provider identifier to a canonical provider ID appropriate for the given compute profile.
@@ -213,8 +213,8 @@ public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
 
         var normalized = providerId switch
         {
-            "nemo" => ProviderNames.NemoLocal,
-            "wespeaker" => ProviderNames.WeSpeakerLocal,
+            ProviderNames.NemoDiarizationAlias => ProviderNames.NemoLocal,
+            ProviderNames.WeSpeakerDiarizationAlias => ProviderNames.WeSpeakerLocal,
             _ => providerId,
         };
 
@@ -226,25 +226,25 @@ public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
     /// <summary>
     /// Normalizes a diarization capability provider identifier to a canonical provider ID.
     /// </summary>
-    /// <param name="providerId">The provider identifier or legacy alias (may be null or empty). Recognized aliases: "nemo" and "wespeaker".</param>
+    /// <param name="providerId">The provider identifier or legacy alias (may be null or empty). Recognized aliases: <see cref="ProviderNames.NemoDiarizationAlias"/> and <see cref="ProviderNames.WeSpeakerDiarizationAlias"/>.</param>
     /// <returns>
-    /// The canonical provider ID: `ProviderNames.NemoLocal` for "nemo" or `ProviderNames.NemoLocal`,
-    /// `ProviderNames.WeSpeakerLocal` for "wespeaker" or `ProviderNames.WeSpeakerLocal`,
+    /// The canonical provider ID: `ProviderNames.NemoLocal` for <see cref="ProviderNames.NemoDiarizationAlias"/> or `ProviderNames.NemoLocal`,
+    /// `ProviderNames.WeSpeakerLocal` for <see cref="ProviderNames.WeSpeakerDiarizationAlias"/> or `ProviderNames.WeSpeakerLocal`,
     /// or the original `providerId` if non-null and unrecognized; otherwise an empty string.
     /// </returns>
     public static string NormalizeDiarizationCapabilityProviderId(string? providerId) => providerId switch
     {
-        "nemo" or ProviderNames.NemoLocal => ProviderNames.NemoLocal,
-        "wespeaker" or ProviderNames.WeSpeakerLocal => ProviderNames.WeSpeakerLocal,
+        ProviderNames.NemoDiarizationAlias or ProviderNames.NemoLocal => ProviderNames.NemoLocal,
+        ProviderNames.WeSpeakerDiarizationAlias or ProviderNames.WeSpeakerLocal => ProviderNames.WeSpeakerLocal,
         _ => providerId ?? string.Empty,
     };
 
     /// <summary>
-        /// Determine the legacy InferenceRuntime that best fits a transcription provider identifier.
-        /// </summary>
-        /// <param name="providerId">The transcription provider identifier to use when inferring the runtime; may be null or whitespace.</param>
-        /// <returns>The inferred <see cref="InferenceRuntime"/> for the specified provider.</returns>
-        public static InferenceRuntime InferTranscriptionRuntime(string? providerId) =>
+    /// Determine the legacy InferenceRuntime that best fits a transcription provider identifier.
+    /// </summary>
+    /// <param name="providerId">The transcription provider identifier to use when inferring the runtime; may be null or whitespace.</param>
+    /// <returns>The inferred <see cref="InferenceRuntime"/> for the specified provider.</returns>
+    public static InferenceRuntime InferTranscriptionRuntime(string? providerId) =>
         ResolveRuntime(InferTranscriptionProfile(providerId));
 
     public static InferenceRuntime InferTranslationRuntime(string? providerId) =>

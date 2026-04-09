@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from importlib import import_module
 from pathlib import Path
 from datetime import datetime
@@ -48,6 +49,7 @@ qwen_model = None
 qwen_model_key = None
 wespeaker_model = None
 wespeaker_model_key: str | None = None
+_wespeaker_model_lock = threading.Lock()
 
 # Warmup state: None = not started, "warming" = in progress,
 # "ready" = model loaded, "failed: <reason>" = terminal failure
@@ -340,9 +342,13 @@ def _normalize_native_speaker_label(raw_label, assigned_labels: dict[str, str]) 
     if key in assigned_labels:
         return assigned_labels[key]
 
-    digits = "".join(ch for ch in key if ch.isdigit())
-    speaker_index = int(digits) if digits else len(assigned_labels)
-    normalized = f"spk_{speaker_index:02d}"
+    used_labels = set(assigned_labels.values())
+    speaker_index = len(assigned_labels)
+    while True:
+        normalized = f"spk_{speaker_index:02d}"
+        if normalized not in used_labels:
+            break
+        speaker_index += 1
     assigned_labels[key] = normalized
     return normalized
 
@@ -471,15 +477,31 @@ def load_wespeaker_model(model_name: str = WESPEAKER_MODEL):
         wespeaker_model: The loaded WeSpeaker model instance (cached for subsequent calls).
     """
     global wespeaker_model, wespeaker_model_key
-    if wespeaker_model is None or wespeaker_model_key != model_name:
-        import wespeaker
+    if wespeaker_model is not None and wespeaker_model_key == model_name:
+        return wespeaker_model
 
-        logger.info(f"Loading WeSpeaker '{model_name}' on cpu")
-        wespeaker_model = wespeaker.load_model(model_name)
-        wespeaker_model.set_device("cpu")
-        wespeaker_model_key = model_name
-        logger.info("WeSpeaker loaded")
+    with _wespeaker_model_lock:
+        if wespeaker_model is None or wespeaker_model_key != model_name:
+            import wespeaker
+
+            logger.info(f"Loading WeSpeaker '{model_name}' on cpu")
+            wespeaker_model = wespeaker.load_model(model_name)
+            wespeaker_model.set_device("cpu")
+            wespeaker_model_key = model_name
+            logger.info("WeSpeaker loaded")
     return wespeaker_model
+
+
+def _validate_diarization_speaker_bounds(
+    min_speakers: Optional[int],
+    max_speakers: Optional[int],
+) -> None:
+    if min_speakers is not None and min_speakers < 1:
+        raise HTTPException(status_code=400, detail="min_speakers must be at least 1")
+    if max_speakers is not None and max_speakers < 1:
+        raise HTTPException(status_code=400, detail="max_speakers must be at least 1")
+    if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
+        raise HTTPException(status_code=400, detail="min_speakers cannot be greater than max_speakers")
 
 
 def _run_wespeaker_diarization(audio_path: Path) -> tuple[list[DiarizationSegment], int]:
@@ -871,7 +893,6 @@ async def diarize(
     audio: UploadFile = File(...),
     min_speakers: Optional[int] = Form(None),
     max_speakers: Optional[int] = Form(None),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Perform speaker diarization on uploaded audio and return a structured diarization response.
@@ -886,6 +907,7 @@ async def diarize(
     Raises:
         HTTPException: If diarization fails or the uploaded audio cannot be processed.
     """
+    _validate_diarization_speaker_bounds(min_speakers, max_speakers)
     temp_audio_path: Optional[Path] = None
     try:
         temp_audio_path = _stage_audio_upload_to_temp(audio, "diar")
@@ -896,17 +918,16 @@ async def diarize(
             min_speakers,
             max_speakers,
         )
-
-        background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
         return _build_diarization_response(segments, speaker_count)
 
     except HTTPException:
         raise
     except Exception as exc:
         logger.error(f"Diarization failed: {exc}", exc_info=True)
-        if temp_audio_path:
-            background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
         raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        if temp_audio_path:
+            temp_audio_path.unlink(missing_ok=True)
 
 
 @app.post("/diarize/wespeaker", response_model=DiarizationResponse)
@@ -914,7 +935,6 @@ async def diarize_wespeaker(
     audio: UploadFile = File(...),
     min_speakers: Optional[int] = Form(None),
     max_speakers: Optional[int] = Form(None),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Perform speaker diarization on uploaded audio using the WeSpeaker backend.
@@ -933,6 +953,7 @@ async def diarize_wespeaker(
     Raises:
         HTTPException: Raised with status 400 when diarization fails for reasons other than pre-existing HTTP errors.
     """
+    _validate_diarization_speaker_bounds(min_speakers, max_speakers)
     _ = min_speakers
     _ = max_speakers
 
@@ -944,17 +965,16 @@ async def diarize_wespeaker(
             _run_wespeaker_diarization,
             temp_audio_path,
         )
-
-        background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
         return _build_diarization_response(segments, speaker_count)
 
     except HTTPException:
         raise
     except Exception as exc:
         logger.error(f"WeSpeaker diarization failed: {exc}", exc_info=True)
-        if temp_audio_path:
-            background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if temp_audio_path:
+            temp_audio_path.unlink(missing_ok=True)
 
 
 # ============================================================================

@@ -329,10 +329,17 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void NormalizeDiarizationProvider_NemoCapabilityId_ReturnsNemoLocal()
+    public void NormalizeDiarizationProvider_NemoAlias_ReturnsNemoLocal()
     {
-        var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider("nemo");
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(ProviderNames.NemoDiarizationAlias);
         Assert.Equal(ProviderNames.NemoLocal, result);
+    }
+
+    [Fact]
+    public void NormalizeDiarizationProvider_WeSpeakerAlias_ReturnsWeSpeakerLocal()
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(ProviderNames.WeSpeakerDiarizationAlias);
+        Assert.Equal(ProviderNames.WeSpeakerLocal, result);
     }
 
     [Fact]
@@ -353,9 +360,16 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
-    public void NormalizeDiarizationCapabilityProviderId_WeSpeaker_ReturnsWeSpeakerLocal()
+    public void NormalizeDiarizationCapabilityProviderId_NemoAlias_ReturnsNemoLocal()
     {
-        var result = InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId("wespeaker");
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(ProviderNames.NemoDiarizationAlias);
+        Assert.Equal(ProviderNames.NemoLocal, result);
+    }
+
+    [Fact]
+    public void NormalizeDiarizationCapabilityProviderId_WeSpeakerAlias_ReturnsWeSpeakerLocal()
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(ProviderNames.WeSpeakerDiarizationAlias);
         Assert.Equal(ProviderNames.WeSpeakerLocal, result);
     }
 

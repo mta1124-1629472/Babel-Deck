@@ -740,7 +740,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
-    public async Task ContainerizedInferenceClient_DiarizeAsync_UsesWeSpeakerEndpoint()
+    public async Task ContainerizedInferenceClient_DiarizeAsync_UsesWeSpeakerEndpointAndNormalizesSpeakerIds()
     {
         var inputPath = Path.Combine(_ctx.Dir, "wespeaker.wav");
         await File.WriteAllBytesAsync(inputPath, [1, 2, 3, 4]);
@@ -752,18 +752,20 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             {
                 postedPath = request.RequestUri?.AbsolutePath;
                 return Json(HttpStatusCode.OK,
-                    "{\"success\":true,\"speaker_count\":1,\"segments\":[{\"start\":0.0,\"end\":1.0,\"speaker_id\":\"1\"}]}");
+                    "{\"success\":true,\"speaker_count\":2,\"segments\":[{\"start\":0.0,\"end\":1.0,\"speaker_id\":\"1\"},{\"start\":1.0,\"end\":2.0,\"speaker_id\":\"2\"}]}");
             }
 
             return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
         });
 
-        var result = await client.DiarizeAsync(inputPath, "wespeaker");
+        var result = await client.DiarizeAsync(inputPath, ProviderNames.WeSpeakerLocal);
 
         Assert.True(result.Success);
         Assert.Equal("/diarize/wespeaker", postedPath);
-        Assert.Single(result.Segments);
-        Assert.Equal("spk_01", result.Segments[0].SpeakerId);
+        Assert.Equal(2, result.SpeakerCount);
+        Assert.Collection(result.Segments,
+            first => Assert.Equal("spk_00", first.SpeakerId),
+            second => Assert.Equal("spk_01", second.SpeakerId));
     }
 
     [Fact]
@@ -865,6 +867,44 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
+    public async Task ContainerizedProviderReadiness_CheckTtsForExecutionAsync_ReturnsNotReadyWhenProviderNotAdvertised()
+    {
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+            true,
+            true,
+            "12.8",
+            "http://localhost:8000",
+            null,
+            new ContainerCapabilitiesSnapshot(
+                TranscriptionReady: true,
+                TranscriptionDetail: null,
+                TranslationReady: true,
+                TranslationDetail: null,
+                TtsReady: true,
+                TtsDetail: null,
+                TtsProviders: new Dictionary<string, bool>
+                {
+                    [ProviderNames.EdgeTts] = true,
+                },
+                TtsProviderDetails: new Dictionary<string, string>
+                {
+                    [ProviderNames.EdgeTts] = "Edge TTS ready",
+                }))));
+
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+            ContainerizedServiceUrl = "http://localhost:8000",
+            TtsProvider = ProviderNames.Qwen,
+        };
+
+        var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains("not advertised by host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ContainerizedProviderReadiness_CheckDiarizationForExecutionAsync_UsesProviderSpecificReadiness()
     {
         var probe = new ContainerizedServiceProbe(
@@ -916,6 +956,63 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.False(readiness.IsReady);
         Assert.Contains("diarization", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContainerizedProviderReadiness_CheckDiarizationForExecutionAsync_ReturnsNotReadyWhenProviderNotAdvertised()
+    {
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+            true,
+            true,
+            "12.8",
+            "http://localhost:8000",
+            null,
+            new ContainerCapabilitiesSnapshot(
+                TranscriptionReady: true,
+                TranscriptionDetail: null,
+                TranslationReady: true,
+                TranslationDetail: null,
+                TtsReady: true,
+                TtsDetail: null,
+                DiarizationReady: true,
+                DiarizationDetail: null,
+                DiarizationProviders: new Dictionary<string, bool>
+                {
+                    [ProviderNames.NemoLocal] = true,
+                },
+                DiarizationProviderDetails: new Dictionary<string, string>
+                {
+                    [ProviderNames.NemoLocal] = "NeMo ready",
+                },
+                DiarizationDefaultProvider: ProviderNames.NemoLocal))));
+
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+            ContainerizedServiceUrl = "http://localhost:8000",
+            DiarizationProvider = ProviderNames.WeSpeakerLocal,
+        };
+
+        var readiness = await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(settings, ProviderNames.WeSpeakerLocal, probe);
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains("not advertised by host", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FakeDiarizationProvider_RespectsCancellationToken()
+    {
+        var provider = new FakeDiarizationProvider();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            provider.EnsureReadyAsync(new AppSettings(), ct: cts.Token));
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            provider.DiarizeAsync(new DiarizationRequest("audio.wav"), cts.Token));
+
+        Assert.Null(provider.LastRequest);
     }
 
     [Fact]
