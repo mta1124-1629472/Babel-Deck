@@ -116,18 +116,18 @@ public abstract class PythonSubprocessServiceBase
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         CancellationToken cancellationToken = default)
     {
-        await EnsurePythonRuntimeReadyAsync(cancellationToken).ConfigureAwait(false);
-
-        // Guard against path traversal via scriptPrefix
+        // Guard against path traversal via scriptPrefix — fast arg-check before any I/O.
         if (!IsValidScriptPrefix(scriptPrefix))
             throw new ArgumentException(
                 $"scriptPrefix must contain only alphanumeric characters, hyphens, and underscores. Got: {scriptPrefix}",
                 nameof(scriptPrefix));
 
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
-
-        // Check for cancellation before doing any work
+        // Honour cancellation before triggering the (potentially expensive) bootstrap.
         cancellationToken.ThrowIfCancellationRequested();
+
+        await EnsurePythonRuntimeReadyAsync(cancellationToken).ConfigureAwait(false);
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptPrefix}_{Guid.NewGuid():N}.py");
 
         try
         {
