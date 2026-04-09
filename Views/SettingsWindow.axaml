@@ -250,7 +250,7 @@
                                   Content="HDR Passthrough"
                                   Margin="0,8,0,0"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                                   Text="Enables mpv's HDR passthrough path so HDR source video stays HDR through the Windows display pipeline. Requires gpu-next and Windows HDR enabled on the current display." />
+                                   Text="Enables mpv's HDR passthrough path so HDR source video stays HDR through the Windows display pipeline. Requires gpu-next and Windows HDR enabled on at least one connected display." />
                         <TextBlock TextWrapping="Wrap"
                                    Opacity="0.55"
                                    IsVisible="{Binding HasHdrAvailabilityHint}"

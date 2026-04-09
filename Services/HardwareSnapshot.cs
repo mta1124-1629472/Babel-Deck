@@ -344,7 +344,7 @@ public sealed record HardwareSnapshot(
 
             try
             {
-                var enumAdapters1 = GetDxgiMethod<EnumAdapters1Delegate>(factoryPtr, slot: 12);
+                var enumAdapters1 = GetDxgiMethod<EnumAdapters1Delegate>(factoryPtr, slot: VtblSlot_IDXGIFactory1_EnumAdapters1);
 
                 for (uint adapterIndex = 0; ; adapterIndex++)
                 {
@@ -357,7 +357,7 @@ public sealed record HardwareSnapshot(
 
                     try
                     {
-                        var enumOutputs = GetDxgiMethod<EnumOutputsDelegate>(adapterPtr, slot: 7);
+                        var enumOutputs = GetDxgiMethod<EnumOutputsDelegate>(adapterPtr, slot: VtblSlot_IDXGIAdapter_EnumOutputs);
 
                         for (uint outputIndex = 0; ; outputIndex++)
                         {
@@ -412,7 +412,7 @@ public sealed record HardwareSnapshot(
 
             try
             {
-                var getDesc1 = GetDxgiMethod<GetOutputDesc1Delegate>(output6Ptr, slot: 27);
+                var getDesc1 = GetDxgiMethod<GetOutputDesc1Delegate>(output6Ptr, slot: VtblSlot_IDXGIOutput6_GetDesc1);
                 return getDesc1(output6Ptr, out outputDesc) >= 0;
             }
             finally
@@ -500,6 +500,24 @@ public sealed record HardwareSnapshot(
     private static readonly Guid IID_IDXGIFactory1 = new("770aae78-f26f-4dba-a829-253c83d1b387");
     private static readonly Guid IID_IDXGIOutput6 = new("068346e8-aaec-4b84-add7-137f513f77a1");
     private const int DXGI_ERROR_NOT_FOUND = unchecked((int)0x887A0002);
+
+    // COM vtable slot indices — zero-based position in the virtual function table,
+    // counting all inherited slots.  Reference: DXGI interface method ordering in
+    // the Windows SDK headers (dxgi.h / dxgi1_6.h).
+    //
+    //   IDXGIFactory1 : IDXGIFactory(7-11) : IDXGIObject(3-6) : IUnknown(0-2)
+    //     slot 12 → IDXGIFactory1::EnumAdapters1
+    private const int VtblSlot_IDXGIFactory1_EnumAdapters1 = 12;
+    //
+    //   IDXGIAdapter : IDXGIObject(3-6) : IUnknown(0-2)
+    //     slot  7 → IDXGIAdapter::EnumOutputs
+    private const int VtblSlot_IDXGIAdapter_EnumOutputs = 7;
+    //
+    //   IDXGIOutput6 : IDXGIOutput5(26) : IDXGIOutput4(25) : IDXGIOutput3(24)
+    //                : IDXGIOutput2(23) : IDXGIOutput1(19-22) : IDXGIOutput(7-18)
+    //                : IDXGIObject(3-6) : IUnknown(0-2)
+    //     slot 27 → IDXGIOutput6::GetDesc1
+    private const int VtblSlot_IDXGIOutput6_GetDesc1 = 27;
 
     [DllImport("dxgi.dll", ExactSpelling = true)]
     private static extern int CreateDXGIFactory1(in Guid riid, out IntPtr ppFactory);
