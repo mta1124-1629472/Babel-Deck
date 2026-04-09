@@ -150,7 +150,9 @@ public sealed class ArtifactContractTests : IDisposable
             return;
 
         var outputPath = Path.Combine(_dir, "stdout.json");
-        var service = new TestPythonSubprocessService(Path.Combine(_dir, "test.log"));
+        var service = new TestPythonSubprocessService(
+            Path.Combine(_dir, "test.log"),
+            DependencyLocator.FindPython()!);
         var text = "line 1\n\"quoted\" \\ backslash";
         var script = """
 import json
@@ -181,8 +183,8 @@ print("ok")
 
     private sealed class TestPythonSubprocessService : PythonSubprocessServiceBase
     {
-        public TestPythonSubprocessService(string logPath)
-            : base(new AppLog(logPath))
+        public TestPythonSubprocessService(string logPath, string pythonPath)
+            : base(new AppLog(logPath), pythonPath)
         {
         }
 

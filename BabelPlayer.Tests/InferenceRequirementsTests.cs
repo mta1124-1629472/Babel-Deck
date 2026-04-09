@@ -14,6 +14,24 @@ namespace BabelPlayer.Tests;
 /// </summary>
 public sealed class InferenceRequirementsTests
 {
+    private static string FindRepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        for (var i = 0; i < 8; i++)
+        {
+            if (File.Exists(Path.Combine(dir, "BabelPlayer.csproj")))
+                return dir;
+
+            var parent = Directory.GetParent(dir)?.FullName;
+            if (parent is null)
+                break;
+            dir = parent;
+        }
+
+        throw new InvalidOperationException(
+            $"Could not locate repo root containing BabelPlayer.csproj. Searched from: {AppContext.BaseDirectory}");
+    }
+
     private static string FindInferenceDirectory()
     {
         // When the test project is built, the parent project's inference/ files are copied
@@ -45,6 +63,9 @@ public sealed class InferenceRequirementsTests
             .Select(l => l.Trim())
             .Where(l => l.Length > 0 && !l.StartsWith('#') && !l.StartsWith('-'))
             .ToArray();
+
+    private static string ReadProviderSource(string relativePath) =>
+        File.ReadAllText(Path.Combine(FindRepoRoot(), relativePath));
 
     // ── gpu-requirements.txt ────────────────────────────────────────────────
 
@@ -124,6 +145,33 @@ public sealed class InferenceRequirementsTests
         // Should specify >=2.7.0 per the PR diff
         Assert.Contains(">=", nemoLine);
         Assert.Contains("2.7", nemoLine);
+    }
+
+    // ── requirements.txt (managed CPU runtime) ──────────────────────────────
+
+    [Theory]
+    [InlineData("edge-tts==7.2.8")]
+    [InlineData("ctranslate2==4.7.1")]
+    [InlineData("transformers==4.57.3")]
+    [InlineData("sentencepiece==0.2.1")]
+    [InlineData("faster-whisper==1.2.1")]
+    public void CpuRequirements_ContainsPinnedCpuSubprocessDependencies(string expectedLine)
+    {
+        var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
+        var lines = ReadRequirementsLines(requirementsPath);
+
+        Assert.Contains(expectedLine, lines);
+    }
+
+    [Theory]
+    [InlineData("Services/EdgeTtsProvider.cs")]
+    [InlineData("Services/CTranslate2TranslationProvider.cs")]
+    [InlineData("Services/FasterWhisperTranscriptionProvider.cs")]
+    public void CpuSubprocessProviders_DoNotInlinePipInstall(string relativePath)
+    {
+        var source = ReadProviderSource(relativePath);
+
+        Assert.DoesNotContain("pip install", source, StringComparison.OrdinalIgnoreCase);
     }
 
     // ── gpu-constraints.txt ─────────────────────────────────────────────────

@@ -12,7 +12,7 @@ namespace Babel.Player.Services;
 /// Base class for services that execute inference work by spawning Python subprocesses.
 ///
 /// Eliminates boilerplate shared by all five AI pipeline services:
-///   - Python executable discovery via <see cref="DependencyLocator"/>
+///   - Managed CPU runtime bootstrap and Python executable resolution
 ///   - Temp-script write → process spawn → stdout/stderr capture → cleanup
 ///   - Async wait with <see cref="CancellationToken"/> support
 ///   - Uniform failure logging and exception throwing
@@ -27,13 +27,28 @@ public abstract class PythonSubprocessServiceBase
 
     protected readonly AppLog Log;
     protected readonly string PythonPath;
+    private readonly ManagedCpuRuntimeManager? _cpuRuntimeManager;
 
     protected PythonSubprocessServiceBase(AppLog log)
+        : this(log, new ManagedCpuRuntimeManager(log))
     {
-        Log        = log;
-        PythonPath = DependencyLocator.FindPython()
-            ?? throw new InvalidOperationException(
-                "Python not found. Expected bundled python next to the app or python on PATH.");
+    }
+
+    protected PythonSubprocessServiceBase(
+        AppLog log,
+        ManagedCpuRuntimeManager cpuRuntimeManager)
+        : this(log, cpuRuntimeManager.GetPythonExecutablePath(), cpuRuntimeManager)
+    {
+    }
+
+    protected PythonSubprocessServiceBase(
+        AppLog log,
+        string pythonPath,
+        ManagedCpuRuntimeManager? cpuRuntimeManager = null)
+    {
+        Log = log;
+        PythonPath = pythonPath;
+        _cpuRuntimeManager = cpuRuntimeManager;
     }
 
     /// <summary>Captures the output of a single Python subprocess invocation.</summary>
@@ -80,6 +95,8 @@ public abstract class PythonSubprocessServiceBase
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         CancellationToken cancellationToken = default)
     {
+        await EnsurePythonRuntimeReadyAsync(cancellationToken).ConfigureAwait(false);
+
         // Guard against path traversal via scriptPrefix
         if (!IsValidScriptPrefix(scriptPrefix))
             throw new ArgumentException(
@@ -176,6 +193,30 @@ public abstract class PythonSubprocessServiceBase
         {
             if (File.Exists(scriptPath))
                 File.Delete(scriptPath);
+        }
+    }
+
+    private async Task EnsurePythonRuntimeReadyAsync(CancellationToken cancellationToken)
+    {
+        if (_cpuRuntimeManager is null)
+        {
+            if (string.IsNullOrWhiteSpace(PythonPath) || !File.Exists(PythonPath))
+            {
+                throw new InvalidOperationException(
+                    "Python subprocess runtime is not ready. A valid test Python path must be provided.");
+            }
+
+            return;
+        }
+
+        await _cpuRuntimeManager.EnsureInstalledAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if (_cpuRuntimeManager.State != ManagedCpuState.Ready || !File.Exists(PythonPath))
+        {
+            var failureReason = _cpuRuntimeManager.FailureReason
+                ?? $"Expected managed CPU Python at {PythonPath}.";
+            throw new InvalidOperationException(
+                $"Managed CPU runtime is not ready for subprocess providers. {failureReason}");
         }
     }
 
