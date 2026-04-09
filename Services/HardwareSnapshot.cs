@@ -29,7 +29,6 @@ public sealed record HardwareSnapshot(
     bool IsRtxCapable,
     bool IsVsrDriverSufficient,
     string? NvidiaDriverVersion,
-    bool IsHdrDisplayActive,
     string? GpuComputeCapability = null)
 {
     /// <summary>Placeholder shown while background detection is still running.</summary>
@@ -45,7 +44,6 @@ public sealed record HardwareSnapshot(
         IsRtxCapable: false,
         IsVsrDriverSufficient: false,
         NvidiaDriverVersion: null,
-        IsHdrDisplayActive: false,
         GpuComputeCapability: null);
 
     // ── Formatted display lines ────────────────────────────────────────────────
@@ -158,7 +156,6 @@ public sealed record HardwareSnapshot(
         var npuLabel                      = InferNpu(cpuName);
         var (driverVer, isVsrSufficient)  = DetectNvidiaDriver();
         var isRtx                         = IsRtxGpu(gpuName);
-        var isHdrDisplayActive            = DetectActiveHdrDisplay();
         var gpuComputeCapability          = DetectGpuComputeCapability(hasCuda, findPython);
 
         return new HardwareSnapshot(
@@ -173,7 +170,6 @@ public sealed record HardwareSnapshot(
             IsRtxCapable: isRtx,
             IsVsrDriverSufficient: isVsrSufficient,
             NvidiaDriverVersion: driverVer,
-            IsHdrDisplayActive: isHdrDisplayActive,
             GpuComputeCapability: gpuComputeCapability);
     }
 
@@ -330,7 +326,7 @@ public sealed record HardwareSnapshot(
 
     // ── Active HDR display (Windows-only) ─────────────────────────────────────
 
-    private static bool DetectActiveHdrDisplay()
+    public static bool QueryActiveHdrDisplay()
     {
         if (!OperatingSystem.IsWindows())
             return false;
@@ -340,7 +336,10 @@ public sealed record HardwareSnapshot(
             var factoryIid = IID_IDXGIFactory1;
             var hr = CreateDXGIFactory1(in factoryIid, out var factoryPtr);
             if (hr < 0 || factoryPtr == IntPtr.Zero)
+            {
+                Debug.WriteLine($"HDR detection: CreateDXGIFactory1 failed with HRESULT 0x{hr:X8}.");
                 return false;
+            }
 
             try
             {
@@ -394,7 +393,10 @@ public sealed record HardwareSnapshot(
                 Marshal.Release(factoryPtr);
             }
         }
-        catch { /* fall through */ }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"HDR detection: DXGI query failed ({ex.Message}).");
+        }
 
         return false;
     }
@@ -408,20 +410,27 @@ public sealed record HardwareSnapshot(
             var output6Iid = IID_IDXGIOutput6;
             var hr = Marshal.QueryInterface(outputPtr, in output6Iid, out var output6Ptr);
             if (hr < 0 || output6Ptr == IntPtr.Zero)
+            {
+                Debug.WriteLine($"HDR detection: IDXGIOutput6 query failed with HRESULT 0x{hr:X8}.");
                 return false;
+            }
 
             try
             {
                 var getDesc1 = GetDxgiMethod<GetOutputDesc1Delegate>(output6Ptr, slot: VtblSlot_IDXGIOutput6_GetDesc1);
-                return getDesc1(output6Ptr, out outputDesc) >= 0;
+                hr = getDesc1(output6Ptr, out outputDesc);
+                if (hr < 0)
+                    Debug.WriteLine($"HDR detection: IDXGIOutput6.GetDesc1 failed with HRESULT 0x{hr:X8}.");
+                return hr >= 0;
             }
             finally
             {
                 Marshal.Release(output6Ptr);
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"HDR detection: output descriptor query failed ({ex.Message}).");
             return false;
         }
     }

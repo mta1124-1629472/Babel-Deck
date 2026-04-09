@@ -116,8 +116,8 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         SetOption("hwdec",   _options.HwdecMode);
         SetOption("gpu-api", _options.GpuApi);
 
-        // ── HDR passthrough options (gpu-next + HDR display required) ─────────
-        if (_options.UseGpuNext && _options.HdrEnabled)
+        // ── HDR passthrough options (gpu-next + active HDR display required) ──
+        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
         {
             // Request mpv's HDR-capable output path. Driver-level Auto HDR remains
             // separate and cannot be controlled from this playback path.
@@ -148,7 +148,7 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         _isPaused = true;
         _hasEnded = false;
 
-        if (_options.UseGpuNext && _options.HdrEnabled)
+        if (_options.UseGpuNext && _options.HdrEnabled && _options.AllowHdrPassthrough)
         {
             _log?.Info(
                 $"Configured mpv HDR passthrough: gpu-next={_options.UseGpuNext}, " +
@@ -623,7 +623,9 @@ public class LibMpvEmbeddedTransport : IMediaTransport, IDisposable
         if (monitorWidth <= 0 || monitorHeight <= 0)
             return VsrFilterPlan.Skip("monitor-size-unavailable", videoWidth, videoHeight, displayWidth, displayHeight, monitorWidth, monitorHeight, hwPixelFormat);
 
-        double scaleExact = Math.Max(monitorWidth, monitorHeight) / (double)Math.Max(videoWidth, videoHeight);
+        double scaleExact = Math.Min(
+            monitorWidth / (double)videoWidth,
+            monitorHeight / (double)videoHeight);
         double scale = Math.Floor(scaleExact * 10.0) / 10.0;
 
         if (scale <= 1.0)

@@ -24,6 +24,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private readonly ApiKeyStore? _apiKeyStore;
     private readonly Window _ownerWindow;
     private readonly IContainerizedInferenceManager _containerizedManager;
+    private readonly Func<bool> _hdrDisplayStateProvider;
     private CancellationTokenSource? _restartCts;
 
     public SettingsViewModel(
@@ -32,7 +33,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         Window ownerWindow,
         ModelsTabViewModel modelsTab,
         IContainerizedInferenceManager? containerizedManager = null,
-        ApiKeyStore? apiKeyStore = null)
+        ApiKeyStore? apiKeyStore = null,
+        Func<bool>? hdrDisplayStateProvider = null)
     {
         _settingsService       = settingsService;
         _coordinator           = coordinator;
@@ -40,6 +42,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         ModelsTab              = modelsTab;
         _containerizedManager  = containerizedManager ?? NullInferenceManager.Instance;
         _apiKeyStore           = apiKeyStore;
+        _hdrDisplayStateProvider = hdrDisplayStateProvider ?? HardwareSnapshot.QueryActiveHdrDisplay;
 
         var current = _coordinator.CurrentSettings;
         SelectedVoice          = current.TtsVoice;
@@ -247,11 +250,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public string VsrFilterText => _coordinator.VideoEnhancementDiagnostics.LastFilterText;
 
     /// <summary>True when Windows HDR is currently active for at least one desktop output.</summary>
-    public bool IsHdrDisplayActive => _coordinator.HardwareSnapshot.IsHdrDisplayActive;
+    public bool IsHdrDisplayActive => _hdrDisplayStateProvider();
 
     /// <summary>
-    /// HDR passthrough is only available when gpu-next is enabled and Windows HDR
-    /// is currently active on the display pipeline.
+    /// HDR passthrough requires both gpu-next and an active Windows HDR display pipeline.
     /// </summary>
     public bool HdrSettingsAvailable => VideoUseGpuNext && IsHdrDisplayActive;
 
@@ -390,13 +392,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(VsrFilterText));
         }
 
-        if (e.PropertyName == nameof(SessionWorkflowCoordinator.HardwareSnapshot))
-        {
-            OnPropertyChanged(nameof(IsHdrDisplayActive));
-            OnPropertyChanged(nameof(HdrSettingsAvailable));
-            OnPropertyChanged(nameof(HdrAvailabilityHintText));
-            OnPropertyChanged(nameof(HasHdrAvailabilityHint));
-        }
+    }
+
+    internal void RefreshHdrDisplayState()
+    {
+        OnPropertyChanged(nameof(IsHdrDisplayActive));
+        OnPropertyChanged(nameof(HdrSettingsAvailable));
+        OnPropertyChanged(nameof(HdrAvailabilityHintText));
+        OnPropertyChanged(nameof(HasHdrAvailabilityHint));
     }
 
     // ── Null-object for tests / design-time ───────────────────────────────────

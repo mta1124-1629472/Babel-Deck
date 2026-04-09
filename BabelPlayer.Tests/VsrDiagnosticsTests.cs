@@ -81,10 +81,10 @@ public sealed class VsrDiagnosticsTests : IDisposable
         var plan = LibMpvEmbeddedTransport.EvaluateVsrFilterPlan(
             videoWidth: 1280,
             videoHeight: 720,
-            displayWidth: 1538,
-            displayHeight: 789,
-            monitorWidth: 1538,
-            monitorHeight: 789,
+            displayWidth: 1600,
+            displayHeight: 900,
+            monitorWidth: 1600,
+            monitorHeight: 900,
             hwPixelFormat: "nv12");
 
         var snapshot = LibMpvEmbeddedTransport.CreateVsrDiagnosticSnapshot(
@@ -102,8 +102,8 @@ public sealed class VsrDiagnosticsTests : IDisposable
         Assert.Equal("libmpv rejected the vf add command", snapshot.BackendResultLabel);
         Assert.Equal("libmpv rejected the vf add command", snapshot.ReasonText);
         Assert.Contains("rejected", snapshot.PlaybackStatusText, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1538, snapshot.MonitorWidth);
-        Assert.Equal(789, snapshot.MonitorHeight);
+        Assert.Equal(1600, snapshot.MonitorWidth);
+        Assert.Equal(900, snapshot.MonitorHeight);
     }
 
     [Fact]
@@ -130,10 +130,10 @@ public sealed class VsrDiagnosticsTests : IDisposable
             LibMpvEmbeddedTransport.EvaluateVsrFilterPlan(
                 videoWidth: 1280,
                 videoHeight: 720,
-                displayWidth: 1538,
-                displayHeight: 789,
-                monitorWidth: 1538,
-                monitorHeight: 789,
+                displayWidth: 1600,
+                displayHeight: 900,
+                monitorWidth: 1600,
+                monitorHeight: 900,
                 hwPixelFormat: "nv12"),
             backendResultCode: -12,
             videoOutput: "gpu-next",
@@ -160,14 +160,14 @@ public sealed class VsrDiagnosticsTests : IDisposable
         coordinator.HardwareSnapshot = CreateHardwareSnapshot(
             isRtxCapable: false,
             isVsrDriverSufficient: false,
-            nvidiaDriverVersion: null,
-            isHdrDisplayActive: true);
+            nvidiaDriverVersion: null);
 
         using var settingsVm = new SettingsViewModel(
             new SettingsService(_settingsPath, _log),
             coordinator,
             (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
-            new ModelsTabViewModel(new ModelDownloader(_log), coordinator));
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () => true);
 
         Assert.True(settingsVm.IsHdrDisplayActive);
         Assert.True(settingsVm.HdrSettingsAvailable);
@@ -186,14 +186,14 @@ public sealed class VsrDiagnosticsTests : IDisposable
         coordinator.HardwareSnapshot = CreateHardwareSnapshot(
             isRtxCapable: false,
             isVsrDriverSufficient: false,
-            nvidiaDriverVersion: null,
-            isHdrDisplayActive: false);
+            nvidiaDriverVersion: null);
 
         using var settingsVm = new SettingsViewModel(
             new SettingsService(_settingsPath, _log),
             coordinator,
             (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
-            new ModelsTabViewModel(new ModelDownloader(_log), coordinator));
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () => false);
 
         Assert.False(settingsVm.IsHdrDisplayActive);
         Assert.False(settingsVm.HdrSettingsAvailable);
@@ -214,14 +214,14 @@ public sealed class VsrDiagnosticsTests : IDisposable
         coordinator.HardwareSnapshot = CreateHardwareSnapshot(
             isRtxCapable: false,
             isVsrDriverSufficient: false,
-            nvidiaDriverVersion: null,
-            isHdrDisplayActive: true);
+            nvidiaDriverVersion: null);
 
         using var settingsVm = new SettingsViewModel(
             new SettingsService(_settingsPath, _log),
             coordinator,
             (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
-            new ModelsTabViewModel(new ModelDownloader(_log), coordinator));
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () => true);
 
         Assert.True(settingsVm.IsHdrDisplayActive);
         Assert.False(settingsVm.HdrSettingsAvailable);
@@ -230,25 +230,24 @@ public sealed class VsrDiagnosticsTests : IDisposable
     }
 
     [Fact]
-    public void HdrPassthrough_RaisesPropertyChangesWhenHardwareSnapshotChanges()
+    public void HdrPassthrough_RaisesPropertyChangesWhenDisplayStateIsRefreshed()
     {
         var coordinator = CreateCoordinator(CreateSettings());
         coordinator.Initialize();
+        var isHdrDisplayActive = false;
 
         using var settingsVm = new SettingsViewModel(
             new SettingsService(_settingsPath, _log),
             coordinator,
             (Window)RuntimeHelpers.GetUninitializedObject(typeof(Window)),
-            new ModelsTabViewModel(new ModelDownloader(_log), coordinator));
+            new ModelsTabViewModel(new ModelDownloader(_log), coordinator),
+            hdrDisplayStateProvider: () => isHdrDisplayActive);
 
         var changedProperties = new List<string>();
         settingsVm.PropertyChanged += CaptureChange;
 
-        coordinator.HardwareSnapshot = CreateHardwareSnapshot(
-            isRtxCapable: false,
-            isVsrDriverSufficient: false,
-            nvidiaDriverVersion: null,
-            isHdrDisplayActive: true);
+        isHdrDisplayActive = true;
+        settingsVm.RefreshHdrDisplayState();
 
         settingsVm.PropertyChanged -= CaptureChange;
 
@@ -300,8 +299,7 @@ public sealed class VsrDiagnosticsTests : IDisposable
     private static HardwareSnapshot CreateHardwareSnapshot(
         bool isRtxCapable,
         bool isVsrDriverSufficient,
-        string? nvidiaDriverVersion,
-        bool isHdrDisplayActive = false) =>
+        string? nvidiaDriverVersion) =>
         new(
             IsDetecting: false,
             CpuName: "Fake CPU",
@@ -320,7 +318,6 @@ public sealed class VsrDiagnosticsTests : IDisposable
             IsRtxCapable: isRtxCapable,
             IsVsrDriverSufficient: isVsrDriverSufficient,
             NvidiaDriverVersion: nvidiaDriverVersion,
-            IsHdrDisplayActive: isHdrDisplayActive,
             GpuComputeCapability: "12.0");
 
     private sealed class FakeTranscriptionRegistry : ITranscriptionRegistry
