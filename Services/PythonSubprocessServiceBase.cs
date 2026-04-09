@@ -46,6 +46,25 @@ public abstract class PythonSubprocessServiceBase
         string pythonPath,
         ManagedCpuRuntimeManager? cpuRuntimeManager = null)
     {
+        if (cpuRuntimeManager is not null)
+        {
+            var managedPythonPath = cpuRuntimeManager.GetPythonExecutablePath();
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            if (!string.Equals(
+                    Path.GetFullPath(pythonPath),
+                    Path.GetFullPath(managedPythonPath),
+                    comparison))
+            {
+                throw new ArgumentException(
+                    $"The supplied pythonPath ('{pythonPath}') must match the managed runtime Python executable path " +
+                    $"('{managedPythonPath}') when a {nameof(ManagedCpuRuntimeManager)} is provided.",
+                    nameof(pythonPath));
+            }
+        }
+
         Log = log;
         PythonPath = pythonPath;
         _cpuRuntimeManager = cpuRuntimeManager;
@@ -208,6 +227,10 @@ public abstract class PythonSubprocessServiceBase
 
             return;
         }
+
+        // Fast path: skip bootstrap/hash checks when the runtime is already ready.
+        if (_cpuRuntimeManager.State == ManagedCpuState.Ready && File.Exists(PythonPath))
+            return;
 
         await _cpuRuntimeManager.EnsureInstalledAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
 

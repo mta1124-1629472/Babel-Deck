@@ -155,6 +155,7 @@ public sealed class InferenceRequirementsTests
     [InlineData("transformers==4.57.3")]
     [InlineData("sentencepiece==0.2.1")]
     [InlineData("faster-whisper==1.2.1")]
+    [InlineData("googletrans==4.0.0rc1")]
     public void CpuRequirements_ContainsPinnedCpuSubprocessDependencies(string expectedLine)
     {
         var requirementsPath = Path.Combine(FindInferenceDirectory(), "requirements.txt");
@@ -167,11 +168,16 @@ public sealed class InferenceRequirementsTests
     [InlineData("Services/EdgeTtsProvider.cs")]
     [InlineData("Services/CTranslate2TranslationProvider.cs")]
     [InlineData("Services/FasterWhisperTranscriptionProvider.cs")]
-    public void CpuSubprocessProviders_DoNotInlinePipInstall(string relativePath)
+    [InlineData("Services/GoogleTranslationProvider.cs")]
+    [InlineData("Services/NllbTranslationProvider.cs")]
+    public void CpuManagedPythonSubprocessProviders_DoNotInlinePipInstall(string relativePath)
     {
         var source = ReadProviderSource(relativePath);
 
+        // Guard against shell-style: pip install <pkg>
         Assert.DoesNotContain("pip install", source, StringComparison.OrdinalIgnoreCase);
+        // Guard against subprocess list-style: ['-m', 'pip', 'install', ...]
+        Assert.DoesNotContain("'-m', 'pip'", source, StringComparison.Ordinal);
     }
 
     // ── gpu-constraints.txt ─────────────────────────────────────────────────

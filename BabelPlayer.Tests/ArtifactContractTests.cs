@@ -146,13 +146,14 @@ public sealed class ArtifactContractTests : IDisposable
     [Fact]
     public async Task RunPythonScriptAsync_ArgumentListAndStdinPreserveUserText()
     {
-        if (DependencyLocator.FindPython() is null)
+        var outputPath = Path.Combine(_dir, "stdout.json");
+        var python = DependencyLocator.FindPython();
+        if (python is null)
             return;
 
-        var outputPath = Path.Combine(_dir, "stdout.json");
         var service = new TestPythonSubprocessService(
             Path.Combine(_dir, "test.log"),
-            DependencyLocator.FindPython()!);
+            python);
         var text = "line 1\n\"quoted\" \\ backslash";
         var script = """
 import json
