@@ -867,32 +867,35 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     [Fact]
     public async Task ContainerizedProviderReadiness_CheckDiarizationForExecutionAsync_UsesProviderSpecificReadiness()
     {
-        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
-            true,
-            true,
-            "12.8",
-            "http://localhost:8000",
-            null,
-            new ContainerCapabilitiesSnapshot(
-                TranscriptionReady: true,
-                TranscriptionDetail: null,
-                TranslationReady: true,
-                TranslationDetail: null,
-                TtsReady: true,
-                TtsDetail: null,
-                DiarizationReady: true,
-                DiarizationDetail: "Diarization available",
-                DiarizationProviders: new Dictionary<string, bool>
-                {
-                    [ProviderNames.NemoLocal] = true,
-                    [ProviderNames.WeSpeakerLocal] = false,
-                },
-                DiarizationProviderDetails: new Dictionary<string, string>
-                {
-                    [ProviderNames.NemoLocal] = "NeMo ready",
-                    [ProviderNames.WeSpeakerLocal] = "CPU fallback warming",
-                },
-                DiarizationDefaultProvider: ProviderNames.NemoLocal))));
+        var probe = new ContainerizedServiceProbe(
+            _ctx.Log,
+            (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+                true,
+                true,
+                "12.8",
+                "http://localhost:8000",
+                null,
+                new ContainerCapabilitiesSnapshot(
+                    TranscriptionReady: true,
+                    TranscriptionDetail: null,
+                    TranslationReady: true,
+                    TranslationDetail: null,
+                    TtsReady: true,
+                    TtsDetail: null,
+                    DiarizationReady: true,
+                    DiarizationDetail: "Diarization available",
+                    DiarizationProviders: new Dictionary<string, bool>
+                    {
+                        [ProviderNames.NemoLocal] = true,
+                        [ProviderNames.WeSpeakerLocal] = false,
+                    },
+                    DiarizationProviderDetails: new Dictionary<string, string>
+                    {
+                        [ProviderNames.NemoLocal] = "NeMo ready",
+                        [ProviderNames.WeSpeakerLocal] = "CPU fallback warming",
+                    },
+                    DiarizationDefaultProvider: ProviderNames.NemoLocal))),
+            retryDelay: TimeSpan.FromMilliseconds(10));
 
         var settings = new AppSettings
         {
@@ -904,7 +907,11 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         var readiness = await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
             settings,
             ProviderNames.WeSpeakerLocal,
-            probe);
+            probe,
+            new ContainerizedProviderReadiness.ExecutionWaitOptions(
+                ExecutionProbeBudget: TimeSpan.FromMilliseconds(40),
+                CapabilityWarmupBudget: TimeSpan.FromMilliseconds(80),
+                CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(10)));
 
         Assert.False(readiness.IsReady);
         Assert.Contains("diarization", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
@@ -917,28 +924,31 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         // Simulates Qwen3-TTS loading: first probe returns "warming up" (active warmup),
         // second probe returns ready. Expects the method to retry and ultimately return ready.
         var callCount = 0;
-        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) =>
-        {
-            callCount++;
-            var ready = callCount >= 2;
-            return Task.FromResult(new ContainerHealthStatus(
-                true,
-                true,
-                "12.8",
-                "http://localhost:8000",
-                null,
-                new ContainerCapabilitiesSnapshot(
-                    TranscriptionReady: true,
-                    TranscriptionDetail: null,
-                    TranslationReady: true,
-                    TranslationDetail: null,
-                    TtsReady: ready,
-                    TtsDetail: ready ? null : "Qwen3-TTS warming up",
-                    TtsProviders: new Dictionary<string, bool> { [ProviderNames.Qwen] = ready },
-                    TtsProviderDetails: ready
-                        ? new Dictionary<string, string>()
-                        : new Dictionary<string, string> { [ProviderNames.Qwen] = "Qwen3-TTS warming up" })));
-        });
+        var probe = new ContainerizedServiceProbe(
+            _ctx.Log,
+            (_, _, _) =>
+            {
+                callCount++;
+                var ready = callCount >= 2;
+                return Task.FromResult(new ContainerHealthStatus(
+                    true,
+                    true,
+                    "12.8",
+                    "http://localhost:8000",
+                    null,
+                    new ContainerCapabilitiesSnapshot(
+                        TranscriptionReady: true,
+                        TranscriptionDetail: null,
+                        TranslationReady: true,
+                        TranslationDetail: null,
+                        TtsReady: ready,
+                        TtsDetail: ready ? null : "Qwen3-TTS warming up",
+                        TtsProviders: new Dictionary<string, bool> { [ProviderNames.Qwen] = ready },
+                        TtsProviderDetails: ready
+                            ? new Dictionary<string, string>()
+                            : new Dictionary<string, string> { [ProviderNames.Qwen] = "Qwen3-TTS warming up" })));
+            },
+            retryDelay: TimeSpan.FromMilliseconds(10));
 
         var settings = new AppSettings
         {
@@ -947,7 +957,13 @@ public sealed class ContainerizedProvidersTests() : IDisposable
             TtsProvider = ProviderNames.Qwen,
         };
 
-        var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
+        var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(
+            settings,
+            probe,
+            new ContainerizedProviderReadiness.ExecutionWaitOptions(
+                ExecutionProbeBudget: TimeSpan.FromMilliseconds(100),
+                CapabilityWarmupBudget: TimeSpan.FromMilliseconds(250),
+                CapabilityWarmupRetryDelay: TimeSpan.FromMilliseconds(10)));
 
         Assert.True(readiness.IsReady);
         Assert.Null(readiness.BlockingReason);
