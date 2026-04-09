@@ -38,6 +38,8 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private CancellationTokenSource? _providerReadinessRefreshCts;
     private int _providerReadinessRefreshVersion;
     private ProviderSelectionSnapshot? _lastQueuedProviderReadinessSnapshot;
+    private CancellationTokenSource? _autoSpeakerDetectionRefreshCts;
+    private int _autoSpeakerDetectionRefreshVersion;
 
     [ObservableProperty]
     private ObservableCollection<WorkflowSegmentState> _segments = [];
@@ -1108,6 +1110,7 @@ partial void OnSourcePositionMsChanged(double value)
     {
         if (string.IsNullOrWhiteSpace(DiarizationProvider))
         {
+            CancelAutoSpeakerDetectionRefresh();
             AutoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
             return;
         }
@@ -1115,32 +1118,15 @@ partial void OnSourcePositionMsChanged(double value)
         var registry = _coordinator.DiarizationRegistry;
         if (registry is null)
         {
+            CancelAutoSpeakerDetectionRefresh();
             AutoSpeakerDetectionStatus = "⚠ Speaker diarization is unavailable in this build. Manual mapping remains available.";
             return;
         }
 
-        try
-        {
-            var readiness = registry.CheckReadiness(DiarizationProvider, _coordinator.CurrentSettings, _coordinator.KeyStore);
-            var providerLabel = registry.GetAvailableProviders()
-                .FirstOrDefault(provider => string.Equals(provider.Id, DiarizationProvider, StringComparison.Ordinal))
-                ?.DisplayName ?? DiarizationProvider;
-            AutoSpeakerDetectionStatus = readiness.IsReady
-                ? $"Speaker diarization is enabled via {providerLabel}."
-                : $"⚠ {providerLabel} is not ready: {readiness.BlockingReason}. Manual mapping will still work.";
-        }
-        catch (Exception ex)
-        {
-            AutoSpeakerDetectionStatus = $"⚠ Speaker diarization readiness check failed: {ex.Message}. Manual mapping will still work.";
-        }
+        var providerLabel = ResolveDiarizationProviderLabel();
+        AutoSpeakerDetectionStatus = $"Checking {providerLabel} readiness…";
+        QueueAutoSpeakerDetectionStatusRefresh(registry, DiarizationProvider, providerLabel);
     }
-
-    /// <summary>
-    /// Get the human-readable label for the currently selected diarization provider.
-    /// </summary>
-    /// <returns>
-    /// The registered provider's display name when a matching provider exists; the raw <see cref="DiarizationProvider"/> identifier when set but not found in the registry; or "speaker" when no provider is selected.
-    /// </returns>
     private string ResolveDiarizationProviderLabel()
     {
         if (string.IsNullOrWhiteSpace(DiarizationProvider))
@@ -1160,8 +1146,6 @@ partial void OnSourcePositionMsChanged(double value)
     /// <remarks>
     /// The list always starts with an empty entry. When a coordinator diarization registry is available,
     /// each implemented provider's Id is appended (duplicates and empty Ids are ignored).
-    /// If no providers were added besides the empty entry, two local provider identifiers
-    /// (NemoLocal and WeSpeakerLocal) are appended as fallbacks.
     /// The resulting collection is assigned to <see cref="DiarizationProviderOptions"/>.
     /// </remarks>
     private void RebuildDiarizationProviderOptions()
@@ -1183,20 +1167,77 @@ partial void OnSourcePositionMsChanged(double value)
             }
         }
 
-        if (options.Count == 1)
-        {
-            options.Add(ProviderNames.NemoLocal);
-            options.Add(ProviderNames.WeSpeakerLocal);
-        }
-
         DiarizationProviderOptions = options;
     }
 
-    /// <summary>
-    /// Validates and normalizes a diarization provider identifier from user input.
-    /// </summary>
-    /// <param name="value">Candidate provider identifier; may be null or whitespace.</param>
-    /// <returns>The trimmed provider identifier if it is present in <c>DiarizationProviderOptions</c>; otherwise an empty string.</returns>
+    private void QueueAutoSpeakerDetectionStatusRefresh(
+        IDiarizationRegistry registry,
+        string providerId,
+        string providerLabel)
+    {
+        var version = Interlocked.Increment(ref _autoSpeakerDetectionRefreshVersion);
+        var cts = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _autoSpeakerDetectionRefreshCts, cts);
+        previous?.Cancel();
+        previous?.Dispose();
+
+        _ = RefreshAutoSpeakerDetectionStatusAsync(
+            registry,
+            providerId,
+            providerLabel,
+            _coordinator.CurrentSettings,
+            _coordinator.KeyStore,
+            version,
+            cts.Token);
+    }
+
+    private async Task RefreshAutoSpeakerDetectionStatusAsync(
+        IDiarizationRegistry registry,
+        string providerId,
+        string providerLabel,
+        Services.Settings.AppSettings settings,
+        ApiKeyStore? keyStore,
+        int version,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var readiness = await Task.Run(
+                () => registry.CheckReadiness(providerId, settings, keyStore),
+                cancellationToken);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (version != _autoSpeakerDetectionRefreshVersion || cancellationToken.IsCancellationRequested)
+                    return;
+
+                AutoSpeakerDetectionStatus = readiness.IsReady
+                    ? $"Speaker diarization is enabled via {providerLabel}."
+                    : $"⚠ {providerLabel} is not ready: {readiness.BlockingReason}. Manual mapping will still work.";
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer settings refresh.
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (version != _autoSpeakerDetectionRefreshVersion || cancellationToken.IsCancellationRequested)
+                    return;
+
+                AutoSpeakerDetectionStatus = $"⚠ Speaker diarization readiness check failed: {ex.Message}. Manual mapping will still work.";
+            });
+        }
+    }
+
+    private void CancelAutoSpeakerDetectionRefresh()
+    {
+        _autoSpeakerDetectionRefreshCts?.Cancel();
+        _autoSpeakerDetectionRefreshCts?.Dispose();
+        _autoSpeakerDetectionRefreshCts = null;
+    }
     private string NormalizeDiarizationProviderSelection(string? value)
     {
         var normalized = string.IsNullOrWhiteSpace(value)
@@ -2244,6 +2285,8 @@ partial void OnSourcePositionMsChanged(double value)
         _providerReadinessRefreshCts?.Cancel();
         _providerReadinessRefreshCts?.Dispose();
         _providerReadinessRefreshCts = null;
+
+        CancelAutoSpeakerDetectionRefresh();
 
         GC.SuppressFinalize(this);
     }

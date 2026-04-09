@@ -43,10 +43,13 @@ public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keySt
     /// </summary>
     /// <param name="settings">Application settings context used for readiness checks.</param>
     /// <param name="progress">If non-null, reports 1.0 to indicate readiness completion.</param>
-    /// <param name="ct">Cancellation token (not observed by this implementation).</param>
+    /// <param name="ct">Cancellation token observed before the readiness result is returned.</param>
     /// <returns>`true` if the provider is ready, `false` otherwise.</returns>
     public Task<bool> EnsureReadyAsync(AppSettings settings, IProgress<double>? progress = null, CancellationToken ct = default)
     {
+        if (ct.IsCancellationRequested)
+            return Task.FromCanceled<bool>(ct);
+
         progress?.Report(1.0);
         return Task.FromResult(Readiness.IsReady);
     }
@@ -55,9 +58,13 @@ public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keySt
     /// Generates a diarization result for the specified request and records that request as the most recent one.
     /// </summary>
     /// <param name="request">The diarization request to process.</param>
+    /// <param name="ct">Cancellation token observed before the result is produced.</param>
     /// <returns>The diarization result produced for the given request.</returns>
     public Task<DiarizationResult> DiarizeAsync(DiarizationRequest request, CancellationToken ct = default)
     {
+        if (ct.IsCancellationRequested)
+            return Task.FromCanceled<DiarizationResult>(ct);
+
         LastRequest = request;
         return Task.FromResult(_resultFactory(request));
     }
@@ -119,4 +126,12 @@ public sealed class FakeDiarizationRegistry(
 
         return new ProviderReadiness(false, $"Unknown diarization provider '{providerId}'.");
     }
+}
+
+public static class FakeDiarizationFactory
+{
+    public static IDiarizationRegistry CreateDefaultRegistry() =>
+        new FakeDiarizationRegistry(
+            (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider()),
+            (ProviderNames.WeSpeakerLocal, "WeSpeaker", new FakeDiarizationProvider()));
 }

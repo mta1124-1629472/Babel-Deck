@@ -22,6 +22,9 @@ public sealed class ApiKeyStore
     public static IReadOnlyList<string> KnownProviders { get; } =
         [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl];
 
+    private static IReadOnlyList<string> LegacyMigrationProviders { get; } =
+        [CredentialKeys.LegacyHuggingFace];
+
     /// <summary>
     /// Maps a provider identifier to a user-facing display name.
     /// </summary>
@@ -73,7 +76,17 @@ public sealed class ApiKeyStore
                 }
             }
 
-            if (migratedCount > 0)
+            var hasLegacyOnlyKeys = false;
+            foreach (var providerId in LegacyMigrationProviders)
+            {
+                if (!string.IsNullOrEmpty(legacyProvider.GetKey(providerId)))
+                {
+                    hasLegacyOnlyKeys = true;
+                    break;
+                }
+            }
+
+            if (migratedCount > 0 || hasLegacyOnlyKeys)
             {
                 // Logic for "shredding" or just deleting the old file.
                 // For now, simple delete is safer than leaving encrypted keys in a known location.

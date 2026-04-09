@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Babel.Player.Models;
@@ -572,6 +573,42 @@ public sealed class RegistryTests : IDisposable
             null);
 
         Assert.IsType<WeSpeakerContainerizedDiarizationProvider>(provider);
+    }
+
+    [Fact]
+    public void DiarizationRegistry_CreateProvider_ReusesNormalizedServiceUrlClientCache()
+    {
+        var registry = new DiarizationRegistry(_log);
+
+        _ = registry.CreateProvider(
+            ProviderNames.NemoLocal,
+            new AppSettings
+            {
+                PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+                AdvancedGpuServiceUrl = "http://localhost:8000",
+            },
+            null);
+
+        _ = registry.CreateProvider(
+            ProviderNames.WeSpeakerLocal,
+            new AppSettings
+            {
+                PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
+                AdvancedGpuServiceUrl = "http://localhost:8000/",
+            },
+            null);
+
+        var cacheField = typeof(DiarizationRegistry).GetField("_clientCache", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(cacheField);
+
+        var cache = cacheField!.GetValue(registry);
+        Assert.NotNull(cache);
+
+        var countProperty = cache!.GetType().GetProperty("Count");
+        Assert.NotNull(countProperty);
+
+        var count = (int)countProperty!.GetValue(cache)!;
+        Assert.Equal(1, count);
     }
 
     [Fact]

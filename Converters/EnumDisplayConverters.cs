@@ -1,13 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
-using System.Linq;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Babel.Player.Models;
-using Babel.Player.Services;
-using Babel.Player.Services.Registries;
 
 namespace Babel.Player.Converters;
 
@@ -44,41 +40,28 @@ public sealed class GpuHostBackendDisplayConverter : IValueConverter
 
 public sealed class DiarizationProviderDisplayConverter : IValueConverter
 {
-    private static readonly Lazy<DiarizationRegistry> _lazyRegistry = new(() =>
-        new DiarizationRegistry(new AppLog(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BabelPlayer", "logs", "babel-player.log"))));
-
     /// <summary>
-    /// Converts a diarization provider identifier into a user-facing display string by querying the shared provider catalog.
+    /// Converts a diarization provider identifier into a user-facing display string without consulting the runtime registry.
     /// </summary>
-    /// <param name="value">The provider identifier (may be null or a ProviderNames value).</param>
+    /// <param name="value">The provider identifier (may be null, empty, or a ProviderNames value).</param>
     /// <returns>
-    /// "Off" when <paramref name="value"/> is null or whitespace; otherwise returns the DisplayName from the provider catalog,
-    /// falling back to <c>value.ToString()</c> or an empty string if no catalog entry exists.
+    /// "Off" when <paramref name="value"/> is null or whitespace; otherwise returns a stable display label for known
+    /// diarization provider identifiers and falls back to the raw identifier when the value is unrecognized.
     /// </returns>
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is null)
             return "Off";
 
-        if (value is string providerId)
+        if (value is not string providerId || string.IsNullOrWhiteSpace(providerId))
+            return "Off";
+
+        return providerId switch
         {
-            if (string.IsNullOrWhiteSpace(providerId))
-                return "Off";
-
-            try
-            {
-                var providers = _lazyRegistry.Value.GetAvailableProviders();
-                var descriptor = providers.FirstOrDefault(p => p.Id == providerId);
-                if (descriptor != null)
-                    return descriptor.DisplayName;
-            }
-            catch
-            {
-                // Fall through to default behavior if registry access fails
-            }
-        }
-
-        return value?.ToString() ?? string.Empty;
+            ProviderNames.NemoLocal => "NeMo",
+            ProviderNames.WeSpeakerLocal => "WeSpeaker",
+            _ => providerId,
+        };
     }
 
     /// <summary>

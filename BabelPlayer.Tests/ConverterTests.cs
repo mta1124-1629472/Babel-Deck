@@ -1,11 +1,27 @@
 using System.Globalization;
 using Avalonia.Media;
 using Babel.Player.Converters;
+using Babel.Player.Models;
 
 namespace BabelPlayer.Tests;
 
 public sealed class ConverterTests
 {
+    [Theory]
+    [InlineData(null, "Off")]
+    [InlineData("", "Off")]
+    [InlineData(ProviderNames.NemoLocal, "NeMo")]
+    [InlineData(ProviderNames.WeSpeakerLocal, "WeSpeaker")]
+    [InlineData("custom-provider", "custom-provider")]
+    public void DiarizationProviderDisplayConverter_MapsKnownProvidersAndOff(string? providerId, string expected)
+    {
+        var converter = new DiarizationProviderDisplayConverter();
+
+        var result = converter.Convert(providerId, typeof(string), null, CultureInfo.InvariantCulture);
+
+        Assert.Equal(expected, result);
+    }
+
     [Theory]
     [InlineData("spk_00", "S0")]
     [InlineData("spk_01", "S1")]

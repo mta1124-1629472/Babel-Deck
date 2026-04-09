@@ -494,12 +494,21 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                 TranslationReady: true,
                 TranslationDetail: null,
                 TtsReady: false,
-                TtsDetail: "model unavailable"))));
+                TtsDetail: "model unavailable",
+                TtsProviders: new Dictionary<string, bool>
+                {
+                    [ProviderNames.Qwen] = false,
+                },
+                TtsProviderDetails: new Dictionary<string, string>
+                {
+                    [ProviderNames.Qwen] = "model unavailable",
+                }))));
 
         var settings = new AppSettings
         {
             PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
-            ContainerizedServiceUrl = "http://localhost:8000"
+            ContainerizedServiceUrl = "http://localhost:8000",
+            TtsProvider = ProviderNames.Qwen,
         };
 
         var readiness = await ContainerizedProviderReadiness.CheckTtsForExecutionAsync(settings, probe);
@@ -594,15 +603,24 @@ public sealed class ContainerizedProvidersTests() : IDisposable
                 Capabilities: new ContainerCapabilitiesSnapshot(
                     TranscriptionReady: true,
                     TranscriptionDetail: null,
-                    TranslationReady: true,
-                    TranslationDetail: null,
-                    TtsReady: true,
-                    TtsDetail: null))));
+                TranslationReady: true,
+                TranslationDetail: null,
+                TtsReady: true,
+                TtsDetail: null,
+                TtsProviders: new Dictionary<string, bool>
+                {
+                    [ProviderNames.Qwen] = true,
+                },
+                TtsProviderDetails: new Dictionary<string, string>
+                {
+                    [ProviderNames.Qwen] = "Qwen3-TTS ready",
+                }))));
 
         var settings = new AppSettings
         {
             PreferredLocalGpuBackend = GpuHostBackend.DockerHost,
-            ContainerizedServiceUrl = "http://localhost:8000"
+            ContainerizedServiceUrl = "http://localhost:8000",
+            TtsProvider = ProviderNames.Qwen,
         };
         _ = ContainerizedProviderReadiness.CheckTts(settings, probe);
         ProviderReadiness readiness;
@@ -1006,10 +1024,10 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+        await Assert.ThrowsAsync<TaskCanceledException>(() =>
             provider.EnsureReadyAsync(new AppSettings(), ct: cts.Token));
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+        await Assert.ThrowsAsync<TaskCanceledException>(() =>
             provider.DiarizeAsync(new DiarizationRequest("audio.wav"), cts.Token));
 
         Assert.Null(provider.LastRequest);

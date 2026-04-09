@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -27,7 +28,7 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
 {
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
-    private readonly Dictionary<string, ContainerizedInferenceClient> _clientCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, ContainerizedInferenceClient> _clientCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="DiarizationRegistry"/> with the given logging facility and an optional probe for containerized services.
@@ -51,7 +52,7 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
             "NeMo",
             false,
             null,
-            ["nemo"],
+            [ProviderNames.NemoDiarizationAlias],
             SupportedRuntimes: [InferenceRuntime.Containerized],
             DefaultRuntime: InferenceRuntime.Containerized,
             IsImplemented: true,
@@ -61,7 +62,7 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
             "WeSpeaker",
             false,
             null,
-            ["wespeaker"],
+            [ProviderNames.WeSpeakerDiarizationAlias],
             SupportedRuntimes: [InferenceRuntime.Containerized],
             DefaultRuntime: InferenceRuntime.Containerized,
             IsImplemented: true,
@@ -99,12 +100,8 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     /// <exception cref="PipelineProviderException">Thrown when the specified providerId is not implemented.</exception>
     public IDiarizationProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)
     {
-        var serviceUrl = settings.EffectiveContainerizedServiceUrl;
-        if (!_clientCache.TryGetValue(serviceUrl, out var client))
-        {
-            client = new ContainerizedInferenceClient(serviceUrl, _log);
-            _clientCache[serviceUrl] = client;
-        }
+        var serviceUrl = ContainerizedInferenceClient.NormalizeBaseUrl(settings.EffectiveContainerizedServiceUrl);
+        var client = _clientCache.GetOrAdd(serviceUrl, normalizedServiceUrl => new ContainerizedInferenceClient(normalizedServiceUrl, _log));
 
         return providerId switch
         {
@@ -121,4 +118,5 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
                 "Select an implemented provider in Settings.")
         };
     }
+
 }

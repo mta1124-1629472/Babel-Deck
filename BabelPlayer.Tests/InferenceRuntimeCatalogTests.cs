@@ -452,6 +452,16 @@ public sealed class InferenceRuntimeCatalogTests
         Assert.True(InferenceRuntimeCatalog.IsKnownDiarizationProvider(providerId));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("unknown-diarizer")]
+    [InlineData(ProviderNames.Piper)]
+    public void IsKnownDiarizationProvider_UnknownProviders_ReturnFalse(string? providerId)
+    {
+        Assert.False(InferenceRuntimeCatalog.IsKnownDiarizationProvider(providerId));
+    }
+
     // ── NormalizeSettings ─────────────────────────────────────────────────────
 
     [Fact]

@@ -35,12 +35,12 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
     }
 
     /// <summary>
-        /// Determines the readiness of the Nemo containerized diarization provider using the provided application settings and optional API key store.
-        /// </summary>
-        /// <param name="settings">Application settings used to evaluate provider readiness.</param>
-        /// <param name="keyStore">Optional API key store for provider authentication information.</param>
-        /// <returns>A <see cref="ProviderReadiness"/> describing whether the provider is available and any configuration or authentication requirements.</returns>
-        public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore) =>
+    /// Determines the readiness of the Nemo containerized diarization provider using the provided application settings and optional API key store.
+    /// </summary>
+    /// <param name="settings">Application settings used to evaluate provider readiness.</param>
+    /// <param name="keyStore">Optional API key store for provider authentication information.</param>
+    /// <returns>A <see cref="ProviderReadiness"/> describing whether the provider is available and any configuration or authentication requirements.</returns>
+    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore) =>
         ContainerizedProviderReadiness.CheckDiarization(settings, ProviderNames.NemoLocal, _probe, keyStore);
 
     /// <summary>
@@ -66,7 +66,7 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
             settings,
             ProviderNames.NemoLocal,
             _probe,
-            ct);
+            ct).ConfigureAwait(false);
         progress?.Report(1.0);
         return readiness.IsReady;
     }
@@ -86,6 +86,12 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
         _log.Info($"[NemoContainerizedDiarization] Diarizing: {request.SourceAudioPath}");
-        return await _client.DiarizeAsync(request.SourceAudioPath, "nemo", request.MinSpeakers, request.MaxSpeakers, ct);
+        return await _client.DiarizeAsync(
+                request.SourceAudioPath,
+                ProviderNames.NemoDiarizationAlias,
+                request.MinSpeakers,
+                request.MaxSpeakers,
+                ct)
+            .ConfigureAwait(false);
     }
 }

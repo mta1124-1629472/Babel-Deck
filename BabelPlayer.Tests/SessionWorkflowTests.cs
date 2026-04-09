@@ -43,7 +43,9 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        diarizationRegistry ??= new Babel.Player.Services.Registries.DiarizationRegistry(log);
+        diarizationRegistry ??= new FakeDiarizationRegistry(
+            (ProviderNames.NemoLocal, "NeMo", new FakeDiarizationProvider()),
+            (ProviderNames.WeSpeakerLocal, "WeSpeaker", new FakeDiarizationProvider()));
         var audioProcessingService = new FfmpegAudioProcessingService(log);
 
         return new SessionWorkflowCoordinator(
@@ -466,7 +468,7 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        diarizationRegistry ??= new Babel.Player.Services.Registries.DiarizationRegistry(log);
+        diarizationRegistry ??= FakeDiarizationFactory.CreateDefaultRegistry();
         var audioProcessingService = new FfmpegAudioProcessingService(log);
 
         return new SessionWorkflowCoordinator(
@@ -627,7 +629,7 @@ public sealed class SegmentInspectionTests
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        diarizationRegistry ??= new Babel.Player.Services.Registries.DiarizationRegistry(log);
+        diarizationRegistry ??= FakeDiarizationFactory.CreateDefaultRegistry();
         var audioProcessingService = new FfmpegAudioProcessingService(log);
 
         return new SessionWorkflowCoordinator(
@@ -653,13 +655,13 @@ public sealed class SegmentInspectionTests
         Babel.Player.Services.Registries.IDiarizationRegistry diarizationRegistry) =>
         CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry);
 
-    private static EmbeddedPlaybackViewModel CreatePlaybackVm()
+    private static EmbeddedPlaybackViewModel CreatePlaybackVm(Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null)
     {
         var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}");
         var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.log"));
         var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.json");
         var store = new SessionSnapshotStore(storePath, log);
-        var coordinator = CreateCoordinator(store, log, caseDir);
+        var coordinator = CreateCoordinator(store, log, caseDir, diarizationRegistry: diarizationRegistry);
         coordinator.Initialize();
         return new EmbeddedPlaybackViewModel(coordinator);
     }
@@ -695,14 +697,26 @@ public sealed class SegmentInspectionTests
     }
 
     [Fact]
+    public void EmbeddedPlaybackViewModel_DiarizationProviderOptions_UseRegistryOnly()
+    {
+        var playback = CreatePlaybackVm(new FakeDiarizationRegistry());
+
+        Assert.Equal([string.Empty], playback.DiarizationProviderOptions);
+    }
+
+    [Fact]
     public void EmbeddedPlaybackViewModel_DiarizationProvider_UpdatesSettingsAndStatus()
     {
-        var playback = CreatePlaybackVm();
+        using var playback = CreatePlaybackVm();
 
         playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
         Assert.Equal(ProviderNames.WeSpeakerLocal, playback.Coordinator.CurrentSettings.DiarizationProvider);
         Assert.Contains("WeSpeaker", playback.AutoSpeakerDetectionStatus, StringComparison.Ordinal);
+        Assert.True(
+            playback.AutoSpeakerDetectionStatus.StartsWith("Checking ", StringComparison.Ordinal) ||
+            playback.AutoSpeakerDetectionStatus.StartsWith("Speaker diarization is enabled via ", StringComparison.Ordinal),
+            $"Unexpected diarization status: {playback.AutoSpeakerDetectionStatus}");
     }
 
     [Fact]

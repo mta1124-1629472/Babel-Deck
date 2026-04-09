@@ -346,10 +346,16 @@ public static class ContainerizedProviderReadiness
         {
             var ttsProviderId = string.IsNullOrWhiteSpace(providerId) ? settings.TtsProvider : providerId;
             if (string.IsNullOrWhiteSpace(ttsProviderId))
-                return capabilities.IsReady(stage);
+            {
+                detail = "TTS provider is not advertised by host.";
+                return false;
+            }
 
             if (!capabilities.TryGetTtsProviderReadiness(ttsProviderId, out var providerReady, out var providerDetail))
-                return capabilities.IsReady(stage);
+            {
+                detail = $"TTS provider '{ttsProviderId}' is not advertised by host.";
+                return false;
+            }
 
             detail = string.IsNullOrWhiteSpace(providerDetail) ? detail : providerDetail;
             return providerReady;
@@ -359,10 +365,16 @@ public static class ContainerizedProviderReadiness
         {
             var diarizationProviderId = string.IsNullOrWhiteSpace(providerId) ? settings.DiarizationProvider : providerId;
             if (string.IsNullOrWhiteSpace(diarizationProviderId))
-                return capabilities.IsReady(stage);
+            {
+                detail = "Diarization provider is not advertised by host.";
+                return false;
+            }
 
             if (!capabilities.TryGetDiarizationProviderReadiness(diarizationProviderId, out var providerReady, out var providerDetail))
-                return capabilities.IsReady(stage);
+            {
+                detail = $"Diarization provider '{diarizationProviderId}' is not advertised by host.";
+                return false;
+            }
 
             detail = string.IsNullOrWhiteSpace(providerDetail) ? detail : providerDetail;
             return providerReady;

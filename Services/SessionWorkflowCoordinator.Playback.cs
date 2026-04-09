@@ -14,11 +14,9 @@ public sealed partial class SessionWorkflowCoordinator
     // ── Diarization ──────────────────────────────────────────────────────
 
     private readonly record struct DiarizationExecutionOutcome(
-        bool Succeeded,
         bool SpeakerAssignmentsChanged,
         int SpeakerCount,
-        int SegmentCount,
-        string? ErrorMessage);
+        int SegmentCount);
 
     /// <summary>
     /// Runs diarization on the current session's ingested media and merges detected speaker assignments into the transcript
@@ -58,9 +56,6 @@ public sealed partial class SessionWorkflowCoordinator
             CurrentSession.TranscriptPath,
             cancellationToken);
 
-        if (!outcome.Succeeded)
-            throw new InvalidOperationException(outcome.ErrorMessage ?? "Diarization failed.");
-
         return outcome.SpeakerAssignmentsChanged;
     }
 
@@ -71,7 +66,7 @@ public sealed partial class SessionWorkflowCoordinator
     /// <param name="transcriptPath">Filesystem path to the transcript file to update with diarization speaker IDs.</param>
     /// <param name="ct">Cancellation token to cancel the operation.</param>
     /// <returns>
-    /// A <see cref="DiarizationExecutionOutcome"/> containing whether the operation succeeded, whether speaker assignments were applied to transcript/translation, the detected speaker count, the diarized segment count, and an optional error message on failure.
+    /// A <see cref="DiarizationExecutionOutcome"/> containing whether speaker assignments were applied to transcript/translation, the detected speaker count, and the diarized segment count.
     /// </returns>
     private async Task<DiarizationExecutionOutcome> ExecuteDiarizationAsync(
         string audioPath,
@@ -79,23 +74,14 @@ public sealed partial class SessionWorkflowCoordinator
         CancellationToken ct)
     {
         if (DiarizationRegistry is null)
-            return new DiarizationExecutionOutcome(
-                Succeeded: false,
-                SpeakerAssignmentsChanged: false,
-                SpeakerCount: 0,
-                SegmentCount: 0,
-                ErrorMessage: "No diarization registry is configured.");
+            throw new PipelineProviderException("No diarization registry is configured.");
 
         var readiness = DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
         if (!readiness.IsReady)
         {
-            _log.Warning($"Diarization skipped: {readiness.BlockingReason}");
-            return new DiarizationExecutionOutcome(
-                Succeeded: false,
-                SpeakerAssignmentsChanged: false,
-                SpeakerCount: 0,
-                SegmentCount: 0,
-                ErrorMessage: readiness.BlockingReason);
+            var blockingReason = readiness.BlockingReason ?? "Diarization provider is not ready.";
+            _log.Warning($"Diarization skipped: {blockingReason}");
+            throw new PipelineProviderException(blockingReason);
         }
 
         var provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
@@ -114,12 +100,7 @@ public sealed partial class SessionWorkflowCoordinator
         if (!result.Success)
         {
             _log.Warning($"Diarization failed: {result.ErrorMessage}");
-            return new DiarizationExecutionOutcome(
-                Succeeded: false,
-                SpeakerAssignmentsChanged: false,
-                SpeakerCount: result.SpeakerCount,
-                SegmentCount: result.Segments.Count,
-                ErrorMessage: result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
+            throw new InvalidOperationException(result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
         }
 
         var transcriptChanged = await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
@@ -144,11 +125,9 @@ public sealed partial class SessionWorkflowCoordinator
         _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
 
         return new DiarizationExecutionOutcome(
-            Succeeded: true,
             SpeakerAssignmentsChanged: transcriptChanged || translationChanged,
             SpeakerCount: result.SpeakerCount,
-            SegmentCount: result.Segments.Count,
-            ErrorMessage: null);
+            SegmentCount: result.Segments.Count);
     }
 
     /// <summary>

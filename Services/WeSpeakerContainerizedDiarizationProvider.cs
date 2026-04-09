@@ -35,12 +35,12 @@ public sealed class WeSpeakerContainerizedDiarizationProvider : IDiarizationProv
     }
 
     /// <summary>
-        /// Determines the readiness of the WeSpeaker containerized diarization provider for the given application settings.
-        /// </summary>
-        /// <param name="settings">Application settings used to evaluate provider configuration and requirements.</param>
-        /// <param name="keyStore">Optional API key store used to validate any required credentials.</param>
-        /// <returns>A <see cref="ProviderReadiness"/> describing availability and any unmet requirements for executing diarization.</returns>
-        public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore) =>
+    /// Determines the readiness of the WeSpeaker containerized diarization provider for the given application settings.
+    /// </summary>
+    /// <param name="settings">Application settings used to evaluate provider configuration and requirements.</param>
+    /// <param name="keyStore">Optional API key store used to validate any required credentials.</param>
+    /// <returns>A <see cref="ProviderReadiness"/> describing availability and any unmet requirements for executing diarization.</returns>
+    public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore) =>
         ContainerizedProviderReadiness.CheckDiarization(settings, ProviderNames.WeSpeakerLocal, _probe, keyStore);
 
     /// <summary>
@@ -66,7 +66,7 @@ public sealed class WeSpeakerContainerizedDiarizationProvider : IDiarizationProv
             settings,
             ProviderNames.WeSpeakerLocal,
             _probe,
-            ct);
+            ct).ConfigureAwait(false);
         progress?.Report(1.0);
         return readiness.IsReady;
     }
@@ -86,6 +86,12 @@ public sealed class WeSpeakerContainerizedDiarizationProvider : IDiarizationProv
             throw new FileNotFoundException($"Audio file not found: {request.SourceAudioPath}");
 
         _log.Info($"[WeSpeakerContainerizedDiarization] Diarizing: {request.SourceAudioPath}");
-        return await _client.DiarizeAsync(request.SourceAudioPath, "wespeaker", request.MinSpeakers, request.MaxSpeakers, ct);
+        return await _client.DiarizeAsync(
+                request.SourceAudioPath,
+                ProviderNames.WeSpeakerDiarizationAlias,
+                request.MinSpeakers,
+                request.MaxSpeakers,
+                ct)
+            .ConfigureAwait(false);
     }
 }

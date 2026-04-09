@@ -783,6 +783,88 @@ public sealed class SessionWorkflowCoordinatorUnitTests() : IDisposable
         Assert.False(speakerAssignmentsChanged);
     }
 
+    [Fact]
+    public async Task RunDiarizationAsync_WhenProviderReturnsFailure_Throws()
+    {
+        var fakeProvider = new FakeDiarizationProvider(_ =>
+            new DiarizationResult(
+                false,
+                [],
+                0,
+                "diarization failed"));
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var settings = CreateMatchingSettings();
+        settings.DiarizationProvider = ProviderNames.NemoLocal;
+
+        var coord = CreateCoordinator(settings, diarizationRegistry: fakeRegistry);
+        coord.Initialize();
+
+        var transcriptPath = CreateTempFile("""{"language":"es","segments":[{"start":0.0,"end":1.0,"text":"hola"}]}""");
+        var mediaPath = CreateTempFile("audio");
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => coord.RunDiarizationAsync());
+
+        Assert.Contains("diarization failed", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunDiarizationAsync_WhenRegistryIsMissing_Throws()
+    {
+        var settings = CreateMatchingSettings();
+        settings.DiarizationProvider = ProviderNames.NemoLocal;
+
+        var coord = CreateCoordinator(settings, diarizationRegistry: null);
+        coord.Initialize();
+
+        var transcriptPath = CreateTempFile("""{"language":"es","segments":[{"start":0.0,"end":1.0,"text":"hola"}]}""");
+        var mediaPath = CreateTempFile("audio");
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
+
+        var ex = await Assert.ThrowsAsync<PipelineProviderException>(() => coord.RunDiarizationAsync());
+
+        Assert.Contains("No diarization registry is configured", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunDiarizationAsync_WhenProviderIsNotReady_Throws()
+    {
+        var fakeProvider = new FakeDiarizationProvider(
+            readiness: new ProviderReadiness(false, "host is warming"));
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var settings = CreateMatchingSettings();
+        settings.DiarizationProvider = ProviderNames.NemoLocal;
+
+        var coord = CreateCoordinator(settings, diarizationRegistry: fakeRegistry);
+        coord.Initialize();
+
+        var transcriptPath = CreateTempFile("""{"language":"es","segments":[{"start":0.0,"end":1.0,"text":"hola"}]}""");
+        var mediaPath = CreateTempFile("audio");
+
+        coord.CurrentSession = coord.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+        };
+
+        var ex = await Assert.ThrowsAsync<PipelineProviderException>(() => coord.RunDiarizationAsync());
+
+        Assert.Contains("host is warming", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── CheckSettingsInvalidation ─────────────────────────────────────────────
 
     [Fact]
