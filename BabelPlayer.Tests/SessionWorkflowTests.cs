@@ -41,6 +41,7 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
+        var diarizationRegistry = new Babel.Player.Services.Registries.DiarizationRegistry(log);
         var audioProcessingService = new FfmpegAudioProcessingService(log);
 
         return new SessionWorkflowCoordinator(
@@ -52,6 +53,7 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
             transcriptionRegistry,
             translationRegistry,
             ttsRegistry,
+            diarizationRegistry: diarizationRegistry,
             segmentPlayer: segmentPlayer,
             sourcePlayer: sourcePlayer,
             audioProcessingService: audioProcessingService);
@@ -452,6 +454,7 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
+        var diarizationRegistry = new Babel.Player.Services.Registries.DiarizationRegistry(log);
         var audioProcessingService = new FfmpegAudioProcessingService(log);
 
         return new SessionWorkflowCoordinator(
@@ -463,6 +466,7 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
             transcriptionRegistry,
             translationRegistry,
             ttsRegistry,
+            diarizationRegistry: diarizationRegistry,
             segmentPlayer: segmentPlayer,
             sourcePlayer: sourcePlayer,
             audioProcessingService: audioProcessingService);
@@ -601,6 +605,7 @@ public sealed class SegmentInspectionTests
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
+        var diarizationRegistry = new Babel.Player.Services.Registries.DiarizationRegistry(log);
         var audioProcessingService = new FfmpegAudioProcessingService(log);
 
         return new SessionWorkflowCoordinator(
@@ -612,6 +617,7 @@ public sealed class SegmentInspectionTests
             transcriptionRegistry,
             translationRegistry,
             ttsRegistry,
+            diarizationRegistry: diarizationRegistry,
             segmentPlayer: segmentPlayer,
             sourcePlayer: sourcePlayer,
             audioProcessingService: audioProcessingService);

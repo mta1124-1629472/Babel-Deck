@@ -337,6 +337,7 @@ public static class DependencyLocator
         var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
         var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
         var ttsRegistry = new TtsRegistry(appLog, containerizedProbe, audioProcessingService);
+        var diarizationRegistry = new DiarizationRegistry(appLog, containerizedProbe);
 
         var snapshotStore = new SessionSnapshotStore(
             Path.Combine(appDataRoot, "state", "current-session.json"), appLog);
@@ -345,6 +346,7 @@ public static class DependencyLocator
             snapshotStore, appLog, appSettings, perSessionStore, recentStore, 
             transcriptionRegistry, translationRegistry, ttsRegistry, 
             transportManager: transportManager, keyStore: apiKeyStore, 
+            diarizationRegistry: diarizationRegistry,
             containerizedProbe: containerizedProbe, containerizedInferenceManager: containerizedManager,
             audioProcessingService: audioProcessingService);
     }

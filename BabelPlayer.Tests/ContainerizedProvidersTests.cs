@@ -678,6 +678,95 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
+    public async Task ContainerizedInferenceClient_CheckHealthAsync_ParsesDiarizationCapabilities()
+    {
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/health/live")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"status\":\"healthy\",\"cuda_available\":true,\"cuda_version\":\"12.8\"}");
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/capabilities")
+            {
+                return Json(HttpStatusCode.OK,
+                    "{\"transcription\":{\"ready\":true},\"translation\":{\"ready\":true},\"tts\":{\"ready\":true},\"diarization\":{\"ready\":true,\"detail\":\"Diarization available\",\"providers\":{\"nemo\":true,\"wespeaker\":false},\"provider_details\":{\"nemo\":\"NeMo ready\",\"wespeaker\":\"CPU fallback warming\"},\"default_provider\":\"nemo\"}}");
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"status\":\"not-found\"}");
+        });
+
+        var health = await client.CheckHealthAsync();
+
+        Assert.NotNull(health.Capabilities);
+        Assert.True(health.Capabilities!.DiarizationReady);
+        Assert.Equal(ProviderNames.NemoLocal, health.Capabilities.DiarizationDefaultProvider);
+        Assert.True(health.Capabilities.TryGetDiarizationProviderReadiness(ProviderNames.NemoLocal, out var nemoReady, out var nemoDetail));
+        Assert.True(nemoReady);
+        Assert.Equal("NeMo ready", nemoDetail);
+        Assert.True(health.Capabilities.TryGetDiarizationProviderReadiness(ProviderNames.WeSpeakerLocal, out var wespeakerReady, out var wespeakerDetail));
+        Assert.False(wespeakerReady);
+        Assert.Contains("warming", wespeakerDetail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContainerizedInferenceClient_DiarizeAsync_UsesNemoEndpointAndNormalizesSpeakerIds()
+    {
+        var inputPath = Path.Combine(_ctx.Dir, "diarize.wav");
+        await File.WriteAllBytesAsync(inputPath, [1, 2, 3, 4]);
+        string? postedPath = null;
+
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Post)
+            {
+                postedPath = request.RequestUri?.AbsolutePath;
+                return Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"speaker_count\":2,\"segments\":[{\"start\":0.0,\"end\":1.0,\"speaker_id\":\"speaker_0\"},{\"start\":1.0,\"end\":2.0,\"speaker_id\":\"speaker_1\"}]}");
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var result = await client.DiarizeAsync(inputPath, "nemo", minSpeakers: 1, maxSpeakers: 2);
+
+        Assert.True(result.Success);
+        Assert.Equal("/diarize", postedPath);
+        Assert.Equal(2, result.SpeakerCount);
+        Assert.Collection(result.Segments,
+            first => Assert.Equal("spk_00", first.SpeakerId),
+            second => Assert.Equal("spk_01", second.SpeakerId));
+    }
+
+    [Fact]
+    public async Task ContainerizedInferenceClient_DiarizeAsync_UsesWeSpeakerEndpoint()
+    {
+        var inputPath = Path.Combine(_ctx.Dir, "wespeaker.wav");
+        await File.WriteAllBytesAsync(inputPath, [1, 2, 3, 4]);
+        string? postedPath = null;
+
+        var client = CreateClient((request, _) =>
+        {
+            if (request.Method == HttpMethod.Post)
+            {
+                postedPath = request.RequestUri?.AbsolutePath;
+                return Json(HttpStatusCode.OK,
+                    "{\"success\":true,\"speaker_count\":1,\"segments\":[{\"start\":0.0,\"end\":1.0,\"speaker_id\":\"1\"}]}");
+            }
+
+            return Json(HttpStatusCode.NotFound, "{\"success\":false,\"error_message\":\"not found\"}");
+        });
+
+        var result = await client.DiarizeAsync(inputPath, "wespeaker");
+
+        Assert.True(result.Success);
+        Assert.Equal("/diarize/wespeaker", postedPath);
+        Assert.Single(result.Segments);
+        Assert.Equal("spk_01", result.Segments[0].SpeakerId);
+    }
+
+    [Fact]
     public async Task ContainerizedInferenceClient_CheckHealthAsync_ReturnsLiveButWarmingWhenCapabilitiesProbeFails()
     {
         var client = CreateClient((request, _) =>
@@ -773,6 +862,53 @@ public sealed class ContainerizedProvidersTests() : IDisposable
 
         Assert.False(readiness.IsReady);
         Assert.Contains("TTS", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContainerizedProviderReadiness_CheckDiarizationForExecutionAsync_UsesProviderSpecificReadiness()
+    {
+        var probe = new ContainerizedServiceProbe(_ctx.Log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
+            true,
+            true,
+            "12.8",
+            "http://localhost:8000",
+            null,
+            new ContainerCapabilitiesSnapshot(
+                TranscriptionReady: true,
+                TranscriptionDetail: null,
+                TranslationReady: true,
+                TranslationDetail: null,
+                TtsReady: true,
+                TtsDetail: null,
+                DiarizationReady: true,
+                DiarizationDetail: "Diarization available",
+                DiarizationProviders: new Dictionary<string, bool>
+                {
+                    [ProviderNames.NemoLocal] = true,
+                    [ProviderNames.WeSpeakerLocal] = false,
+                },
+                DiarizationProviderDetails: new Dictionary<string, string>
+                {
+                    [ProviderNames.NemoLocal] = "NeMo ready",
+                    [ProviderNames.WeSpeakerLocal] = "CPU fallback warming",
+                },
+                DiarizationDefaultProvider: ProviderNames.NemoLocal))));
+
+        var settings = new AppSettings
+        {
+            PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
+            ContainerizedServiceUrl = "http://localhost:8000",
+            DiarizationProvider = ProviderNames.WeSpeakerLocal,
+        };
+
+        var readiness = await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
+            settings,
+            ProviderNames.WeSpeakerLocal,
+            probe);
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains("diarization", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("warming", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

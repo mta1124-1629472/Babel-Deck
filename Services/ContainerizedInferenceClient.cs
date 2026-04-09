@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -223,6 +224,53 @@ public sealed class ContainerizedInferenceClient
         }
     }
 
+    public async Task<DiarizationResult> DiarizeAsync(
+        string audioFilePath,
+        string engine,
+        int? minSpeakers = null,
+        int? maxSpeakers = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (!File.Exists(audioFilePath))
+                throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
+
+            var normalizedEngine = NormalizeDiarizationEngine(engine);
+            var endpoint = normalizedEngine == "wespeaker" ? "/diarize/wespeaker" : "/diarize";
+            _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
+
+            using var content = new MultipartFormDataContent();
+            using var fileStream = File.OpenRead(audioFilePath);
+            content.Add(new StreamContent(fileStream), "audio", Path.GetFileName(audioFilePath));
+            if (minSpeakers.HasValue)
+                content.Add(new StringContent(minSpeakers.Value.ToString()), "min_speakers");
+            if (maxSpeakers.HasValue)
+                content.Add(new StringContent(maxSpeakers.Value.ToString()), "max_speakers");
+
+            using var response = await _httpClient.PostAsync(
+                $"{_inferenceServiceUrl}{endpoint}",
+                content,
+                cancellationToken);
+
+            var result = await DeserializeResponseAsync<DiarizationApiResponseDto>(response, cancellationToken);
+            if (!result.Success)
+                throw new InvalidOperationException($"Diarization error: {result.ErrorMessage}");
+
+            var normalizedSegments = NormalizeDiarizationSegments(result.Segments ?? []);
+            var speakerCount = result.SpeakerCount > 0
+                ? result.SpeakerCount
+                : CountDistinctSpeakers(normalizedSegments);
+
+            return new DiarizationResult(true, normalizedSegments, speakerCount, null);
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Diarization failed: {ex.Message}", ex);
+            return new DiarizationResult(false, [], 0, ex.Message);
+        }
+    }
+
     public async Task<string> RegisterQwenReferenceAsync(
         string speakerId,
         string referenceAudioPath,
@@ -398,7 +446,12 @@ public sealed class ContainerizedInferenceClient
                     capabilitiesDto.Tts?.Ready ?? false,
                     capabilitiesDto.Tts?.Detail,
                     capabilitiesDto.Tts?.Providers,
-                    capabilitiesDto.Tts?.ProviderDetails);
+                    capabilitiesDto.Tts?.ProviderDetails,
+                    capabilitiesDto.Diarization?.Ready ?? false,
+                    capabilitiesDto.Diarization?.Detail,
+                    NormalizeDiarizationProviderReadiness(capabilitiesDto.Diarization?.Providers),
+                    NormalizeDiarizationProviderDetails(capabilitiesDto.Diarization?.ProviderDetails),
+                    NormalizeDiarizationDefaultProvider(capabilitiesDto.Diarization?.DefaultProvider));
             }
             catch (Exception ex)
             {
@@ -427,7 +480,9 @@ public sealed class ContainerizedInferenceClient
             TranslationReady: false,
             TranslationDetail: detail,
             TtsReady: false,
-            TtsDetail: detail);
+            TtsDetail: detail,
+            DiarizationReady: false,
+            DiarizationDetail: detail);
 
     private static async Task<T> DeserializeResponseAsync<T>(
         HttpResponseMessage response,
@@ -473,6 +528,9 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("tts")]
         public StageCapabilityDto? Tts { get; set; }
+
+        [JsonPropertyName("diarization")]
+        public StageCapabilityDto? Diarization { get; set; }
     }
 
     private sealed class StageCapabilityDto
@@ -488,6 +546,9 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("provider_details")]
         public Dictionary<string, string>? ProviderDetails { get; set; }
+
+        [JsonPropertyName("default_provider")]
+        public string? DefaultProvider { get; set; }
     }
 
     private sealed class TranscriptionApiResponseDto
@@ -586,6 +647,126 @@ public sealed class ContainerizedInferenceClient
         public string? ErrorMessage { get; set; }
     }
 
+    private sealed class DiarizationApiResponseDto
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("segments")]
+        public List<DiarizationSegmentDto>? Segments { get; set; }
+
+        [JsonPropertyName("speaker_count")]
+        public int SpeakerCount { get; set; }
+
+        [JsonPropertyName("error_message")]
+        public string? ErrorMessage { get; set; }
+    }
+
+    private sealed class DiarizationSegmentDto
+    {
+        [JsonPropertyName("start")]
+        public double Start { get; set; }
+
+        [JsonPropertyName("end")]
+        public double End { get; set; }
+
+        [JsonPropertyName("speaker_id")]
+        public string? SpeakerId { get; set; }
+    }
+
+    private static string NormalizeDiarizationEngine(string engine) => engine switch
+    {
+        "wespeaker" => "wespeaker",
+        _ => "nemo",
+    };
+
+    private static IReadOnlyDictionary<string, bool>? NormalizeDiarizationProviderReadiness(
+        IReadOnlyDictionary<string, bool>? providers)
+    {
+        if (providers is null || providers.Count == 0)
+            return providers;
+
+        var normalized = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var pair in providers)
+            normalized[InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(pair.Key)] = pair.Value;
+        return normalized;
+    }
+
+    private static IReadOnlyDictionary<string, string>? NormalizeDiarizationProviderDetails(
+        IReadOnlyDictionary<string, string>? providerDetails)
+    {
+        if (providerDetails is null || providerDetails.Count == 0)
+            return providerDetails;
+
+        var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var pair in providerDetails)
+            normalized[InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(pair.Key)] = pair.Value;
+        return normalized;
+    }
+
+    private static string? NormalizeDiarizationDefaultProvider(string? defaultProvider)
+    {
+        if (string.IsNullOrWhiteSpace(defaultProvider))
+            return defaultProvider;
+
+        return InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(defaultProvider);
+    }
+
+    private static IReadOnlyList<DiarizedSegment> NormalizeDiarizationSegments(
+        IReadOnlyList<DiarizationSegmentDto> segments)
+    {
+        var normalized = new List<DiarizedSegment>(segments.Count);
+        var assignedLabels = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var segment in segments)
+        {
+            normalized.Add(new DiarizedSegment(
+                segment.Start,
+                segment.End,
+                NormalizeSpeakerId(segment.SpeakerId, assignedLabels)));
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeSpeakerId(string? rawSpeakerId, IDictionary<string, string> assignedLabels)
+    {
+        var key = string.IsNullOrWhiteSpace(rawSpeakerId)
+            ? $"speaker_{assignedLabels.Count}"
+            : rawSpeakerId.Trim();
+
+        if (assignedLabels.TryGetValue(key, out var existing))
+            return existing;
+
+        if (key.StartsWith("spk_", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(key[4..], out var normalizedIndex))
+        {
+            var normalized = $"spk_{normalizedIndex:D2}";
+            assignedLabels[key] = normalized;
+            return normalized;
+        }
+
+        var digits = new string([.. key.Where(char.IsDigit)]);
+        var speakerIndex = int.TryParse(digits, out var parsedIndex)
+            ? parsedIndex
+            : assignedLabels.Count;
+        var speakerId = $"spk_{speakerIndex:D2}";
+        assignedLabels[key] = speakerId;
+        return speakerId;
+    }
+
+    private static int CountDistinctSpeakers(IReadOnlyList<DiarizedSegment> segments)
+    {
+        var speakers = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var segment in segments)
+        {
+            if (!string.IsNullOrWhiteSpace(segment.SpeakerId))
+                speakers.Add(segment.SpeakerId);
+        }
+
+        return speakers.Count;
+    }
+
 }
 
 public enum ContainerCapabilityStage
@@ -593,6 +774,7 @@ public enum ContainerCapabilityStage
     Transcription,
     Translation,
     Tts,
+    Diarization,
 }
 
 public sealed record ContainerCapabilitiesSnapshot(
@@ -603,13 +785,19 @@ public sealed record ContainerCapabilitiesSnapshot(
     bool TtsReady,
     string? TtsDetail,
     IReadOnlyDictionary<string, bool>? TtsProviders = null,
-    IReadOnlyDictionary<string, string>? TtsProviderDetails = null)
+    IReadOnlyDictionary<string, string>? TtsProviderDetails = null,
+    bool DiarizationReady = false,
+    string? DiarizationDetail = null,
+    IReadOnlyDictionary<string, bool>? DiarizationProviders = null,
+    IReadOnlyDictionary<string, string>? DiarizationProviderDetails = null,
+    string? DiarizationDefaultProvider = null)
 {
     public bool IsReady(ContainerCapabilityStage stage) => stage switch
     {
         ContainerCapabilityStage.Transcription => TranscriptionReady,
         ContainerCapabilityStage.Translation => TranslationReady,
         ContainerCapabilityStage.Tts => TtsReady,
+        ContainerCapabilityStage.Diarization => DiarizationReady,
         _ => false,
     };
 
@@ -618,6 +806,7 @@ public sealed record ContainerCapabilitiesSnapshot(
         ContainerCapabilityStage.Transcription => TranscriptionDetail,
         ContainerCapabilityStage.Translation => TranslationDetail,
         ContainerCapabilityStage.Tts => TtsDetail,
+        ContainerCapabilityStage.Diarization => DiarizationDetail,
         _ => null,
     };
 
@@ -636,6 +825,26 @@ public sealed record ContainerCapabilitiesSnapshot(
         }
 
         if (TtsProviderDetails is not null && TtsProviderDetails.TryGetValue(providerId, out var providerDetail))
+            detail = providerDetail;
+
+        return found || detail is not null;
+    }
+
+    public bool TryGetDiarizationProviderReadiness(string providerId, out bool ready, out string? detail)
+    {
+        ready = false;
+        detail = null;
+        if (string.IsNullOrWhiteSpace(providerId))
+            return false;
+
+        var found = false;
+        if (DiarizationProviders is not null && DiarizationProviders.TryGetValue(providerId, out var providerReady))
+        {
+            ready = providerReady;
+            found = true;
+        }
+
+        if (DiarizationProviderDetails is not null && DiarizationProviderDetails.TryGetValue(providerId, out var providerDetail))
             detail = providerDetail;
 
         return found || detail is not null;
@@ -666,7 +875,7 @@ public sealed record ContainerHealthStatus(
             if (Capabilities is null)
                 return $"Healthy ({cuda})";
 
-            return $"Healthy ({cuda}) · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")}";
+            return $"Healthy ({cuda}) · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")} · diar={(Capabilities.DiarizationReady ? "✓" : "x")}";
         }
     }
 }

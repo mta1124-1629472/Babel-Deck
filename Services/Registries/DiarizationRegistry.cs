@@ -26,10 +26,12 @@ public interface IDiarizationRegistry
 public sealed class DiarizationRegistry : IDiarizationRegistry
 {
     private readonly AppLog _log;
+    private readonly ContainerizedServiceProbe? _containerizedProbe;
 
-    public DiarizationRegistry(AppLog log)
+    public DiarizationRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null)
     {
         _log = log;
+        _containerizedProbe = containerizedProbe;
     }
 
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
@@ -42,6 +44,26 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
             ["pyannote/speaker-diarization-3.1"],
             IsImplemented: true,
             Notes: "Requires pyannote.audio Python package and HuggingFace model acceptance."),
+        new ProviderDescriptor(
+            ProviderNames.NemoLocal,
+            "NeMo",
+            false,
+            null,
+            ["nemo"],
+            SupportedRuntimes: [InferenceRuntime.Containerized],
+            DefaultRuntime: InferenceRuntime.Containerized,
+            IsImplemented: true,
+            Notes: "Uses the containerized NeMo ClusteringDiarizer endpoint."),
+        new ProviderDescriptor(
+            ProviderNames.WeSpeakerLocal,
+            "WeSpeaker",
+            false,
+            null,
+            ["wespeaker"],
+            SupportedRuntimes: [InferenceRuntime.Containerized],
+            DefaultRuntime: InferenceRuntime.Containerized,
+            IsImplemented: true,
+            Notes: "Uses the containerized WeSpeaker CPU fallback endpoint."),
     ];
 
     public ProviderReadiness CheckReadiness(string providerId, AppSettings settings, ApiKeyStore? keyStore)
@@ -64,6 +86,14 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
                 _log,
                 keyStore,
                 ResolveHuggingFaceToken(keyStore, settings)),
+            ProviderNames.NemoLocal => new NemoContainerizedDiarizationProvider(
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                _log,
+                _containerizedProbe),
+            ProviderNames.WeSpeakerLocal => new WeSpeakerContainerizedDiarizationProvider(
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                _log,
+                _containerizedProbe),
             _ => throw new PipelineProviderException(
                 $"Diarization provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")

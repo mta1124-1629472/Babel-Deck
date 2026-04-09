@@ -34,6 +34,8 @@ public static class ProviderNames
 
     // ── Diarization ─────────────────────────────────────────────────────
     public const string PyannoteLocal = "pyannote-local";
+    public const string NemoLocal = "nemo-local";
+    public const string WeSpeakerLocal = "wespeaker-local";
 }
 
 /// <summary>

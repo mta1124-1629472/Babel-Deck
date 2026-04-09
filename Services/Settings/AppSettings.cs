@@ -39,8 +39,8 @@ public sealed class AppSettings
     /// </summary>
     public int TranscriptionNumWorkers { get; set; } = 1;
 
-    /// <summary>Diarization provider identifier (e.g. "pyannote-local"). Empty string = diarization disabled.</summary>
-    public string DiarizationProvider { get; set; } = "";
+    /// <summary>Diarization provider identifier (e.g. "nemo-local"). Empty string = diarization disabled.</summary>
+    public string DiarizationProvider { get; set; } = ProviderNames.NemoLocal;
 
     /// <summary>
     /// HuggingFace user access token required to download the gated pyannote speaker

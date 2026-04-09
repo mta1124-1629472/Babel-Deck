@@ -39,6 +39,13 @@ public static class ContainerizedProviderReadiness
         ApiKeyStore? keyStore = null) =>
         Check(settings, ContainerCapabilityStage.Tts, probe);
 
+    public static ProviderReadiness CheckDiarization(
+        AppSettings settings,
+        string providerId,
+        ContainerizedServiceProbe? probe = null,
+        ApiKeyStore? keyStore = null) =>
+        Check(settings, ContainerCapabilityStage.Diarization, probe, providerId);
+
     public static Task<ProviderReadiness> CheckTranscriptionForExecutionAsync(
         AppSettings settings,
         ContainerizedServiceProbe probe,
@@ -57,10 +64,18 @@ public static class ContainerizedProviderReadiness
         CancellationToken cancellationToken = default) =>
         CheckForExecutionAsync(settings, ContainerCapabilityStage.Tts, probe, cancellationToken);
 
+    public static Task<ProviderReadiness> CheckDiarizationForExecutionAsync(
+        AppSettings settings,
+        string providerId,
+        ContainerizedServiceProbe probe,
+        CancellationToken cancellationToken = default) =>
+        CheckForExecutionAsync(settings, ContainerCapabilityStage.Diarization, probe, cancellationToken, providerId);
+
     private static ProviderReadiness Check(
         AppSettings settings,
         ContainerCapabilityStage stage,
-        ContainerizedServiceProbe? probe)
+        ContainerizedServiceProbe? probe,
+        string? providerId = null)
     {
         var serviceUrl = settings.EffectiveGpuServiceUrl;
         if (string.IsNullOrWhiteSpace(serviceUrl))
@@ -69,14 +84,15 @@ public static class ContainerizedProviderReadiness
         var probeResult = probe?.GetCurrentOrStartBackgroundProbe(serviceUrl)
             ?? FromHealth(ContainerizedInferenceClient.CheckHealth(serviceUrl, timeoutSeconds: 2));
 
-        return MapProbeResultToReadiness(settings, probeResult, stage);
+        return MapProbeResultToReadiness(settings, probeResult, stage, providerId);
     }
 
     private static async Task<ProviderReadiness> CheckForExecutionAsync(
         AppSettings settings,
         ContainerCapabilityStage stage,
         ContainerizedServiceProbe probe,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? providerId = null)
     {
         var serviceUrl = settings.EffectiveGpuServiceUrl;
         if (string.IsNullOrWhiteSpace(serviceUrl))
@@ -88,7 +104,7 @@ public static class ContainerizedProviderReadiness
             waitTimeout: ExecutionProbeBudget,
             cancellationToken);
 
-        if (IsCapabilityActivelyWarming(probeResult, stage, settings))
+        if (IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
         {
             var warmupSw = Stopwatch.StartNew();
             while (warmupSw.Elapsed < CapabilityWarmupBudget)
@@ -100,23 +116,24 @@ public static class ContainerizedProviderReadiness
                     forceRefresh: true,
                     waitTimeout: ExecutionProbeBudget,
                     cancellationToken);
-                if (!IsCapabilityActivelyWarming(probeResult, stage, settings))
+                if (!IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
                     break;
             }
         }
 
-        return MapProbeResultToReadiness(settings, probeResult, stage);
+        return MapProbeResultToReadiness(settings, probeResult, stage, providerId);
     }
 
     private static bool IsCapabilityActivelyWarming(
         ContainerizedProbeResult probeResult,
         ContainerCapabilityStage stage,
-        AppSettings settings)
+        AppSettings settings,
+        string? providerId)
     {
         if (probeResult.State != ContainerizedProbeState.Available || probeResult.Capabilities is null)
             return false;
 
-        if (IsStageReadyForSelection(settings, probeResult.Capabilities, stage, out var detail))
+        if (IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out var detail))
             return false;
 
         // Retry only for active warmup (e.g. "Qwen3-TTS warming up").
@@ -130,7 +147,8 @@ public static class ContainerizedProviderReadiness
     internal static ProviderReadiness MapProbeResultToReadiness(
         AppSettings settings,
         ContainerizedProbeResult probeResult,
-        ContainerCapabilityStage stage)
+        ContainerCapabilityStage stage,
+        string? providerId = null)
     {
         var hostLabel = GetHostLabel(settings);
         if (probeResult.State == ContainerizedProbeState.Checking)
@@ -149,13 +167,14 @@ public static class ContainerizedProviderReadiness
         }
 
         string? detail = null;
-        if (probeResult.Capabilities is null || !IsStageReadyForSelection(settings, probeResult.Capabilities, stage, out detail))
+        if (probeResult.Capabilities is null || !IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out detail))
         {
             var stageLabel = stage switch
             {
                 ContainerCapabilityStage.Transcription => "transcription",
                 ContainerCapabilityStage.Translation => "translation",
-                _ => "TTS",
+                ContainerCapabilityStage.Tts => "TTS",
+                _ => "diarization",
             };
             return new ProviderReadiness(
                 false,
@@ -216,21 +235,37 @@ public static class ContainerizedProviderReadiness
         AppSettings settings,
         ContainerCapabilitiesSnapshot capabilities,
         ContainerCapabilityStage stage,
+        string? providerId,
         out string? detail)
     {
         detail = capabilities.Detail(stage);
 
-        if (stage != ContainerCapabilityStage.Tts)
-            return capabilities.IsReady(stage);
+        if (stage == ContainerCapabilityStage.Tts)
+        {
+            var ttsProviderId = string.IsNullOrWhiteSpace(providerId) ? settings.TtsProvider : providerId;
+            if (string.IsNullOrWhiteSpace(ttsProviderId))
+                return capabilities.IsReady(stage);
 
-        var providerId = settings.TtsProvider;
-        if (string.IsNullOrWhiteSpace(providerId))
-            return capabilities.IsReady(stage);
+            if (!capabilities.TryGetTtsProviderReadiness(ttsProviderId, out var providerReady, out var providerDetail))
+                return capabilities.IsReady(stage);
 
-        if (!capabilities.TryGetTtsProviderReadiness(providerId, out var providerReady, out var providerDetail))
-            return capabilities.IsReady(stage);
+            detail = string.IsNullOrWhiteSpace(providerDetail) ? detail : providerDetail;
+            return providerReady;
+        }
 
-        detail = string.IsNullOrWhiteSpace(providerDetail) ? detail : providerDetail;
-        return providerReady;
+        if (stage == ContainerCapabilityStage.Diarization)
+        {
+            var diarizationProviderId = string.IsNullOrWhiteSpace(providerId) ? settings.DiarizationProvider : providerId;
+            if (string.IsNullOrWhiteSpace(diarizationProviderId))
+                return capabilities.IsReady(stage);
+
+            if (!capabilities.TryGetDiarizationProviderReadiness(diarizationProviderId, out var providerReady, out var providerDetail))
+                return capabilities.IsReady(stage);
+
+            detail = string.IsNullOrWhiteSpace(providerDetail) ? detail : providerDetail;
+            return providerReady;
+        }
+
+        return capabilities.IsReady(stage);
     }
 }

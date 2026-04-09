@@ -76,6 +76,8 @@ public static class InferenceRuntimeCatalog
     public static string DefaultTtsProvider(InferenceRuntime runtime) =>
         DefaultTtsProvider(MapLegacyRuntimeToProfile(runtime));
 
+    public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
+
     public static string NormalizeTranscriptionProvider(ComputeProfile profile, string? providerId)
     {
         if (string.IsNullOrWhiteSpace(providerId))
@@ -161,6 +163,27 @@ public static class InferenceRuntimeCatalog
         };
     }
 
+    public static string NormalizeDiarizationProvider(string? providerId)
+    {
+        if (string.IsNullOrWhiteSpace(providerId))
+            return DefaultDiarizationProvider();
+
+        return providerId switch
+        {
+            "nemo" => ProviderNames.NemoLocal,
+            "wespeaker" => ProviderNames.WeSpeakerLocal,
+            _ => providerId,
+        };
+    }
+
+    public static string NormalizeDiarizationCapabilityProviderId(string? providerId) => providerId switch
+    {
+        "nemo" or ProviderNames.NemoLocal => ProviderNames.NemoLocal,
+        "wespeaker" or ProviderNames.WeSpeakerLocal => ProviderNames.WeSpeakerLocal,
+        ProviderNames.PyannoteLocal => ProviderNames.PyannoteLocal,
+        _ => providerId ?? string.Empty,
+    };
+
     public static InferenceRuntime InferTranscriptionRuntime(string? providerId) =>
         ResolveRuntime(InferTranscriptionProfile(providerId));
 
@@ -205,6 +228,7 @@ public static class InferenceRuntimeCatalog
         settings.TtsProvider = NormalizeTtsProvider(
             settings.TtsProfile,
             settings.TtsProvider);
+        settings.DiarizationProvider = NormalizeDiarizationProvider(settings.DiarizationProvider);
     }
 
     private static ComputeProfile ResolveConfiguredProfile(
@@ -250,6 +274,14 @@ public static class InferenceRuntimeCatalog
             or ProviderNames.GoogleCloudTts
             or ProviderNames.OpenAiTts
             or ProviderNames.Qwen => true,
+        _ => false,
+    };
+
+    public static bool IsKnownDiarizationProvider(string? providerId) => providerId switch
+    {
+        ProviderNames.PyannoteLocal
+            or ProviderNames.NemoLocal
+            or ProviderNames.WeSpeakerLocal => true,
         _ => false,
     };
 }
