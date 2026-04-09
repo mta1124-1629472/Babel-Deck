@@ -1010,12 +1010,9 @@ partial void OnSourcePositionMsChanged(double value)
     }
 
     /// <summary>
-    /// Synchronizes all provider/model UI backing fields from CurrentSettings.
-    /// Called when CurrentSession changes (e.g., media restored from cache).
-    /// This ensures dropdowns always display the actual configured state,
-    /// not stale values from a previous session.
-    /// <summary>
     /// Synchronizes the view-model's provider, runtime, and model selection fields from the coordinator's current settings.
+    /// Called when CurrentSession changes (e.g., media restored from cache) to ensure dropdowns always display
+    /// the actual configured state, not stale values from a previous session.
     /// </summary>
     /// <remarks>
     /// Updates TTS playback rate, resolves and selects runtimes/providers/models, rebuilds model option lists,
