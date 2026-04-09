@@ -414,7 +414,6 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Theory]
-    [InlineData(ProviderNames.PyannoteLocal)]
     [InlineData(ProviderNames.NemoLocal)]
     [InlineData(ProviderNames.WeSpeakerLocal)]
     public void IsKnownDiarizationProvider_KnownProviders_ReturnTrue(string providerId)

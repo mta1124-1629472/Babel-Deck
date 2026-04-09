@@ -184,88 +184,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private bool _isMultiSpeakerEnabled;
 
     public List<string> DiarizationProviderOptions { get; } =
-        BuildDiarizationProviderOptions();
-
-    private static List<string> BuildDiarizationProviderOptions()
-    {
-        var options = new List<string> { string.Empty };
-
-        foreach (var providerName in GetRegisteredDiarizationProviderNames())
-        {
-            if (!string.IsNullOrWhiteSpace(providerName) &&
-                !options.Contains(providerName, StringComparer.Ordinal))
-            {
-                options.Add(providerName);
-            }
-        }
-
-        if (!options.Contains(ProviderNames.PyannoteLocal, StringComparer.Ordinal))
-        {
-            options.Add(ProviderNames.PyannoteLocal);
-        }
-
-        return options;
-    }
-
-    private static IEnumerable<string> GetRegisteredDiarizationProviderNames()
-    {
-        var registryType = typeof(DiarizationRegistry);
-        object? registryInstance = registryType
-            .GetProperty("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)?
-            .GetValue(null);
-
-        foreach (var memberName in new[] { "ProviderNames", "AvailableProviderNames", "Providers" })
-        {
-            foreach (var providerName in ReadProviderNames(registryType, registryInstance, memberName))
-            {
-                yield return providerName;
-            }
-        }
-    }
-
-    private static IEnumerable<string> ReadProviderNames(
-        Type registryType,
-        object? registryInstance,
-        string memberName)
-    {
-        var bindingFlags = System.Reflection.BindingFlags.Public |
-                           System.Reflection.BindingFlags.Static |
-                           System.Reflection.BindingFlags.Instance;
-
-        var property = registryType.GetProperty(memberName, bindingFlags);
-        var value = property?.GetValue(property.GetMethod?.IsStatic == true ? null : registryInstance);
-
-        if (value is IEnumerable<string> stringValues)
-        {
-            foreach (var stringValue in stringValues)
-            {
-                yield return stringValue;
-            }
-
-            yield break;
-        }
-
-        if (value is System.Collections.IEnumerable values)
-        {
-            foreach (var item in values)
-            {
-                if (item is string stringItem)
-                {
-                    yield return stringItem;
-                    continue;
-                }
-
-                var name = item?.GetType()
-                    .GetProperty("Name", bindingFlags)?
-                    .GetValue(item) as string;
-
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    yield return name;
-                }
-            }
-        }
-    }
+        [string.Empty, ProviderNames.NemoLocal, ProviderNames.WeSpeakerLocal];
     [ObservableProperty]
     private string _diarizationProvider = string.Empty;
 
@@ -812,7 +731,7 @@ partial void OnSourcePositionMsChanged(double value)
     {
         if (_isSynchronizingPipelineSettings) return;
 
-        DiarizationProvider = value ? ProviderNames.PyannoteLocal : string.Empty;
+        DiarizationProvider = value ? InferenceRuntimeCatalog.DefaultDiarizationProvider() : string.Empty;
     }
 
     partial void OnDiarizationProviderChanged(string value)
@@ -826,7 +745,7 @@ partial void OnSourcePositionMsChanged(double value)
         if (!DiarizationProviderOptions.Contains(normalized, StringComparer.Ordinal))
             normalized = string.Empty;
 
-        var expectedAutoDetect = string.Equals(normalized, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
+        var expectedAutoDetect = !string.IsNullOrEmpty(normalized);
 
         _isSynchronizingPipelineSettings = true;
         try
@@ -1145,8 +1064,7 @@ partial void OnSourcePositionMsChanged(double value)
             DiarizationProvider = _coordinator.CurrentSettings.DiarizationProvider;
             DiarizationMinSpeakers = _coordinator.CurrentSettings.DiarizationMinSpeakers;
             DiarizationMaxSpeakers = _coordinator.CurrentSettings.DiarizationMaxSpeakers;
-            IsAutoSpeakerDetectionEnabled =
-                string.Equals(_coordinator.CurrentSettings.DiarizationProvider, ProviderNames.PyannoteLocal, StringComparison.Ordinal);
+            IsAutoSpeakerDetectionEnabled = !string.IsNullOrWhiteSpace(_coordinator.CurrentSettings.DiarizationProvider);
             DefaultTtsVoiceFallback = _coordinator.CurrentSession.DefaultTtsVoiceFallback ?? string.Empty;
 
             // Notify after RebuildAllModelOptions() so bindings read the rebuilt backing fields.
@@ -1165,7 +1083,7 @@ partial void OnSourcePositionMsChanged(double value)
 
     private void RefreshAutoSpeakerDetectionStatus()
     {
-        if (!IsAutoSpeakerDetectionEnabled)
+        if (!IsAutoSpeakerDetectionEnabled || string.IsNullOrWhiteSpace(DiarizationProvider))
         {
             AutoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
             return;
@@ -1174,20 +1092,23 @@ partial void OnSourcePositionMsChanged(double value)
         var registry = _coordinator.DiarizationRegistry;
         if (registry is null)
         {
-            AutoSpeakerDetectionStatus = "⚠ Auto speaker detection is unavailable in this build. Using manual mapping.";
+            AutoSpeakerDetectionStatus = "⚠ Speaker diarization is unavailable in this build. Manual mapping remains available.";
             return;
         }
 
         try
         {
-            var readiness = registry.CheckReadiness(ProviderNames.PyannoteLocal, _coordinator.CurrentSettings, _coordinator.KeyStore);
+            var readiness = registry.CheckReadiness(DiarizationProvider, _coordinator.CurrentSettings, _coordinator.KeyStore);
+            var providerLabel = registry.GetAvailableProviders()
+                .FirstOrDefault(provider => string.Equals(provider.Id, DiarizationProvider, StringComparison.Ordinal))
+                ?.DisplayName ?? DiarizationProvider;
             AutoSpeakerDetectionStatus = readiness.IsReady
-                ? "⚠ Advanced mode enabled. Requires pyannote runtime + HuggingFace model access on user machines."
-                : $"⚠ Auto detection not ready: {readiness.BlockingReason}. Manual mapping will still work.";
+                ? $"Speaker diarization is enabled via {providerLabel}."
+                : $"⚠ {providerLabel} is not ready: {readiness.BlockingReason}. Manual mapping will still work.";
         }
         catch (Exception ex)
         {
-            AutoSpeakerDetectionStatus = $"⚠ Auto detection readiness check failed: {ex.Message}. Manual mapping will still work.";
+            AutoSpeakerDetectionStatus = $"⚠ Speaker diarization readiness check failed: {ex.Message}. Manual mapping will still work.";
         }
     }
 

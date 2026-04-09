@@ -288,19 +288,13 @@
                                        IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
                                        Foreground="{DynamicResource PrimaryTextBrush}" />
 
-                             <!-- Auto speaker detection (pyannote) — only meaningful when multi-speaker is on -->
+                             <!-- Speaker diarization — only meaningful when multi-speaker is on -->
                              <CheckBox Content="Auto speaker detection"
                                        IsChecked="{Binding Playback.IsAutoSpeakerDetectionEnabled, Mode=TwoWay}"
                                        IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
                                        Foreground="{DynamicResource PrimaryTextBrush}" />
 
-                            <!-- Controls that only apply when auto-detection is enabled -->
-                             <!-- HF token hint -->
-                             <TextBlock Text="HuggingFace token required — set it in 🔑 API Keys above."
-                                        FontSize="11" Foreground="{DynamicResource StatusTextBrush}"
-                                        TextWrapping="Wrap"
-                                        IsVisible="{Binding Playback.IsAutoSpeakerDetectionEnabled}" />
-
+                             <!-- Controls that only apply when auto-detection is enabled -->
                              <!-- Speaker count constraints — only visible when auto-detection is on -->
                              <StackPanel Spacing="5"
                                          IsVisible="{Binding Playback.IsAutoSpeakerDetectionEnabled}">
@@ -310,22 +304,17 @@
                                                     Value="{Binding Playback.DiarizationMinSpeakers, Mode=TwoWay}"
                                                     Minimum="1" Maximum="20"
                                                     Width="80"
-                                                    ToolTip.Tip="Leave blank to let pyannote auto-detect" />
+                                                    ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
                                      <TextBlock Grid.Row="1" Grid.Column="0" Text="Max Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
                                      <NumericUpDown Grid.Row="1" Grid.Column="1"
                                                     Value="{Binding Playback.DiarizationMaxSpeakers, Mode=TwoWay}"
                                                     Minimum="1" Maximum="20"
                                                     Width="80"
-                                                    ToolTip.Tip="Leave blank to let pyannote auto-detect" />
+                                                    ToolTip.Tip="Leave blank to let the selected diarization provider auto-detect" />
                                  </Grid>
                             </StackPanel>
 
-                             <!-- Setup guide + status — only enabled when auto-detection is on -->
-                             <Button Content="Get HF access (token + models)"
-                                     Click="OnAutoSpeakerSetupGuideClick"
-                                     IsEnabled="{Binding Playback.IsAutoSpeakerDetectionEnabled}"
-                                     HorizontalAlignment="Left"
-                                     ToolTip.Tip="Opens HuggingFace token settings and the two pyannote model pages you must accept" />
+                             <!-- Status -->
                              <TextBlock Text="{Binding Playback.AutoSpeakerDetectionStatus}"
                                         FontSize="11"
                                         Foreground="{DynamicResource StatusTextBrush}"
@@ -337,7 +326,7 @@
                                          IsVisible="{Binding Playback.IsMultiSpeakerEnabled}">
 
                                  <!-- Hint shown when multi-speaker is on but no speaker IDs have been detected yet -->
-                                 <TextBlock Text="Transcribe with auto-detection enabled to assign speaker IDs."
+                                 <TextBlock Text="Transcribe with a diarization provider enabled to assign speaker IDs."
                                             FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
                                             IsVisible="{Binding Playback.IsMultiSpeakerNoSpeakersYet}" />
 

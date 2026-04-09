@@ -37,14 +37,6 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
     [
         new ProviderDescriptor(
-            ProviderNames.PyannoteLocal,
-            "Pyannote (Local)",
-            false,
-            null,
-            ["pyannote/speaker-diarization-3.1"],
-            IsImplemented: true,
-            Notes: "Requires pyannote.audio Python package and HuggingFace model acceptance."),
-        new ProviderDescriptor(
             ProviderNames.NemoLocal,
             "NeMo",
             false,
@@ -82,10 +74,6 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     {
         return providerId switch
         {
-            ProviderNames.PyannoteLocal => new PyannoteDiarizationProvider(
-                _log,
-                keyStore,
-                ResolveHuggingFaceToken(keyStore, settings)),
             ProviderNames.NemoLocal => new NemoContainerizedDiarizationProvider(
                 new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
                 _log,
@@ -98,19 +86,5 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
                 $"Diarization provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")
         };
-    }
-
-    /// <summary>
-    /// Resolves the HuggingFace token: keyStore value takes precedence over the settings
-    /// fallback. Whitespace-only values are treated as absent.
-    /// </summary>
-    private static string? ResolveHuggingFaceToken(ApiKeyStore? keyStore, AppSettings settings)
-    {
-        var storeToken = keyStore?.GetKey(CredentialKeys.HuggingFace)?.Trim();
-        if (!string.IsNullOrWhiteSpace(storeToken))
-            return storeToken;
-
-        var settingsToken = settings.DiarizationHuggingFaceToken?.Trim();
-        return string.IsNullOrWhiteSpace(settingsToken) ? null : settingsToken;
     }
 }

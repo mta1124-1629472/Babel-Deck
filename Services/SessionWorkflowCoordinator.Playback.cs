@@ -29,15 +29,11 @@ public sealed partial class SessionWorkflowCoordinator
         var request = new DiarizationRequest(
             SourceAudioPath:  audioPath,
             MinSpeakers:      CurrentSettings.DiarizationMinSpeakers,
-            MaxSpeakers:      CurrentSettings.DiarizationMaxSpeakers,
-            HuggingFaceToken: string.IsNullOrWhiteSpace(CurrentSettings.DiarizationHuggingFaceToken)
-                                  ? null
-                                  : CurrentSettings.DiarizationHuggingFaceToken);
+            MaxSpeakers:      CurrentSettings.DiarizationMaxSpeakers);
 
         _log.Info($"Running diarization: provider={CurrentSettings.DiarizationProvider}, audio={audioPath}, " +
                   $"minSpeakers={CurrentSettings.DiarizationMinSpeakers?.ToString() ?? "auto"}, " +
-                  $"maxSpeakers={CurrentSettings.DiarizationMaxSpeakers?.ToString() ?? "auto"}, " +
-                  $"hasToken={!string.IsNullOrWhiteSpace(CurrentSettings.DiarizationHuggingFaceToken)}");
+                  $"maxSpeakers={CurrentSettings.DiarizationMaxSpeakers?.ToString() ?? "auto"}");
 
         var result = await provider.DiarizeAsync(request, ct);
 

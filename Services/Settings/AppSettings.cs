@@ -43,22 +43,14 @@ public sealed class AppSettings
     public string DiarizationProvider { get; set; } = ProviderNames.NemoLocal;
 
     /// <summary>
-    /// HuggingFace user access token required to download the gated pyannote speaker
-    /// diarization model. Obtain one at https://huggingface.co/settings/tokens after
-    /// accepting the model terms at https://hf.co/pyannote/speaker-diarization-3.1.
-    /// Empty string = no token (will fail for gated models).
-    /// </summary>
-    public string DiarizationHuggingFaceToken { get; set; } = "";
-
-    /// <summary>
     /// Optional lower bound on the number of speakers to detect.
-    /// null means no constraint (pyannote auto-detects).
+    /// null means no lower bound hint.
     /// </summary>
     public int? DiarizationMinSpeakers { get; set; } = null;
 
     /// <summary>
     /// Optional upper bound on the number of speakers to detect.
-    /// null means no constraint (pyannote auto-detects).
+    /// null means no upper bound hint.
     /// </summary>
     public int? DiarizationMaxSpeakers { get; set; } = null;
 

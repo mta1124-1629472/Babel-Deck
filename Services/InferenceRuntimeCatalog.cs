@@ -168,19 +168,22 @@ public static class InferenceRuntimeCatalog
         if (string.IsNullOrWhiteSpace(providerId))
             return DefaultDiarizationProvider();
 
-        return providerId switch
+        var normalized = providerId switch
         {
             "nemo" => ProviderNames.NemoLocal,
             "wespeaker" => ProviderNames.WeSpeakerLocal,
             _ => providerId,
         };
+
+        return IsKnownDiarizationProvider(normalized)
+            ? normalized
+            : DefaultDiarizationProvider();
     }
 
     public static string NormalizeDiarizationCapabilityProviderId(string? providerId) => providerId switch
     {
         "nemo" or ProviderNames.NemoLocal => ProviderNames.NemoLocal,
         "wespeaker" or ProviderNames.WeSpeakerLocal => ProviderNames.WeSpeakerLocal,
-        ProviderNames.PyannoteLocal => ProviderNames.PyannoteLocal,
         _ => providerId ?? string.Empty,
     };
 
@@ -279,8 +282,7 @@ public static class InferenceRuntimeCatalog
 
     public static bool IsKnownDiarizationProvider(string? providerId) => providerId switch
     {
-        ProviderNames.PyannoteLocal
-            or ProviderNames.NemoLocal
+        ProviderNames.NemoLocal
             or ProviderNames.WeSpeakerLocal => true,
         _ => false,
     };

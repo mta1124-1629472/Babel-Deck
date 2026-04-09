@@ -536,65 +536,12 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void DiarizationRegistry_GetAvailableProviders_ContainsPyannoteLocal()
+    public void DiarizationRegistry_GetAvailableProviders_ReturnsNemoAndWeSpeakerOnly()
     {
         var providers = _diarizationRegistry.GetAvailableProviders();
-        Assert.Contains(providers, p => p.Id == ProviderNames.PyannoteLocal);
-    }
-
-    [Fact]
-    public void DiarizationRegistry_GetAvailableProviders_ContainsNemoAndWeSpeaker()
-    {
-        var providers = _diarizationRegistry.GetAvailableProviders();
-        Assert.Contains(providers, p => p.Id == ProviderNames.NemoLocal);
-        Assert.Contains(providers, p => p.Id == ProviderNames.WeSpeakerLocal);
-    }
-
-    [Fact]
-    public void DiarizationRegistry_PyannoteLocal_IsImplemented()
-    {
-        var providers = _diarizationRegistry.GetAvailableProviders();
-        var pyannote = Assert.Single(providers, p => p.Id == ProviderNames.PyannoteLocal);
-        Assert.True(pyannote.IsImplemented);
-    }
-
-    [Fact]
-    public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithNoToken_ReturnsNotReady()
-    {
-        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "api-keys.json")));
-        var readiness = _diarizationRegistry.CheckReadiness(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
-
-        Assert.False(readiness.IsReady);
-        Assert.Contains("HuggingFace token is required", readiness.BlockingReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void DiarizationRegistry_PyannoteLocal_CheckReadiness_WithValidToken_DoesNotBlockOnToken()
-    {
-        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "api-keys.json")));
-        keyStore.SetKey(CredentialKeys.HuggingFace, "hf_test_token");
-
-
-        // Note: CheckReadiness will still run the pyannote.audio import probe,
-        // which may return NotReady in CI if pyannote isn't installed —
-        // but the blocking reason will NOT mention HuggingFace.
-        var readiness = _diarizationRegistry.CheckReadiness(
-            ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
-
-        if (!readiness.IsReady)
-        {
-            Assert.DoesNotContain("HuggingFace", readiness.BlockingReason ?? "",
-                StringComparison.OrdinalIgnoreCase);
-        }
-    }
-
-    [Fact]
-    public void DiarizationRegistry_PyannoteLocal_CreateProvider_DoesNotThrow()
-    {
-        var keyStore = new ApiKeyStore(new FileSystemCredentialProvider(Path.Combine(_dir, "empty-keys.json")));
-        var provider = _diarizationRegistry.CreateProvider(ProviderNames.PyannoteLocal, new AppSettings(), keyStore);
-
-        Assert.NotNull(provider);
+        Assert.Equal(
+            [ProviderNames.NemoLocal, ProviderNames.WeSpeakerLocal],
+            providers.Select(provider => provider.Id).ToArray());
     }
 
     [Fact]

@@ -20,7 +20,7 @@ public sealed class ApiKeyStore
     /// <summary>Canonical provider IDs managed by this store (in display order).</summary>
 
     public static IReadOnlyList<string> KnownProviders { get; } =
-        [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl, CredentialKeys.HuggingFace];
+        [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl];
 
     public static string GetDisplayName(string providerKey) => providerKey switch
     {
@@ -29,7 +29,6 @@ public sealed class ApiKeyStore
         CredentialKeys.GoogleGemini => "Google Gemini",
         CredentialKeys.ElevenLabs   => "ElevenLabs",
         CredentialKeys.Deepl        => "DeepL",
-        CredentialKeys.HuggingFace  => "HuggingFace (pyannote diarization)",
         _                           => providerKey,
     };
 
