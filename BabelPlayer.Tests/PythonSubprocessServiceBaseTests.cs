@@ -27,6 +27,11 @@ public sealed class PythonSubprocessServiceBaseTests : IDisposable
 
     private sealed class TestPythonService : PythonSubprocessServiceBase
     {
+        public TestPythonService(AppLog log, ManagedCpuRuntimeManager cpuRuntimeManager)
+            : base(log, cpuRuntimeManager)
+        {
+        }
+
         public TestPythonService(AppLog log, string pythonPath, ManagedCpuRuntimeManager? cpuRuntimeManager = null)
             : base(log, pythonPath, cpuRuntimeManager)
         {
@@ -387,6 +392,34 @@ for i, arg in enumerate(sys.argv):
         Assert.Contains("uv.exe was not found", ex.Message, StringComparison.Ordinal);
 
         try { Directory.Delete(tempRoot, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public void ManagedCpuRuntimeManager_CapturesRuntimeRootOnce_ForManagerAndSubprocessPath()
+    {
+        using var log = new AppLog(_tempLogPath);
+
+        var tempRootA = Path.Combine(Path.GetTempPath(), $"cpu-runtime-root-a-{Guid.NewGuid():N}");
+        var tempRootB = Path.Combine(Path.GetTempPath(), $"cpu-runtime-root-b-{Guid.NewGuid():N}");
+        var resolveCount = 0;
+
+        var runtimeManager = new ManagedCpuRuntimeManager(
+            log,
+            cpuRuntimeRootResolver: () =>
+            {
+                resolveCount++;
+                return resolveCount == 1 ? tempRootA : tempRootB;
+            });
+
+        Assert.Equal(1, resolveCount);
+        Assert.Equal(tempRootA, runtimeManager.RuntimeRoot);
+        Assert.Equal(Path.Combine(tempRootA, ".venv", "Scripts", "python.exe"), runtimeManager.GetPythonExecutablePath());
+        Assert.Equal(Path.Combine(tempRootA, ".cpu-bootstrap-version"), runtimeManager.GetBootstrapMarkerPath());
+
+        var service = new TestPythonService(log, runtimeManager);
+        Assert.Equal(Path.Combine(tempRootA, ".venv", "Scripts", "python.exe"), GetPythonPath(service));
+
+        Assert.Equal(1, resolveCount);
     }
 
     private static string GetPythonPath(object provider)

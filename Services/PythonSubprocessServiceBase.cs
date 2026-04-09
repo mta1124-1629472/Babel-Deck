@@ -39,6 +39,8 @@ public abstract class PythonSubprocessServiceBase
         ManagedCpuRuntimeManager cpuRuntimeManager)
         : this(log, cpuRuntimeManager.GetPythonExecutablePath(), cpuRuntimeManager)
     {
+        // ManagedCpuRuntimeManager pins its runtime root at construction so the subprocess
+        // Python path and bootstrap marker checks resolve against the same managed CPU venv.
     }
 
     protected PythonSubprocessServiceBase(

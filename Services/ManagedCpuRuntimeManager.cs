@@ -23,7 +23,7 @@ public sealed class ManagedCpuRuntimeManager
 
     private readonly AppLog _log;
     private readonly Func<string?> _uvResolver;
-    private readonly Func<string> _cpuRuntimeRootResolver;
+    private readonly string _cpuRuntimeRoot;
     private readonly Func<string> _requirementsPathResolver;
 
     public ManagedCpuRuntimeManager(
@@ -34,7 +34,7 @@ public sealed class ManagedCpuRuntimeManager
     {
         _log = log;
         _uvResolver = uvResolver ?? DependencyLocator.FindUv;
-        _cpuRuntimeRootResolver = cpuRuntimeRootResolver ?? ManagedRuntimeLayout.GetCpuRuntimeRoot;
+        _cpuRuntimeRoot = (cpuRuntimeRootResolver ?? ManagedRuntimeLayout.GetCpuRuntimeRoot)();
         _requirementsPathResolver = requirementsPathResolver ?? ResolveCpuRequirementsPath;
     }
 
@@ -55,11 +55,10 @@ public sealed class ManagedCpuRuntimeManager
     {
         get
         {
-            var runtimeRoot = _cpuRuntimeRootResolver();
-            var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
+            var pythonPath = GetPythonExecutablePath();
             if (!File.Exists(pythonPath))
                 return true;
-            var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
+            var markerPath = GetBootstrapMarkerPath();
             if (!File.Exists(markerPath))
                 return true;
             try
@@ -113,11 +112,17 @@ public sealed class ManagedCpuRuntimeManager
         }
     }
 
+    /// <summary>
+    /// Returns the captured managed CPU runtime root for this manager instance.
+    /// The root is resolved once in the constructor so Python and marker paths stay consistent.
+    /// </summary>
+    public string RuntimeRoot => _cpuRuntimeRoot;
+
     public string GetPythonExecutablePath() =>
-        Path.Combine(_cpuRuntimeRootResolver(), ".venv", "Scripts", "python.exe");
+        Path.Combine(RuntimeRoot, ".venv", "Scripts", "python.exe");
 
     public string GetBootstrapMarkerPath() =>
-        Path.Combine(_cpuRuntimeRootResolver(), ".cpu-bootstrap-version");
+        Path.Combine(RuntimeRoot, ".cpu-bootstrap-version");
 
     private async Task RunBootstrapAsync(
         Action<string>? onStatusLine,
@@ -137,10 +142,10 @@ public sealed class ManagedCpuRuntimeManager
             return;
         }
 
-        var runtimeRoot = _cpuRuntimeRootResolver();
+        var runtimeRoot = RuntimeRoot;
         var venvDir = Path.Combine(runtimeRoot, ".venv");
-        var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
-        var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
+        var pythonPath = GetPythonExecutablePath();
+        var markerPath = GetBootstrapMarkerPath();
         Directory.CreateDirectory(runtimeRoot);
 
         State = ManagedCpuState.Installing;
