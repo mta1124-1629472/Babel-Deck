@@ -230,10 +230,6 @@ public abstract class PythonSubprocessServiceBase
             return;
         }
 
-        // Fast path: skip bootstrap/hash checks when the runtime is already ready.
-        if (_cpuRuntimeManager.State == ManagedCpuState.Ready && File.Exists(PythonPath))
-            return;
-
         await _cpuRuntimeManager.EnsureInstalledAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (_cpuRuntimeManager.State != ManagedCpuState.Ready || !File.Exists(PythonPath))

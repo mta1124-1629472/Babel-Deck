@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace BabelPlayer.Tests;
@@ -176,8 +177,11 @@ public sealed class InferenceRequirementsTests
 
         // Guard against shell-style: pip install <pkg>
         Assert.DoesNotContain("pip install", source, StringComparison.OrdinalIgnoreCase);
-        // Guard against subprocess list-style: ['-m', 'pip', 'install', ...]
-        Assert.DoesNotContain("'-m', 'pip'", source, StringComparison.Ordinal);
+        // Guard against subprocess list-style: ["-m", "pip", ...] or ['-m', 'pip', ...]
+        var pipInstallPattern = @"[""-m[""]'\s*,\s*[""']pip[""']";
+        Assert.False(
+            Regex.IsMatch(source, pipInstallPattern, RegexOptions.IgnoreCase),
+            $"Provider source must not contain inline pip install in subprocess.run list format. Pattern: {pipInstallPattern}");
     }
 
     // ── gpu-constraints.txt ─────────────────────────────────────────────────
