@@ -939,13 +939,12 @@ async def diarize_wespeaker(
     """
     Perform speaker diarization on uploaded audio using the WeSpeaker backend.
     
-    This endpoint accepts optional speaker-count hints for parity with the NeMo endpoint but ignores them; it writes the uploaded audio to a temporary file, runs WeSpeaker diarization in a background thread, schedules the temp file for deletion, and returns the diarization result.
+    This endpoint accepts optional speaker-count hints for parity with the NeMo endpoint but ignores them; it writes the uploaded audio to a temporary file, runs WeSpeaker diarization in a background thread, cleans up the temp file in a finally block, and returns the diarization result.
     
     Parameters:
         audio (UploadFile): Uploaded audio file to diarize.
         min_speakers (Optional[int]): Hint for minimum number of speakers (accepted but ignored).
         max_speakers (Optional[int]): Hint for maximum number of speakers (accepted but ignored).
-        background_tasks (BackgroundTasks): FastAPI background task scheduler used to enqueue temp-file cleanup.
     
     Returns:
         DiarizationResponse: Structured response containing diarization segments and the detected speaker count.
