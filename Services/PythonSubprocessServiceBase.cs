@@ -203,7 +203,7 @@ public abstract class PythonSubprocessServiceBase
             if (string.IsNullOrWhiteSpace(PythonPath) || !File.Exists(PythonPath))
             {
                 throw new InvalidOperationException(
-                    "Python subprocess runtime is not ready. A valid test Python path must be provided.");
+                    "Python subprocess runtime is not ready. A valid Python executable path must be provided.");
             }
 
             return;
