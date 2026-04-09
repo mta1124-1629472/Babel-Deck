@@ -55,10 +55,11 @@ public sealed class ManagedCpuRuntimeManager
     {
         get
         {
-            var pythonPath = GetPythonExecutablePath();
+            var runtimeRoot = _cpuRuntimeRootResolver();
+            var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
             if (!File.Exists(pythonPath))
                 return true;
-            var markerPath = GetBootstrapMarkerPath();
+            var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
             if (!File.Exists(markerPath))
                 return true;
             try
@@ -138,8 +139,8 @@ public sealed class ManagedCpuRuntimeManager
 
         var runtimeRoot = _cpuRuntimeRootResolver();
         var venvDir = Path.Combine(runtimeRoot, ".venv");
-        var pythonPath = GetPythonExecutablePath();
-        var markerPath = GetBootstrapMarkerPath();
+        var pythonPath = Path.Combine(runtimeRoot, ".venv", "Scripts", "python.exe");
+        var markerPath = Path.Combine(runtimeRoot, ".cpu-bootstrap-version");
         Directory.CreateDirectory(runtimeRoot);
 
         State = ManagedCpuState.Installing;

@@ -377,7 +377,7 @@ for i, arg in enumerate(sys.argv):
             cpuRuntimeRootResolver: () => tempRoot,
             requirementsPathResolver: () => requirementsPath);
 
-        var pythonPath = Path.Combine(tempRoot, ".venv", "Scripts", "python.exe");
+        var pythonPath = runtimeManager.GetPythonExecutablePath();
         var service = new TestPythonService(log, pythonPath, runtimeManager);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
