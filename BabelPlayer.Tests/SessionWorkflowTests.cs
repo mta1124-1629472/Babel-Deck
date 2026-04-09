@@ -650,6 +650,38 @@ public sealed class SegmentInspectionTests
     }
 
     [Fact]
+    public void EmbeddedPlaybackViewModel_DiarizationProviderOptions_ShowOffNeMoAndWeSpeaker()
+    {
+        var playback = CreatePlaybackVm();
+
+        Assert.Equal(
+            [string.Empty, ProviderNames.NemoLocal, ProviderNames.WeSpeakerLocal],
+            playback.DiarizationProviderOptions);
+    }
+
+    [Fact]
+    public void EmbeddedPlaybackViewModel_DiarizationProvider_UpdatesSettingsAndStatus()
+    {
+        var playback = CreatePlaybackVm();
+
+        playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
+
+        Assert.Equal(ProviderNames.WeSpeakerLocal, playback.Coordinator.CurrentSettings.DiarizationProvider);
+        Assert.Contains("WeSpeaker", playback.AutoSpeakerDetectionStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmbeddedPlaybackViewModel_DiarizationProvider_EmptyValueReturnsManualStatus()
+    {
+        var playback = CreatePlaybackVm();
+
+        playback.DiarizationProvider = string.Empty;
+
+        Assert.Equal(string.Empty, playback.Coordinator.CurrentSettings.DiarizationProvider);
+        Assert.Equal("Manual speaker mapping is the default release flow.", playback.AutoSpeakerDetectionStatus);
+    }
+
+    [Fact]
     public void IsVisible_FalseWhenNoSegmentSelected()
     {
         var playback = CreatePlaybackVm();

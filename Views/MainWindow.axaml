@@ -288,16 +288,26 @@
                                        IsChecked="{Binding Playback.IsMultiSpeakerEnabled, Mode=TwoWay}"
                                        Foreground="{DynamicResource PrimaryTextBrush}" />
 
-                             <!-- Speaker diarization — only meaningful when multi-speaker is on -->
-                             <CheckBox Content="Auto speaker detection"
-                                       IsChecked="{Binding Playback.IsAutoSpeakerDetectionEnabled, Mode=TwoWay}"
-                                       IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
-                                       Foreground="{DynamicResource PrimaryTextBrush}" />
+                             <StackPanel Spacing="5">
+                                 <TextBlock Text="Diarization Provider" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                 <ComboBox ItemsSource="{Binding Playback.DiarizationProviderOptions}"
+                                           SelectedItem="{Binding Playback.DiarizationProvider, Mode=TwoWay}"
+                                           IsEnabled="{Binding Playback.IsMultiSpeakerEnabled}"
+                                           HorizontalAlignment="Stretch" FontSize="12"
+                                           Background="{DynamicResource ControlBackgroundBrush}"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           BorderBrush="{DynamicResource BorderBrush}">
+                                     <ComboBox.ItemTemplate>
+                                         <DataTemplate>
+                                             <TextBlock Text="{Binding Converter={StaticResource DiarizationProviderDisplayConverter}}" />
+                                         </DataTemplate>
+                                     </ComboBox.ItemTemplate>
+                                 </ComboBox>
+                             </StackPanel>
 
-                             <!-- Controls that only apply when auto-detection is enabled -->
-                             <!-- Speaker count constraints — only visible when auto-detection is on -->
+                             <!-- Controls that only apply when a provider is selected -->
                              <StackPanel Spacing="5"
-                                         IsVisible="{Binding Playback.IsAutoSpeakerDetectionEnabled}">
+                                         IsVisible="{Binding Playback.DiarizationProvider, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
                                      <TextBlock Grid.Row="0" Grid.Column="0" Text="Min Speakers" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
                                      <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -326,7 +336,7 @@
                                          IsVisible="{Binding Playback.IsMultiSpeakerEnabled}">
 
                                  <!-- Hint shown when multi-speaker is on but no speaker IDs have been detected yet -->
-                                 <TextBlock Text="Transcribe with a diarization provider enabled to assign speaker IDs."
+                                 <TextBlock Text="Transcribe with a diarization provider selected to assign speaker IDs."
                                             FontSize="11" Foreground="{DynamicResource StatusTextBrush}" TextWrapping="Wrap"
                                             IsVisible="{Binding Playback.IsMultiSpeakerNoSpeakersYet}" />
 

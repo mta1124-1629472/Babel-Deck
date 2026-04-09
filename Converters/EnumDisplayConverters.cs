@@ -31,3 +31,18 @@ public sealed class GpuHostBackendDisplayConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+public sealed class DiarizationProviderDisplayConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
+    {
+        null => "Off",
+        string providerId when string.IsNullOrWhiteSpace(providerId) => "Off",
+        ProviderNames.NemoLocal => "NeMo",
+        ProviderNames.WeSpeakerLocal => "WeSpeaker",
+        _ => value?.ToString() ?? string.Empty,
+    };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

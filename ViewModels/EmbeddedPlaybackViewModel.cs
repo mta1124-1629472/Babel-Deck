@@ -183,8 +183,9 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsMultiSpeakerNoSpeakersYet))]
     private bool _isMultiSpeakerEnabled;
 
-    public List<string> DiarizationProviderOptions { get; } =
-        [string.Empty, ProviderNames.NemoLocal, ProviderNames.WeSpeakerLocal];
+    [ObservableProperty]
+    private IReadOnlyList<string> _diarizationProviderOptions = [string.Empty];
+
     [ObservableProperty]
     private string _diarizationProvider = string.Empty;
 
@@ -194,21 +195,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private decimal? _diarizationMaxSpeakers;
 
-    private bool _isAutoSpeakerDetectionEnabled;
-
     private string _autoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
-
-    public bool IsAutoSpeakerDetectionEnabled
-    {
-        get => _isAutoSpeakerDetectionEnabled;
-        set
-        {
-            if (!SetProperty(ref _isAutoSpeakerDetectionEnabled, value))
-                return;
-
-            OnIsAutoSpeakerDetectionEnabledChanged(value);
-        }
-    }
 
     public string AutoSpeakerDetectionStatus
     {
@@ -274,6 +261,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         _lastKnownSourceMediaPath = coordinator.CurrentSession.SourceMediaPath;
         _isSourceMediaLoaded = !string.IsNullOrEmpty(coordinator.CurrentSession.IngestedMediaPath);
         BuildProviderCaches();
+        RebuildDiarizationProviderOptions();
         SyncProviderModelFieldsFromSettings();
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
@@ -721,40 +709,23 @@ partial void OnSourcePositionMsChanged(double value)
         if (_isSynchronizingPipelineSettings) return;
 
         if (!value)
-            IsAutoSpeakerDetectionEnabled = false;
+            DiarizationProvider = string.Empty;
 
         _coordinator.SetMultiSpeakerEnabled(value);
         _ = RefreshSegmentsAsync();
-    }
-
-    private void OnIsAutoSpeakerDetectionEnabledChanged(bool value)
-    {
-        if (_isSynchronizingPipelineSettings) return;
-
-        DiarizationProvider = value ? InferenceRuntimeCatalog.DefaultDiarizationProvider() : string.Empty;
     }
 
     partial void OnDiarizationProviderChanged(string value)
     {
         if (_isSynchronizingPipelineSettings) return;
 
-        var normalized = string.IsNullOrWhiteSpace(value)
-            ? string.Empty
-            : value.Trim();
-
-        if (!DiarizationProviderOptions.Contains(normalized, StringComparer.Ordinal))
-            normalized = string.Empty;
-
-        var expectedAutoDetect = !string.IsNullOrEmpty(normalized);
+        var normalized = NormalizeDiarizationProviderSelection(value);
 
         _isSynchronizingPipelineSettings = true;
         try
         {
             if (!string.Equals(normalized, value, StringComparison.Ordinal))
                 DiarizationProvider = normalized;
-
-            if (IsAutoSpeakerDetectionEnabled != expectedAutoDetect)
-                IsAutoSpeakerDetectionEnabled = expectedAutoDetect;
         }
         finally
         {
@@ -1061,10 +1032,10 @@ partial void OnSourcePositionMsChanged(double value)
             // Target language dropdown
             SelectedTargetLanguage = SupportedTargetLanguages.FirstOrDefault(l => l.Code == _coordinator.CurrentSettings.TargetLanguage).Label ?? "English";
 
-            DiarizationProvider = _coordinator.CurrentSettings.DiarizationProvider;
+            RebuildDiarizationProviderOptions();
+            DiarizationProvider = NormalizeDiarizationProviderSelection(_coordinator.CurrentSettings.DiarizationProvider);
             DiarizationMinSpeakers = _coordinator.CurrentSettings.DiarizationMinSpeakers;
             DiarizationMaxSpeakers = _coordinator.CurrentSettings.DiarizationMaxSpeakers;
-            IsAutoSpeakerDetectionEnabled = !string.IsNullOrWhiteSpace(_coordinator.CurrentSettings.DiarizationProvider);
             DefaultTtsVoiceFallback = _coordinator.CurrentSession.DefaultTtsVoiceFallback ?? string.Empty;
 
             // Notify after RebuildAllModelOptions() so bindings read the rebuilt backing fields.
@@ -1083,7 +1054,7 @@ partial void OnSourcePositionMsChanged(double value)
 
     private void RefreshAutoSpeakerDetectionStatus()
     {
-        if (!IsAutoSpeakerDetectionEnabled || string.IsNullOrWhiteSpace(DiarizationProvider))
+        if (string.IsNullOrWhiteSpace(DiarizationProvider))
         {
             AutoSpeakerDetectionStatus = "Manual speaker mapping is the default release flow.";
             return;
@@ -1110,6 +1081,45 @@ partial void OnSourcePositionMsChanged(double value)
         {
             AutoSpeakerDetectionStatus = $"⚠ Speaker diarization readiness check failed: {ex.Message}. Manual mapping will still work.";
         }
+    }
+
+    private void RebuildDiarizationProviderOptions()
+    {
+        var options = new List<string> { string.Empty };
+
+        if (_coordinator.DiarizationRegistry is not null)
+        {
+            foreach (var providerId in _coordinator.DiarizationRegistry
+                         .GetAvailableProviders()
+                         .Where(provider => provider.IsImplemented)
+                         .Select(provider => provider.Id))
+            {
+                if (!string.IsNullOrWhiteSpace(providerId) &&
+                    !options.Contains(providerId, StringComparer.Ordinal))
+                {
+                    options.Add(providerId);
+                }
+            }
+        }
+
+        if (options.Count == 1)
+        {
+            options.Add(ProviderNames.NemoLocal);
+            options.Add(ProviderNames.WeSpeakerLocal);
+        }
+
+        DiarizationProviderOptions = options;
+    }
+
+    private string NormalizeDiarizationProviderSelection(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim();
+
+        return DiarizationProviderOptions.Contains(normalized, StringComparer.Ordinal)
+            ? normalized
+            : string.Empty;
     }
 
     private void NotifyActiveConfigChanged()
