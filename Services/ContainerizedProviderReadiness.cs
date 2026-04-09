@@ -179,7 +179,7 @@ public static class ContainerizedProviderReadiness
             serviceUrl,
             forceRefresh: true,
             waitTimeout: waitOptions.ExecutionProbeBudget,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         if (IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
         {
@@ -187,12 +187,12 @@ public static class ContainerizedProviderReadiness
             while (warmupSw.Elapsed < waitOptions.CapabilityWarmupBudget)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                await Task.Delay(waitOptions.CapabilityWarmupRetryDelay, cancellationToken);
+                await Task.Delay(waitOptions.CapabilityWarmupRetryDelay, cancellationToken).ConfigureAwait(false);
                 probeResult = await probe.WaitForProbeAsync(
                     serviceUrl,
                     forceRefresh: true,
                     waitTimeout: waitOptions.ExecutionProbeBudget,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
                 if (!IsCapabilityActivelyWarming(probeResult, stage, settings, providerId))
                     break;
             }

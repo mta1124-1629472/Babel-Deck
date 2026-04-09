@@ -655,12 +655,7 @@ public sealed partial class SessionWorkflowCoordinator
     public IMediaTransport? SegmentPlayer => _transportManager.SegmentPlayer;
 
     /// <summary>
-    /// Releases resources held by the coordinator: flushes any pending session save, unsubscribes event handlers, and disposes managed services and transport.
-    /// </summary>
-    /// <remarks>
-    /// Flushes pending save state, unsubscribes segment and source-diagnostic event handlers when registered, disposes the containerized inference manager and the TTS service if they implement <see cref="IDisposable"/>, and disposes the transport manager.
-    /// <summary>
-    /// Performs an orderly shutdown: flushes pending state, unsubscribes event handlers, waits for in-flight TTS tasks, and disposes managed resources.
+    /// Performs an orderly shutdown by flushing pending state, unsubscribing event handlers, waiting for in-flight TTS tasks, and disposing managed resources.
     /// </summary>
     /// <remarks>
     /// Attempts to complete any pending save and in-flight TTS operations before disposing internal services and transport resources. Exceptions thrown during disposal or while waiting for pending tasks are caught and ignored to allow shutdown to continue.

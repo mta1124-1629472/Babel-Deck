@@ -430,25 +430,14 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Performs staged health checks against the inference service: verifies liveness and probes capabilities.
-    /// </summary>
-    /// <param name="httpClient">The HTTP client used to send probe requests.</param>
-    /// <param name="serviceUrl">The service base URL (should be normalized, without a trailing slash).</param>
-    /// <param name="cancellationToken">Token to cancel the probe operations.</param>
-    /// <returns>
-    /// A ContainerHealthStatus describing service availability. If the liveness check fails or an exception occurs, an unavailable status is returned with the error message; otherwise the result includes CUDA information and a capabilities snapshot (which may contain a warmup-prefixed error detail if capability probing failed).
-    /// <summary>
-    /// Probes the service's liveness and capabilities and returns a consolidated health status.
+    /// Probes the containerized inference service for liveness, CUDA status, and a capabilities snapshot.
     /// </summary>
     /// <param name="httpClient">The HTTP client used to perform the probe requests.</param>
-    /// <param name="serviceUrl">Base URL of the inference service to probe (should not include a trailing '/').</param>
-    /// <param name="cancellationToken">Token to observe while waiting for the HTTP responses.</param>
-    /// <summary>
-    /// Probe the containerized inference service for liveness, CUDA status, and a capabilities snapshot.
-    /// </summary>
     /// <param name="serviceUrl">Base URL of the inference service to probe.</param>
     /// <param name="cancellationToken">Cancellation token to abort the probe requests.</param>
-    /// <returns>A ContainerHealthStatus indicating whether the container is available. When available, includes CUDA availability/version and a capabilities snapshot; when unavailable, contains an error message describing the failure.</returns>
+    /// <returns>
+    /// A <see cref="ContainerHealthStatus"/> indicating whether the container is available. When available, includes CUDA availability/version and a capabilities snapshot; when unavailable, contains an error message describing the failure.
+    /// </returns>
     private static async Task<ContainerHealthStatus> ProbeHealthAsync(
         HttpClient httpClient,
         string serviceUrl,
@@ -458,8 +447,8 @@ public sealed class ContainerizedInferenceClient
         {
             using var liveResponse = await httpClient.GetAsync(
                 $"{serviceUrl}/health/live",
-                cancellationToken);
-            var live = await DeserializeResponseAsync<LiveHealthResponseDto>(liveResponse, cancellationToken);
+                cancellationToken).ConfigureAwait(false);
+            var live = await DeserializeResponseAsync<LiveHealthResponseDto>(liveResponse, cancellationToken).ConfigureAwait(false);
             if (!string.Equals(live.Status, "healthy", StringComparison.OrdinalIgnoreCase))
                 return ContainerHealthStatus.Unavailable(serviceUrl, $"Unexpected live status '{live.Status ?? "unknown"}'.");
 
@@ -469,8 +458,8 @@ public sealed class ContainerizedInferenceClient
             {
                 using var capabilitiesResponse = await httpClient.GetAsync(
                     $"{serviceUrl}/capabilities",
-                    cancellationToken);
-                var capabilitiesDto = await DeserializeResponseAsync<CapabilitiesResponseDto>(capabilitiesResponse, cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
+                var capabilitiesDto = await DeserializeResponseAsync<CapabilitiesResponseDto>(capabilitiesResponse, cancellationToken).ConfigureAwait(false);
                 capabilities = new ContainerCapabilitiesSnapshot(
                     capabilitiesDto.Transcription?.Ready ?? false,
                     capabilitiesDto.Transcription?.Detail,
@@ -507,11 +496,11 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-            /// Creates a capabilities snapshot where every capability stage is marked not ready and all detail fields contain the provided message.
-            /// </summary>
-            /// <param name="detail">A message describing why capabilities are unavailable; stored in each stage's detail field.</param>
-            /// <returns>A <see cref="ContainerCapabilitiesSnapshot"/> with all stages set as not ready and their detail fields populated with <paramref name="detail"/>.</returns>
-            private static ContainerCapabilitiesSnapshot CreateUnavailableCapabilitiesSnapshot(string detail) =>
+    /// Creates a capabilities snapshot where every capability stage is marked not ready and all detail fields contain the provided message.
+    /// </summary>
+    /// <param name="detail">A message describing why capabilities are unavailable; stored in each stage's detail field.</param>
+    /// <returns>A <see cref="ContainerCapabilitiesSnapshot"/> with all stages set as not ready and their detail fields populated with <paramref name="detail"/>.</returns>
+    private static ContainerCapabilitiesSnapshot CreateUnavailableCapabilitiesSnapshot(string detail) =>
         new(
             TranscriptionReady: false,
             TranscriptionDetail: detail,
@@ -533,7 +522,7 @@ public sealed class ContainerizedInferenceClient
         HttpResponseMessage response,
         CancellationToken cancellationToken)
     {
-        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(payload)
                 ? $"HTTP {(int)response.StatusCode}"
