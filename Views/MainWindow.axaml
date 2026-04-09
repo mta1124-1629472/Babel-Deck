@@ -531,6 +531,25 @@
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
                                 Padding="0,10"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Background="{DynamicResource ButtonBackgroundBrush}"
+                                Foreground="{DynamicResource PrimaryTextBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Command="{Binding Playback.RunDiarizationOnlyCommand}"
+                                IsEnabled="{Binding Playback.CanRunDiarizationOnly}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="↻" VerticalAlignment="Center" />
+                                <TextBlock Text="Re-diarize" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Padding="0,10"
                                 FontSize="13" FontWeight="SemiBold"
                                 Background="{DynamicResource DestructiveBrush}" Foreground="White"
                                 CornerRadius="8"

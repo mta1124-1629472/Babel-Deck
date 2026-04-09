@@ -13,15 +13,67 @@ public sealed partial class SessionWorkflowCoordinator
 {
     // ── Diarization ──────────────────────────────────────────────────────
 
-    private async Task RunDiarizationAsync(string audioPath, string transcriptPath, CancellationToken ct)
+    private readonly record struct DiarizationExecutionOutcome(
+        bool Succeeded,
+        bool SpeakerAssignmentsChanged,
+        int SpeakerCount,
+        int SegmentCount,
+        string? ErrorMessage);
+
+    public async Task<bool> RunDiarizationAsync(CancellationToken cancellationToken = default)
     {
-        if (DiarizationRegistry is null) return;
+        if (CurrentSession.Stage < SessionWorkflowStage.Transcribed)
+            throw new InvalidOperationException("No transcript available. Please transcribe media first.");
+
+        if (string.IsNullOrWhiteSpace(CurrentSession.IngestedMediaPath))
+            throw new InvalidOperationException("No ingested media is available for diarization.");
+
+        if (!File.Exists(CurrentSession.IngestedMediaPath))
+            throw new FileNotFoundException($"Ingested media file not found: {CurrentSession.IngestedMediaPath}");
+
+        if (string.IsNullOrWhiteSpace(CurrentSession.TranscriptPath))
+            throw new InvalidOperationException("No transcript available. Please transcribe media first.");
+
+        if (!File.Exists(CurrentSession.TranscriptPath))
+            throw new FileNotFoundException($"Transcript file not found: {CurrentSession.TranscriptPath}");
+
+        if (string.IsNullOrWhiteSpace(CurrentSettings.DiarizationProvider))
+            throw new InvalidOperationException("No diarization provider is selected.");
+
+        var outcome = await ExecuteDiarizationAsync(
+            CurrentSession.IngestedMediaPath,
+            CurrentSession.TranscriptPath,
+            cancellationToken);
+
+        if (!outcome.Succeeded)
+            throw new InvalidOperationException(outcome.ErrorMessage ?? "Diarization failed.");
+
+        return outcome.SpeakerAssignmentsChanged;
+    }
+
+    private async Task<DiarizationExecutionOutcome> ExecuteDiarizationAsync(
+        string audioPath,
+        string transcriptPath,
+        CancellationToken ct)
+    {
+        if (DiarizationRegistry is null)
+            return new DiarizationExecutionOutcome(
+                Succeeded: false,
+                SpeakerAssignmentsChanged: false,
+                SpeakerCount: 0,
+                SegmentCount: 0,
+                ErrorMessage: "No diarization registry is configured.");
 
         var readiness = DiarizationRegistry.CheckReadiness(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
         if (!readiness.IsReady)
         {
             _log.Warning($"Diarization skipped: {readiness.BlockingReason}");
-            return;
+            return new DiarizationExecutionOutcome(
+                Succeeded: false,
+                SpeakerAssignmentsChanged: false,
+                SpeakerCount: 0,
+                SegmentCount: 0,
+                ErrorMessage: readiness.BlockingReason);
         }
 
         var provider = DiarizationRegistry.CreateProvider(CurrentSettings.DiarizationProvider, CurrentSettings, KeyStore);
@@ -40,14 +92,25 @@ public sealed partial class SessionWorkflowCoordinator
         if (!result.Success)
         {
             _log.Warning($"Diarization failed: {result.ErrorMessage}");
-            return;
+            return new DiarizationExecutionOutcome(
+                Succeeded: false,
+                SpeakerAssignmentsChanged: false,
+                SpeakerCount: result.SpeakerCount,
+                SegmentCount: result.Segments.Count,
+                ErrorMessage: result.ErrorMessage ?? "Diarization provider returned an unsuccessful result.");
         }
 
-        await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
+        var transcriptChanged = await MergeDiarizationIntoTranscriptAsync(transcriptPath, result.Segments, ct);
+        var translationChanged = false;
 
         if (!string.IsNullOrWhiteSpace(CurrentSession.TranslationPath) &&
             File.Exists(CurrentSession.TranslationPath))
-            await MergeSpeakerIdsIntoTranslationAsync(transcriptPath, CurrentSession.TranslationPath, ct);
+        {
+            translationChanged = await MergeSpeakerIdsIntoTranslationAsync(
+                transcriptPath,
+                CurrentSession.TranslationPath,
+                ct);
+        }
 
         CurrentSession = CurrentSession with
         {
@@ -57,25 +120,39 @@ public sealed partial class SessionWorkflowCoordinator
         SaveCurrentSession();
 
         _log.Info($"Diarization complete: {result.SpeakerCount} speakers across {result.Segments.Count} segments.");
+
+        return new DiarizationExecutionOutcome(
+            Succeeded: true,
+            SpeakerAssignmentsChanged: transcriptChanged || translationChanged,
+            SpeakerCount: result.SpeakerCount,
+            SegmentCount: result.Segments.Count,
+            ErrorMessage: null);
     }
 
-    private static async Task MergeDiarizationIntoTranscriptAsync(
+    private static async Task<bool> MergeDiarizationIntoTranscriptAsync(
         string transcriptPath,
         IReadOnlyList<DiarizedSegment> diarizedSegments,
         CancellationToken ct)
     {
         var artifact = await ArtifactJson.LoadTranscriptAsync(transcriptPath, ct);
-        if (artifact.Segments is null) return;
+        if (artifact.Segments is null) return false;
+
+        var before = CaptureTranscriptSpeakerAssignments(artifact.Segments);
 
         var result = new List<TranscriptSegmentArtifact>();
         foreach (var seg in artifact.Segments)
             result.AddRange(SplitSegmentAtSpeakerBoundaries(seg, diarizedSegments));
+
+        var changed = !before.SequenceEqual(CaptureTranscriptSpeakerAssignments(result));
+        if (!changed)
+            return false;
 
         artifact.Segments.Clear();
         artifact.Segments.AddRange(result);
 
         var json = ArtifactJson.SerializeTranscript(artifact);
         await File.WriteAllTextAsync(transcriptPath, json, ct);
+        return true;
     }
 
     private static IReadOnlyList<TranscriptSegmentArtifact> SplitSegmentAtSpeakerBoundaries(
@@ -127,7 +204,7 @@ public sealed partial class SessionWorkflowCoordinator
         }).ToList<TranscriptSegmentArtifact>();
     }
 
-    private static async Task MergeSpeakerIdsIntoTranslationAsync(
+    private static async Task<bool> MergeSpeakerIdsIntoTranslationAsync(
         string transcriptPath,
         string translationPath,
         CancellationToken ct)
@@ -135,7 +212,7 @@ public sealed partial class SessionWorkflowCoordinator
         var transcript = await ArtifactJson.LoadTranscriptAsync(transcriptPath, ct);
         var translation = await ArtifactJson.LoadTranslationAsync(translationPath, ct);
 
-        if (transcript.Segments is null || translation.Segments is null) return;
+        if (transcript.Segments is null || translation.Segments is null) return false;
 
         // Build lookup keyed by OriginalStart (set on split segments) or Start.
         // For split segments that share the same OriginalStart, the first entry wins
@@ -157,10 +234,27 @@ public sealed partial class SessionWorkflowCoordinator
             anyChanged = true;
         }
 
-        if (!anyChanged) return;
+        if (!anyChanged) return false;
 
         var json = ArtifactJson.SerializeTranslation(translation);
         await File.WriteAllTextAsync(translationPath, json, ct);
+        return true;
+    }
+
+    private static IReadOnlyList<(double Start, double End, double? OriginalStart, string SpeakerId)> CaptureTranscriptSpeakerAssignments(
+        IReadOnlyList<TranscriptSegmentArtifact> segments)
+    {
+        var result = new List<(double Start, double End, double? OriginalStart, string SpeakerId)>(segments.Count);
+        foreach (var segment in segments)
+        {
+            result.Add((
+                segment.Start,
+                segment.End,
+                segment.OriginalStart,
+                segment.SpeakerId ?? string.Empty));
+        }
+
+        return result;
     }
 
     private static string FindBestSpeakerFor(double start, double end, IReadOnlyList<DiarizedSegment> diarizedSegments)

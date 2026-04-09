@@ -32,16 +32,18 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
         AppLog log,
         string caseDir,
         IMediaTransport? segmentPlayer = null,
-        IMediaTransport? sourcePlayer = null)
+        IMediaTransport? sourcePlayer = null,
+        Babel.Player.Services.Settings.AppSettings? settings = null,
+        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null)
     {
-        var settings = new Babel.Player.Services.Settings.AppSettings();
+        settings ??= new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
 
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        var diarizationRegistry = new Babel.Player.Services.Registries.DiarizationRegistry(log);
+        diarizationRegistry ??= new Babel.Player.Services.Registries.DiarizationRegistry(log);
         var audioProcessingService = new FfmpegAudioProcessingService(log);
 
         return new SessionWorkflowCoordinator(
@@ -58,6 +60,14 @@ public sealed class SessionWorkflowTests(SessionWorkflowTemplateFixture fixture)
             sourcePlayer: sourcePlayer,
             audioProcessingService: audioProcessingService);
     }
+
+    private static SessionWorkflowCoordinator CreateCoordinator(
+        SessionSnapshotStore store,
+        AppLog log,
+        string caseDir,
+        Babel.Player.Services.Settings.AppSettings settings,
+        Babel.Player.Services.Registries.IDiarizationRegistry diarizationRegistry) =>
+        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry);
 
     private async Task<TestContext> OpenCaseFromTemplateAsync(string templateName, string caseName)
     {
@@ -445,16 +455,18 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
         AppLog log,
         string caseDir,
         IMediaTransport? segmentPlayer = null,
-        IMediaTransport? sourcePlayer = null)
+        IMediaTransport? sourcePlayer = null,
+        Babel.Player.Services.Settings.AppSettings? settings = null,
+        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null)
     {
-        var settings = new Babel.Player.Services.Settings.AppSettings();
+        settings ??= new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
 
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        var diarizationRegistry = new Babel.Player.Services.Registries.DiarizationRegistry(log);
+        diarizationRegistry ??= new Babel.Player.Services.Registries.DiarizationRegistry(log);
         var audioProcessingService = new FfmpegAudioProcessingService(log);
 
         return new SessionWorkflowCoordinator(
@@ -471,6 +483,14 @@ public sealed class EmbeddedPlaybackTests(SessionWorkflowTemplateFixture fixture
             sourcePlayer: sourcePlayer,
             audioProcessingService: audioProcessingService);
     }
+
+    private static SessionWorkflowCoordinator CreateCoordinator(
+        SessionSnapshotStore store,
+        AppLog log,
+        string caseDir,
+        Babel.Player.Services.Settings.AppSettings settings,
+        Babel.Player.Services.Registries.IDiarizationRegistry diarizationRegistry) =>
+        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry);
 
     private async Task<(SessionWorkflowCoordinator coordinator, FakeMediaTransport sourcePlayer, string caseDir)>
         CreateCaseWithSourcePlayerAsync(string caseName)
@@ -596,16 +616,18 @@ public sealed class SegmentInspectionTests
         AppLog log,
         string caseDir,
         IMediaTransport? segmentPlayer = null,
-        IMediaTransport? sourcePlayer = null)
+        IMediaTransport? sourcePlayer = null,
+        Babel.Player.Services.Settings.AppSettings? settings = null,
+        Babel.Player.Services.Registries.IDiarizationRegistry? diarizationRegistry = null)
     {
-        var settings = new Babel.Player.Services.Settings.AppSettings();
+        settings ??= new Babel.Player.Services.Settings.AppSettings();
         var perSessionStore = new PerSessionSnapshotStore(Path.Combine(caseDir, "sessions"), log);
         var recentStore = new RecentSessionsStore(Path.Combine(caseDir, "recent-sessions.json"), log);
 
         var transcriptionRegistry = new Babel.Player.Services.Registries.TranscriptionRegistry(log);
         var translationRegistry = new Babel.Player.Services.Registries.TranslationRegistry(log);
         var ttsRegistry = new Babel.Player.Services.Registries.TtsRegistry(log);
-        var diarizationRegistry = new Babel.Player.Services.Registries.DiarizationRegistry(log);
+        diarizationRegistry ??= new Babel.Player.Services.Registries.DiarizationRegistry(log);
         var audioProcessingService = new FfmpegAudioProcessingService(log);
 
         return new SessionWorkflowCoordinator(
@@ -622,6 +644,14 @@ public sealed class SegmentInspectionTests
             sourcePlayer: sourcePlayer,
             audioProcessingService: audioProcessingService);
     }
+
+    private static SessionWorkflowCoordinator CreateCoordinator(
+        SessionSnapshotStore store,
+        AppLog log,
+        string caseDir,
+        Babel.Player.Services.Settings.AppSettings settings,
+        Babel.Player.Services.Registries.IDiarizationRegistry diarizationRegistry) =>
+        CreateCoordinator(store, log, caseDir, null, null, settings, diarizationRegistry);
 
     private static EmbeddedPlaybackViewModel CreatePlaybackVm()
     {
@@ -643,7 +673,12 @@ public sealed class SegmentInspectionTests
         var store = new SessionSnapshotStore(storePath, log);
         var segmentPlayer = new FakeMediaTransport();
         var sourcePlayer = new FakeMediaTransport();
-        var coordinator = CreateCoordinator(store, log, caseDir, segmentPlayer, sourcePlayer);
+        var coordinator = CreateCoordinator(
+            store,
+            log,
+            caseDir,
+            segmentPlayer: segmentPlayer,
+            sourcePlayer: sourcePlayer);
         coordinator.Initialize();
         coordinator.GetOrCreateSourcePlayer();
         return (new EmbeddedPlaybackViewModel(coordinator), segmentPlayer, sourcePlayer);
@@ -679,6 +714,79 @@ public sealed class SegmentInspectionTests
 
         Assert.Equal(string.Empty, playback.Coordinator.CurrentSettings.DiarizationProvider);
         Assert.Equal("Manual speaker mapping is the default release flow.", playback.AutoSpeakerDetectionStatus);
+    }
+
+    [Fact]
+    public void EmbeddedPlaybackViewModel_RunDiarizationOnlyCommand_RequiresProviderAndTranscribedStage()
+    {
+        var playback = CreatePlaybackVm();
+
+        Assert.False(playback.RunDiarizationOnlyCommand.CanExecute(null));
+
+        playback.Coordinator.CurrentSession = playback.Coordinator.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.Transcribed,
+        };
+
+        Assert.True(playback.RunDiarizationOnlyCommand.CanExecute(null));
+
+        playback.DiarizationProvider = string.Empty;
+
+        Assert.False(playback.RunDiarizationOnlyCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task EmbeddedPlaybackViewModel_RunDiarizationOnlyCommand_WhenAssignmentsChange_ResetsPipelineToTranslated()
+    {
+        var caseDir = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}");
+        var log = new AppLog(Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.log"));
+        var storePath = Path.Combine(Path.GetTempPath(), $"inspect-test-{Guid.NewGuid():N}.json");
+        var store = new SessionSnapshotStore(storePath, log);
+        var settings = new Babel.Player.Services.Settings.AppSettings
+        {
+            DiarizationProvider = ProviderNames.NemoLocal,
+        };
+        var fakeProvider = new FakeDiarizationProvider(_ =>
+            new DiarizationResult(
+                true,
+                [new DiarizedSegment(0.0, 1.0, "spk_02")],
+                1,
+                null));
+        var fakeRegistry = new FakeDiarizationRegistry((ProviderNames.NemoLocal, "NeMo", fakeProvider));
+        var coordinator = CreateCoordinator(store, log, caseDir, settings, fakeRegistry);
+        coordinator.Initialize();
+
+        var transcriptPath = Path.GetTempFileName();
+        await File.WriteAllTextAsync(transcriptPath, """{"language":"es","segments":[{"start":0.0,"end":1.0,"text":"hola"}]}""");
+        var translationPath = Path.GetTempFileName();
+        await File.WriteAllTextAsync(translationPath, """{"sourceLanguage":"es","targetLanguage":"en","segments":[{"id":"segment_0.0","start":0.0,"end":1.0,"text":"hola","translatedText":"hello"}]}""");
+        var mediaPath = Path.GetTempFileName();
+        await File.WriteAllTextAsync(mediaPath, "audio");
+        var ttsPath = Path.GetTempFileName();
+        await File.WriteAllTextAsync(ttsPath, "tts");
+
+        coordinator.CurrentSession = coordinator.CurrentSession with
+        {
+            Stage = SessionWorkflowStage.TtsGenerated,
+            IngestedMediaPath = mediaPath,
+            TranscriptPath = transcriptPath,
+            TranslationPath = translationPath,
+            TtsPath = ttsPath,
+        };
+
+        var playback = new EmbeddedPlaybackViewModel(coordinator);
+
+        Assert.True(playback.RunDiarizationOnlyCommand.CanExecute(null));
+
+        await playback.RunDiarizationOnlyCommand.ExecuteAsync(null);
+
+        var translation = await ArtifactJson.LoadTranslationAsync(translationPath);
+
+        Assert.Equal(SessionWorkflowStage.Translated, coordinator.CurrentSession.Stage);
+        Assert.Null(coordinator.CurrentSession.TtsPath);
+        Assert.Equal("spk_02", translation.Segments![0].SpeakerId);
+        Assert.Single(playback.Segments);
+        Assert.Contains("reset to translated state", playback.StatusText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

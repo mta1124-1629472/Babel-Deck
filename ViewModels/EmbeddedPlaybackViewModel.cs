@@ -64,6 +64,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanRunPipeline))]
+    [NotifyPropertyChangedFor(nameof(CanRunDiarizationOnly))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -187,6 +188,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private IReadOnlyList<string> _diarizationProviderOptions = [string.Empty];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRunDiarizationOnly))]
     private string _diarizationProvider = string.Empty;
 
     [ObservableProperty]
@@ -312,6 +314,10 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     public string SpeechRateLabel => $"{SpeechRate:F1}x";
     public string AudioDuckingLabel => $"{AudioDuckingDb:F1} dB";
     public bool CanRunPipeline => !IsBusy;
+    public bool CanRunDiarizationOnly =>
+        !IsBusy &&
+        _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed &&
+        !string.IsNullOrWhiteSpace(DiarizationProvider);
     public bool HasErrorDetails => !string.IsNullOrWhiteSpace(StatusErrorDetail);
     public bool HasDiagnosticsWarning => !_coordinator.BootstrapDiagnostics.AllDependenciesAvailable;
     public string DiagnosticsWarningText => _coordinator.BootstrapDiagnostics.DiagnosticSummary;
@@ -715,6 +721,11 @@ partial void OnSourcePositionMsChanged(double value)
         _ = RefreshSegmentsAsync();
     }
 
+    partial void OnIsBusyChanged(bool value)
+    {
+        RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
+    }
+
     partial void OnDiarizationProviderChanged(string value)
     {
         if (_isSynchronizingPipelineSettings) return;
@@ -735,6 +746,7 @@ partial void OnSourcePositionMsChanged(double value)
         _coordinator.CurrentSettings.DiarizationProvider = normalized;
         _coordinator.NotifySettingsModified();
         RefreshAutoSpeakerDetectionStatus();
+        RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnDiarizationMinSpeakersChanged(decimal? value)
@@ -1081,6 +1093,19 @@ partial void OnSourcePositionMsChanged(double value)
         {
             AutoSpeakerDetectionStatus = $"⚠ Speaker diarization readiness check failed: {ex.Message}. Manual mapping will still work.";
         }
+    }
+
+    private string ResolveDiarizationProviderLabel()
+    {
+        if (string.IsNullOrWhiteSpace(DiarizationProvider))
+            return "speaker";
+
+        var registry = _coordinator.DiarizationRegistry;
+        return registry?
+            .GetAvailableProviders()
+            .FirstOrDefault(provider => string.Equals(provider.Id, DiarizationProvider, StringComparison.Ordinal))
+            ?.DisplayName
+            ?? DiarizationProvider;
     }
 
     private void RebuildDiarizationProviderOptions()
@@ -1653,6 +1678,8 @@ partial void OnSourcePositionMsChanged(double value)
             case nameof(SessionWorkflowCoordinator.CurrentSession):
                 OnPropertyChanged(nameof(VoiceModelLabel));
                 OnPropertyChanged(nameof(SourceLanguageDisplay));
+                OnPropertyChanged(nameof(CanRunDiarizationOnly));
+                RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
                 var oldPath = _lastKnownSourceMediaPath;
                 var newPath = _coordinator.CurrentSession.SourceMediaPath;
                 IsSourceMediaLoaded = !string.IsNullOrEmpty(_coordinator.CurrentSession.IngestedMediaPath);
@@ -1992,6 +2019,53 @@ partial void OnSourcePositionMsChanged(double value)
         ResetInteractiveModes();
         StatusText = "Pipeline cleared. Ready to run fresh.";
         ClearStatusErrorDetail();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRunDiarizationOnly))]
+    private async Task RunDiarizationOnlyAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            StatusText = $"Running {ResolveDiarizationProviderLabel()} diarization…";
+            ClearStatusErrorDetail();
+
+            var hadTranslatableOutput = _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Translated;
+            var speakerAssignmentsChanged = await _coordinator.RunDiarizationAsync();
+            string completionStatus;
+
+            if (speakerAssignmentsChanged && hadTranslatableOutput)
+            {
+                _coordinator.ResetPipelineToTranslated();
+                completionStatus = "Diarization updated speaker assignments. TTS output was reset to translated state.";
+            }
+            else if (speakerAssignmentsChanged)
+            {
+                completionStatus = "Diarization updated speaker assignments.";
+            }
+            else
+            {
+                completionStatus = "Diarization complete. Speaker assignments were unchanged.";
+            }
+
+            await RefreshSegmentsAsync();
+            StatusText = completionStatus;
+            ClearStatusErrorDetail();
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Re-diarize cancelled.";
+            ClearStatusErrorDetail();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Re-diarize failed: {ex.Message}";
+            SetStatusErrorDetail("Re-diarize failed", ex);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]

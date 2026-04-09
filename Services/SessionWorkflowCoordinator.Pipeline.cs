@@ -141,7 +141,7 @@ public sealed partial class SessionWorkflowCoordinator
                 "Transcript complete. Running diarization to assign speaker turns before translation and dubbing…",
                 progress01: 0,
                 isIndeterminate: true);
-            await RunDiarizationAsync(CurrentSession.IngestedMediaPath!, transcriptPath, cancellationToken);
+            await ExecuteDiarizationAsync(CurrentSession.IngestedMediaPath!, transcriptPath, cancellationToken);
         }
 
         ReportStage(
