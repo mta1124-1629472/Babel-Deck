@@ -27,6 +27,11 @@ public sealed class ApiKeyValidationService(
     private readonly Func<string, ElevenLabsApiClient> _elevenLabsClientFactory = elevenLabsClientFactory ?? (apiKey => new ElevenLabsApiClient(apiKey));
     private readonly Func<string, GoogleApiClient> _googleClientFactory = googleClientFactory ?? (apiKey => new GoogleApiClient(apiKey));
 
+    /// <summary>
+    /// Returns an explanatory message when live validation is not available for the specified credential key.
+    /// </summary>
+    /// <param name="credentialKey">The credential identifier to check (for example, a value from <c>CredentialKeys</c>).</param>
+    /// <returns><c>null</c> if live validation is available for the credential key; otherwise a user-facing message explaining that live validation is unavailable.</returns>
     public string? GetAvailabilityMessage(string credentialKey)
     {
         var implementedProviders = GetImplementedProviders(credentialKey);
@@ -41,6 +46,18 @@ public sealed class ApiKeyValidationService(
         return "Live validation unavailable until an implemented provider uses this key.";
     }
 
+    /// <summary>
+    /// Validates the given API key for the specified credential provider.
+    /// </summary>
+    /// <param name="credentialKey">The credential identifier (e.g., CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.Deepl, CredentialKeys.ElevenLabs) to validate against.</param>
+    /// <param name="apiKey">The API key to validate; may be null or whitespace.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>
+    /// An <see cref="ApiKeyValidationResult"/> indicating whether live validation is available for the credential and whether the provided key is valid.
+    /// - Returns a failure result prompting to enter a key if <paramref name="apiKey"/> is null or whitespace.
+    /// - Returns an unavailable result when no implemented provider requires the credential or when live validation is not implemented for the credential.
+    /// - Returns a success or failure result with a diagnostic message reflecting the provider-specific validation outcome.
+    /// </returns>
     public async Task<ApiKeyValidationResult> ValidateAsync(
         string credentialKey,
         string? apiKey,
@@ -68,7 +85,10 @@ public sealed class ApiKeyValidationService(
         };
     }
 
-    // ── ElevenLabs ────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Validates an ElevenLabs API key by retrieving the account subscription and usage.
+    /// </summary>
+    /// <returns>`ApiKeyValidationResult` with `IsAvailable = true` and `IsValid = true` when the key is accepted; the success message includes the subscription tier and character usage/limit. Returns a failure result with a message indicating rejection, rate-limiting, or a general validation failure otherwise.</returns>
 
     private async Task<ApiKeyValidationResult> ValidateElevenLabsAsync(
         string apiKey,
@@ -221,7 +241,11 @@ public sealed class ApiKeyValidationService(
 
     // Credentials that have a dedicated live probe independent of any fully
     // implemented provider. Add entries here when validation is wired but the
-    // full provider implementation is still pending.
+    /// <summary>
+        /// Determines whether the given credential key has a direct live validation probe available.
+        /// </summary>
+        /// <param name="credentialKey">The credential key to check.</param>
+        /// <returns>`true` if the credential key supports direct validation; `false` otherwise.</returns>
     private static bool HasDirectValidationProbe(string credentialKey) =>
         credentialKey == CredentialKeys.GoogleAi;
 }

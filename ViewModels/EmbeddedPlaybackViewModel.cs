@@ -250,6 +250,13 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private const int ControlsHideDelayMs = 3000;
     private const double PositionUpdateThresholdMs = 0.5;
 
+    /// <summary>
+    /// Initializes a new EmbeddedPlaybackViewModel and wires up provider/state caches, timers, and coordinator event handlers.
+    /// </summary>
+    /// <param name="coordinator">The session workflow coordinator that provides session state, registries, and pipeline operations.</param>
+    /// <param name="apiKeyStore">Optional store for API keys used by providers; may be null when not required.</param>
+    /// <param name="errorDialogService">Optional service to show error dialogs; may be null in non-UI or test contexts.</param>
+    /// <param name="logFilePath">Optional path for diagnostic log output; may be null to disable file logging.</param>
     public EmbeddedPlaybackViewModel(
         SessionWorkflowCoordinator coordinator,
         ApiKeyStore? apiKeyStore = null,
@@ -710,6 +717,10 @@ partial void OnSourcePositionMsChanged(double value)
         UpdateSelectedSpeakerDetails(value);
     }
 
+    /// <summary>
+    /// Handles changes to the multi-speaker enabled setting and updates coordinator state and UI data.
+    /// </summary>
+    /// <param name="value">`true` to enable multi-speaker mode; `false` to disable. When `false`, clears the selected diarization provider.</param>
     partial void OnIsMultiSpeakerEnabledChanged(bool value)
     {
         if (_isSynchronizingPipelineSettings) return;
@@ -721,11 +732,19 @@ partial void OnSourcePositionMsChanged(double value)
         _ = RefreshSegmentsAsync();
     }
 
+    /// <summary>
+    /// Updates the availability of the diarization-only command when the view model's busy state changes.
+    /// </summary>
+    /// <param name="value">The new busy state; true when the view model is busy, false otherwise.</param>
     partial void OnIsBusyChanged(bool value)
     {
         RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// Handle a change to the diarization provider selection by normalizing the selection, applying it to current settings, and updating related UI state and availability.
+    /// </summary>
+    /// <param name="value">The newly selected diarization provider identifier or display value.</param>
     partial void OnDiarizationProviderChanged(string value)
     {
         if (_isSynchronizingPipelineSettings) return;
@@ -749,6 +768,10 @@ partial void OnSourcePositionMsChanged(double value)
         RunDiarizationOnlyCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// Handle changes to the minimum diarization speaker count by updating the coordinator's current settings and signaling that settings were modified.
+    /// </summary>
+    /// <param name="value">The new minimum speaker count; nullable to clear. The value is normalized to a valid integer speaker count before being applied.</param>
     partial void OnDiarizationMinSpeakersChanged(decimal? value)
     {
         if (_isSynchronizingPipelineSettings) return;
@@ -989,7 +1012,14 @@ partial void OnSourcePositionMsChanged(double value)
     /// Called when CurrentSession changes (e.g., media restored from cache).
     /// This ensures dropdowns always display the actual configured state,
     /// not stale values from a previous session.
+    /// <summary>
+    /// Synchronizes the view-model's provider, runtime, and model selection fields from the coordinator's current settings.
     /// </summary>
+    /// <remarks>
+    /// Updates TTS playback rate, resolves and selects runtimes/providers/models, rebuilds model option lists,
+    /// ensures multi-speaker mode is enabled, refreshes diarization provider options and related settings,
+    /// and triggers provider readiness, auto-speaker detection, and speaker-id list refreshes.
+    /// </remarks>
     private void SyncProviderModelFieldsFromSettings()
     {
         _isSynchronizingPipelineSettings = true;
@@ -1064,6 +1094,16 @@ partial void OnSourcePositionMsChanged(double value)
         }
     }
 
+    /// <summary>
+    /// Updates AutoSpeakerDetectionStatus to reflect whether the selected diarization provider is available and ready.
+    /// </summary>
+    /// <remarks>
+    /// Sets a user-facing status string for these cases:
+    /// - No provider selected: explains manual speaker mapping is the default.
+    /// - Registry unavailable: indicates diarization is not supported in this build.
+    /// - Provider present: reports enabled when ready, otherwise shows the provider's display name and the blocking reason.
+    /// - Exceptions during readiness check: reports the failure message while noting manual mapping still works.
+    /// </remarks>
     private void RefreshAutoSpeakerDetectionStatus()
     {
         if (string.IsNullOrWhiteSpace(DiarizationProvider))
@@ -1095,6 +1135,12 @@ partial void OnSourcePositionMsChanged(double value)
         }
     }
 
+    /// <summary>
+    /// Get the human-readable label for the currently selected diarization provider.
+    /// </summary>
+    /// <returns>
+    /// The registered provider's display name when a matching provider exists; the raw <see cref="DiarizationProvider"/> identifier when set but not found in the registry; or "speaker" when no provider is selected.
+    /// </returns>
     private string ResolveDiarizationProviderLabel()
     {
         if (string.IsNullOrWhiteSpace(DiarizationProvider))
@@ -1108,6 +1154,16 @@ partial void OnSourcePositionMsChanged(double value)
             ?? DiarizationProvider;
     }
 
+    /// <summary>
+    /// Rebuilds the list of available diarization provider identifiers for the UI selector.
+    /// </summary>
+    /// <remarks>
+    /// The list always starts with an empty entry. When a coordinator diarization registry is available,
+    /// each implemented provider's Id is appended (duplicates and empty Ids are ignored).
+    /// If no providers were added besides the empty entry, two local provider identifiers
+    /// (NemoLocal and WeSpeakerLocal) are appended as fallbacks.
+    /// The resulting collection is assigned to <see cref="DiarizationProviderOptions"/>.
+    /// </remarks>
     private void RebuildDiarizationProviderOptions()
     {
         var options = new List<string> { string.Empty };
@@ -1136,6 +1192,11 @@ partial void OnSourcePositionMsChanged(double value)
         DiarizationProviderOptions = options;
     }
 
+    /// <summary>
+    /// Validates and normalizes a diarization provider identifier from user input.
+    /// </summary>
+    /// <param name="value">Candidate provider identifier; may be null or whitespace.</param>
+    /// <returns>The trimmed provider identifier if it is present in <c>DiarizationProviderOptions</c>; otherwise an empty string.</returns>
     private string NormalizeDiarizationProviderSelection(string? value)
     {
         var normalized = string.IsNullOrWhiteSpace(value)
@@ -1147,6 +1208,9 @@ partial void OnSourcePositionMsChanged(double value)
             : string.Empty;
     }
 
+    /// <summary>
+    /// Raises property-change notifications for the active transcription, CPU tuning, translation, and TTS configuration display lines.
+    /// </summary>
     private void NotifyActiveConfigChanged()
     {
         OnPropertyChanged(nameof(ActiveTranscriptionConfigLine));

@@ -73,11 +73,30 @@ public static class InferenceRuntimeCatalog
     public static string DefaultTranslationProvider(InferenceRuntime runtime) =>
         DefaultTranslationProvider(MapLegacyRuntimeToProfile(runtime));
 
-    public static string DefaultTtsProvider(InferenceRuntime runtime) =>
+    /// <summary>
+        /// Selects the default TTS provider identifier for a legacy inference runtime.
+        /// </summary>
+        /// <param name="runtime">The legacy <see cref="InferenceRuntime"/> used to determine the compute profile.</param>
+        /// <returns>
+        /// The provider identifier to use by default: <see cref="ProviderNames.Piper"/> when the runtime maps to a CPU profile, <see cref="ProviderNames.Qwen"/> when it maps to a GPU profile, and <see cref="ProviderNames.EdgeTts"/> otherwise.
+        /// </returns>
+        public static string DefaultTtsProvider(InferenceRuntime runtime) =>
         DefaultTtsProvider(MapLegacyRuntimeToProfile(runtime));
 
-    public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
+    /// <summary>
+/// Gets the default diarization provider identifier.
+/// </summary>
+/// <returns>The provider ID for the default diarization provider: <c>ProviderNames.NemoLocal</c>.</returns>
+public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
 
+    /// <summary>
+    /// Normalizes a transcription provider identifier to a canonical provider ID appropriate for the given compute profile.
+    /// </summary>
+    /// <param name="profile">The compute profile used to determine which providers are appropriate.</param>
+    /// <param name="providerId">The incoming provider identifier, which may be null or whitespace.</param>
+    /// <returns>
+    /// A normalized provider identifier: a known provider suitable for the profile, the original <paramref name="providerId"/> if it is not a recognized transcription provider, or the profile's default transcription provider when the input is null/whitespace, references the containerized service, or is not suitable for the profile.
+    /// </returns>
     public static string NormalizeTranscriptionProvider(ComputeProfile profile, string? providerId)
     {
         if (string.IsNullOrWhiteSpace(providerId))
@@ -137,6 +156,18 @@ public static class InferenceRuntimeCatalog
         };
     }
 
+    /// <summary>
+    /// Normalizes a TTS provider identifier for the given compute profile.
+    /// </summary>
+    /// <param name="profile">The compute profile used to choose or constrain the provider.</param>
+    /// <param name="providerId">The requested provider identifier, or null/whitespace to use the profile default.</param>
+    /// <returns>
+    /// The canonical provider identifier to use:
+    /// - If <paramref name="providerId"/> is null/whitespace or equals <see cref="ProviderNames.ContainerizedService"/>, returns the profile's default TTS provider.
+    /// - If <paramref name="providerId"/> is not a recognized TTS provider, returns <paramref name="providerId"/> unchanged.
+    /// - For <see cref="ComputeProfile.Cpu"/>, returns <see cref="ProviderNames.Piper"/>; for <see cref="ComputeProfile.Gpu"/>, returns <see cref="ProviderNames.Qwen"/>.
+    /// - For other profiles, preserves known cloud TTS providers (<see cref="ProviderNames.ElevenLabs"/>, <see cref="ProviderNames.GoogleCloudTts"/>, <see cref="ProviderNames.OpenAiTts"/>, <see cref="ProviderNames.EdgeTts"/>) or falls back to the profile default.
+    /// </returns>
     public static string NormalizeTtsProvider(ComputeProfile profile, string? providerId)
     {
         if (string.IsNullOrWhiteSpace(providerId))
@@ -163,6 +194,11 @@ public static class InferenceRuntimeCatalog
         };
     }
 
+    /// <summary>
+    /// Normalizes a diarization provider identifier, accepting legacy aliases and falling back to the default when unspecified or unrecognized.
+    /// </summary>
+    /// <param name="providerId">The provider identifier or legacy alias (may be null or whitespace).</param>
+    /// <returns>The canonical diarization provider identifier; if <paramref name="providerId"/> is null, whitespace, or not recognized, returns the default provider identifier.</returns>
     public static string NormalizeDiarizationProvider(string? providerId)
     {
         if (string.IsNullOrWhiteSpace(providerId))
@@ -180,6 +216,15 @@ public static class InferenceRuntimeCatalog
             : DefaultDiarizationProvider();
     }
 
+    /// <summary>
+    /// Normalizes a diarization capability provider identifier to a canonical provider ID.
+    /// </summary>
+    /// <param name="providerId">The provider identifier or legacy alias (may be null or empty). Recognized aliases: "nemo" and "wespeaker".</param>
+    /// <returns>
+    /// The canonical provider ID: `ProviderNames.NemoLocal` for "nemo" or `ProviderNames.NemoLocal`,
+    /// `ProviderNames.WeSpeakerLocal` for "wespeaker" or `ProviderNames.WeSpeakerLocal`,
+    /// or the original `providerId` if non-null and unrecognized; otherwise an empty string.
+    /// </returns>
     public static string NormalizeDiarizationCapabilityProviderId(string? providerId) => providerId switch
     {
         "nemo" or ProviderNames.NemoLocal => ProviderNames.NemoLocal,
@@ -187,7 +232,12 @@ public static class InferenceRuntimeCatalog
         _ => providerId ?? string.Empty,
     };
 
-    public static InferenceRuntime InferTranscriptionRuntime(string? providerId) =>
+    /// <summary>
+        /// Determine the legacy InferenceRuntime that best fits a transcription provider identifier.
+        /// </summary>
+        /// <param name="providerId">The transcription provider identifier to use when inferring the runtime; may be null or whitespace.</param>
+        /// <returns>The inferred <see cref="InferenceRuntime"/> for the specified provider.</returns>
+        public static InferenceRuntime InferTranscriptionRuntime(string? providerId) =>
         ResolveRuntime(InferTranscriptionProfile(providerId));
 
     public static InferenceRuntime InferTranslationRuntime(string? providerId) =>
@@ -205,6 +255,11 @@ public static class InferenceRuntimeCatalog
     public static string NormalizeTtsProvider(InferenceRuntime runtime, string? providerId) =>
         NormalizeTtsProvider(MapLegacyRuntimeToProfile(runtime), providerId);
 
+    /// <summary>
+    /// Normalizes and normalizes compute profiles and provider identifiers on the given <see cref="AppSettings"/> instance.
+    /// </summary>
+    /// <param name="settings">The settings object to normalize; updated in place.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings"/> is null.</exception>
     public static void NormalizeSettings(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -234,6 +289,13 @@ public static class InferenceRuntimeCatalog
         settings.DiarizationProvider = NormalizeDiarizationProvider(settings.DiarizationProvider);
     }
 
+    /// <summary>
+    /// Resolve the effective compute profile using the configured profile and an optional provider ID.
+    /// </summary>
+    /// <param name="configuredProfile">The configured compute profile to use as the default.</param>
+    /// <param name="providerId">The provider identifier whose value can override the configured profile; whitespace or null will not override.</param>
+    /// <param name="inferProfile">Accepted for API compatibility; not used by this implementation.</param>
+    /// <returns>`ComputeProfile.Gpu` when <paramref name="providerId"/> equals <see cref="ProviderNames.ContainerizedService"/>, otherwise the provided <paramref name="configuredProfile"/>.</returns>
     private static ComputeProfile ResolveConfiguredProfile(
         ComputeProfile configuredProfile,
         string? providerId,
@@ -269,6 +331,11 @@ public static class InferenceRuntimeCatalog
         _ => false,
     };
 
+    /// <summary>
+    /// Checks whether the given provider identifier is a recognized text-to-speech (TTS) provider.
+    /// </summary>
+    /// <param name="providerId">The provider identifier to test; may be null.</param>
+    /// <returns>`true` if <paramref name="providerId"/> matches one of: `Piper`, `EdgeTts`, `ElevenLabs`, `GoogleCloudTts`, `OpenAiTts`, or `Qwen`; `false` otherwise.</returns>
     public static bool IsKnownTtsProvider(string? providerId) => providerId switch
     {
         ProviderNames.Piper
@@ -280,6 +347,11 @@ public static class InferenceRuntimeCatalog
         _ => false,
     };
 
+    /// <summary>
+    /// Determines whether the specified diarization provider identifier is a known canonical provider.
+    /// </summary>
+    /// <param name="providerId">The provider identifier to check; may be null or whitespace.</param>
+    /// <returns>`true` if the identifier is a recognized diarization provider (`ProviderNames.NemoLocal` or `ProviderNames.WeSpeakerLocal`), `false` otherwise.</returns>
     public static bool IsKnownDiarizationProvider(string? providerId) => providerId switch
     {
         ProviderNames.NemoLocal

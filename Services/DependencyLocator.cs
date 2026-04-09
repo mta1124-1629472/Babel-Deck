@@ -316,6 +316,18 @@ public static class DependencyLocator
         }
     }
 
+    /// <summary>
+    /// Constructs a SessionWorkflowCoordinator with its required services, registries, and host managers wired together.
+    /// </summary>
+    /// <param name="appLog">Application logger used by created services.</param>
+    /// <param name="appSettings">Application settings applied to the coordinator.</param>
+    /// <param name="perSessionStore">Per-session snapshot store passed to the coordinator.</param>
+    /// <param name="recentStore">Recent sessions store passed to the coordinator.</param>
+    /// <param name="apiKeyStore">API key store passed to the coordinator.</param>
+    /// <param name="transportManager">Media transport manager used by the coordinator.</param>
+    /// <param name="appDataRoot">Root application data directory used to locate the session snapshot file.</param>
+    /// <param name="primaryGpuManager">Outputs the ManagedVenvHostManager instance selected as the primary GPU manager.</param>
+    /// <returns>A SessionWorkflowCoordinator instance configured with transcription, translation, TTS, diarization registries, audio processing, containerized probes and inference managers, and the snapshot store.</returns>
     private static SessionWorkflowCoordinator CreateCoordinatorInstance(
         AppLog appLog,
         AppSettings appSettings,

@@ -285,6 +285,14 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Opens a file picker to select an audio reference clip for the currently selected speaker and assigns the chosen file to that speaker.
+    /// </summary>
+    /// <remarks>
+    /// If the window's DataContext is not a MainWindowViewModel or there is no selected speaker id, the method returns without action.
+    /// If the user cancels the file picker or the chosen file has no local path, the method returns without assigning a reference clip.
+    /// When a valid file is selected, the view model's playback is updated via SetReferenceAudioForSelectedSpeaker(path).
+    /// </remarks>
     public async void OnBrowseReferenceClipClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;
@@ -308,6 +316,14 @@ public partial class MainWindow : Window
         await vm.Playback.SetReferenceAudioForSelectedSpeaker(path);
     }
 
+    /// <summary>
+    /// Prompts the user to choose an output .srt file and exports the current playback segments as SubRip subtitles.
+    /// </summary>
+    /// <remarks>
+    /// If no segments are available, sets the playback status to "No segments available to export." 
+    /// On success sets the playback status to "Exported captions to {file.Name}." 
+    /// On failure sets the playback status to "Failed to export captions: {error message}".
+    /// </remarks>
     public async void OnExportCaptionsClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm)

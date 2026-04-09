@@ -22,6 +22,11 @@ public sealed class ApiKeyStore
     public static IReadOnlyList<string> KnownProviders { get; } =
         [CredentialKeys.OpenAi, CredentialKeys.GoogleAi, CredentialKeys.GoogleGemini, CredentialKeys.ElevenLabs, CredentialKeys.Deepl];
 
+    /// <summary>
+    /// Maps a provider identifier to a user-facing display name.
+    /// </summary>
+    /// <param name="providerKey">The canonical provider identifier.</param>
+    /// <returns>A human-friendly display name for the provider, or the original <paramref name="providerKey"/> if no mapping exists.</returns>
     public static string GetDisplayName(string providerKey) => providerKey switch
     {
         CredentialKeys.OpenAi       => "OpenAI",

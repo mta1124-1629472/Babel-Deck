@@ -262,6 +262,12 @@ def _probe_nllb_available() -> tuple[bool, str]:
 
 
 def _probe_qwen_available() -> tuple[bool, str]:
+    """
+    Report Qwen3-TTS warmup readiness and a human-readable status message.
+    
+    Returns:
+        A tuple `(ready, detail)` where `ready` is `True` if the Qwen3-TTS model is loaded and ready, `False` otherwise, and `detail` is a short human-readable status message describing the warmup state or device.
+    """
     status = _qwen_warmup_status
     if status is None or status == "warming":
         return False, "Qwen3-TTS warming up"
@@ -271,6 +277,15 @@ def _probe_qwen_available() -> tuple[bool, str]:
 
 
 def _find_module(module_name: str):
+    """
+    Locate the import specification for a given module name.
+    
+    Parameters:
+        module_name (str): The dotted module or package name to look up.
+    
+    Returns:
+        importlib.machinery.ModuleSpec | None: The module's import spec if found, `None` if the module cannot be located or the lookup fails due to import-related or value errors.
+    """
     try:
         return importlib.util.find_spec(module_name)
     except (ImportError, ModuleNotFoundError, ValueError):
@@ -278,6 +293,12 @@ def _find_module(module_name: str):
 
 
 def _probe_nemo_diarization_available() -> tuple[bool, str]:
+    """
+    Check whether the Python packages required for NeMo-based diarization are importable.
+    
+    Returns:
+        tuple: First element is `True` if required NeMo packages are present, `False` otherwise; second element is a human-readable detail message describing availability or listing missing packages.
+    """
     missing: list[str] = []
     if _find_module("nemo.collections.asr") is None:
         missing.append("nemo.collections.asr")
@@ -289,12 +310,30 @@ def _probe_nemo_diarization_available() -> tuple[bool, str]:
 
 
 def _probe_wespeaker_available() -> tuple[bool, str]:
+    """
+    Check whether the WeSpeaker diarization backend is importable and available for use.
+    
+    Returns:
+        tuple[bool, str]: `True` and an availability message if WeSpeaker can be imported; `False` and an error message otherwise.
+    """
     if _find_module("wespeaker") is None:
         return False, "Missing diarization dependency: wespeaker"
     return True, "WeSpeaker available (CPU only; min/max speaker hints ignored)"
 
 
 def _normalize_native_speaker_label(raw_label, assigned_labels: dict[str, str]) -> str:
+    """
+    Normalize a raw speaker label into a stable internal speaker ID and cache the mapping.
+    
+    If `raw_label` is empty or None, a default native key of the form `speaker_<n>` is used. If a mapping for the native key already exists in `assigned_labels`, the existing normalized ID is returned. Otherwise a new normalized ID of the form `spk_XX` (zero-padded two digits) is created, stored in `assigned_labels` under the native key, and returned.
+    
+    Parameters:
+        raw_label: The original speaker label (any value convertible to string) or None.
+        assigned_labels (dict[str, str]): Mutable mapping from native labels to normalized speaker IDs; this function will add a new entry when creating a normalization.
+    
+    Returns:
+        str: The normalized speaker ID (e.g., `spk_00`, `spk_01`, ...).
+    """
     key = str(raw_label).strip() if raw_label is not None else ""
     if not key:
         key = f"speaker_{len(assigned_labels)}"
@@ -309,6 +348,17 @@ def _normalize_native_speaker_label(raw_label, assigned_labels: dict[str, str]) 
 
 
 def _parse_rttm_file(rttm_path: Path) -> tuple[list[DiarizationSegment], int]:
+    """
+    Parse an RTTM file into diarization segments with normalized speaker labels.
+    
+    Parameters:
+        rttm_path (Path): Path to an RTTM-format file.
+    
+    Returns:
+        tuple[list[DiarizationSegment], int]: A pair where the first element is a list of diarization
+        segments (each containing start time, end time, and a normalized `speaker_id`), and the
+        second element is the count of unique normalized speakers found.
+    """
     segments: list[DiarizationSegment] = []
     seen_speakers: set[str] = set()
     assigned_labels: dict[str, str] = {}
@@ -332,6 +382,20 @@ def _run_nemo_diarization(
     min_speakers: Optional[int],
     max_speakers: Optional[int],
 ) -> tuple[list[DiarizationSegment], int]:
+    """
+    Run NeMo's ClusteringDiarizer on a staged audio file and return parsed diarization results.
+    
+    Parameters:
+        audio_path (Path): Path to the input audio file to diarize.
+        min_speakers (Optional[int]): Minimum number of speakers hint; if equal to `max_speakers` the diarizer is instructed to use that exact speaker count.
+        max_speakers (Optional[int]): Maximum number of speakers hint; used to limit clustering if provided.
+    
+    Returns:
+        tuple[list[DiarizationSegment], int]: A tuple where the first element is a list of diarization segments with normalized speaker IDs and rounded start/end times, and the second element is the number of distinct speakers detected.
+    
+    Raises:
+        RuntimeError: If NeMo produces no RTTM output file.
+    """
     import nemo.collections.asr as nemo_asr
     from omegaconf import OmegaConf
 
@@ -395,6 +459,17 @@ def _run_nemo_diarization(
 
 
 def load_wespeaker_model(model_name: str = WESPEAKER_MODEL):
+    """
+    Load and cache a WeSpeaker model and ensure the model is placed on the CPU.
+    
+    If a different model name is requested than the currently cached one, the function loads the named model, sets it to use the CPU, and updates the module cache.
+    
+    Parameters:
+        model_name (str): Identifier or path of the WeSpeaker model to load (defaults to the module's WESPEAKER_MODEL).
+    
+    Returns:
+        wespeaker_model: The loaded WeSpeaker model instance (cached for subsequent calls).
+    """
     global wespeaker_model, wespeaker_model_key
     if wespeaker_model is None or wespeaker_model_key != model_name:
         import wespeaker
@@ -408,6 +483,16 @@ def load_wespeaker_model(model_name: str = WESPEAKER_MODEL):
 
 
 def _run_wespeaker_diarization(audio_path: Path) -> tuple[list[DiarizationSegment], int]:
+    """
+    Run speaker diarization on an audio file using the WeSpeaker backend and return normalized segments.
+    
+    Parameters:
+        audio_path (Path): Path to the audio file to be diarized.
+    
+    Returns:
+        segments (list[DiarizationSegment]): Ordered list of diarization segments with start/end times and normalized speaker IDs.
+        speaker_count (int): Number of distinct normalized speakers detected.
+    """
     model = load_wespeaker_model()
     diar_result = model.diarize(str(audio_path))
 
@@ -430,6 +515,18 @@ def _run_wespeaker_diarization(audio_path: Path) -> tuple[list[DiarizationSegmen
 
 
 def _probe_diarization_providers() -> tuple[dict[str, bool], dict[str, str], bool, str]:
+    """
+    Probe availability of NeMo and WeSpeaker diarization providers and summarize overall readiness.
+    
+    Returns:
+        provider_ready (dict[str, bool]): Mapping of provider name to availability (e.g., {'nemo': True, 'wespeaker': False}).
+        provider_details (dict[str, str]): Mapping of provider name to a human-readable availability/detail message.
+        stage_ready (bool): `True` if at least one provider is available, `False` otherwise.
+        detail (str): Human-readable stage-level status:
+            - "Diarization available" when the default provider (NeMo) is available,
+            - "Default diarization provider unavailable; CPU fallback available" when some provider is available but the default is not,
+            - otherwise a concatenation of provider-specific detail messages.
+    """
     provider_ready: dict[str, bool] = {}
     provider_details: dict[str, str] = {}
 
@@ -453,6 +550,16 @@ def _probe_diarization_providers() -> tuple[dict[str, bool], dict[str, str], boo
 
 
 def _stage_audio_upload_to_temp(audio: UploadFile, prefix: str) -> Path:
+    """
+    Create a safe temporary file path for an uploaded audio file.
+    
+    Parameters:
+    	audio (UploadFile): Uploaded file; its base filename (basename) is used when constructing the temp name.
+    	prefix (str): Short prefix to include in the generated filename.
+    
+    Returns:
+    	Path: Path inside TEMP_DIR combining the prefix, a random UUID, and the uploaded file's base name.
+    """
     safe_name = Path(audio.filename or "").name or "audio"
     temp_audio_path = TEMP_DIR / f"{prefix}_{uuid4().hex}_{safe_name}"
     return temp_audio_path
@@ -462,6 +569,16 @@ def _build_diarization_response(
     segments: list[DiarizationSegment],
     speaker_count: int,
 ) -> DiarizationResponse:
+    """
+    Builds a successful DiarizationResponse containing the provided segments and speaker count.
+    
+    Parameters:
+        segments (list[DiarizationSegment]): Ordered list of diarization segments.
+        speaker_count (int): Number of distinct speakers detected.
+    
+    Returns:
+        DiarizationResponse: A response object with `success=True`, the given `segments`, and `speaker_count`.
+    """
     return DiarizationResponse(
         success=True,
         segments=segments,
@@ -491,6 +608,18 @@ async def health_check():
 
 @app.get("/capabilities", response_model=CapabilitiesResponse)
 async def get_stage_capabilities():
+    """
+    Builds and returns the service capabilities for transcription, translation, TTS, and diarization.
+    
+    Queries available backends (Whisper, NLLB, Qwen3-TTS, NeMo/WeSpeaker) and assembles a CapabilitiesResponse summarizing readiness, human-readable details, per-stage provider availability, provider-specific details, the diarization default provider, and supported diarization engines.
+    
+    Returns:
+        CapabilitiesResponse: Summary of stage capabilities with the following fields populated:
+            - transcription: StageCapability for Whisper readiness and detail.
+            - translation: StageCapability for NLLB readiness and detail.
+            - tts: StageCapability indicating Qwen3-TTS readiness, detail, and provider map/details for "qwen-tts".
+            - diarization: StageCapability indicating overall diarization readiness, detail, provider readiness map, provider detail map, `default_provider` (NeMo), and `engines` (["nemo", "wespeaker"]).
+    """
     tx_ready, tx_detail = _probe_whisper_available()
     tl_ready, tl_detail = _probe_nllb_available()
 
@@ -744,7 +873,19 @@ async def diarize(
     max_speakers: Optional[int] = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """Run speaker diarization with NeMo ClusteringDiarizer."""
+    """
+    Perform speaker diarization on uploaded audio and return a structured diarization response.
+    
+    Parameters:
+        min_speakers (Optional[int]): Minimum number of speakers to detect; used as a hint when provided.
+        max_speakers (Optional[int]): Maximum number of speakers to detect; used as a hint when provided.
+    
+    Returns:
+        DiarizationResponse: Object containing the list of diarization segments and the detected speaker count.
+    
+    Raises:
+        HTTPException: If diarization fails or the uploaded audio cannot be processed.
+    """
     temp_audio_path: Optional[Path] = None
     try:
         temp_audio_path = _stage_audio_upload_to_temp(audio, "diar")
@@ -775,10 +916,22 @@ async def diarize_wespeaker(
     max_speakers: Optional[int] = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """Run speaker diarization with WeSpeaker.
-
-    min_speakers and max_speakers are accepted for request-shape parity with
-    the NeMo endpoint, but the current WeSpeaker backend ignores both hints.
+    """
+    Perform speaker diarization on uploaded audio using the WeSpeaker backend.
+    
+    This endpoint accepts optional speaker-count hints for parity with the NeMo endpoint but ignores them; it writes the uploaded audio to a temporary file, runs WeSpeaker diarization in a background thread, schedules the temp file for deletion, and returns the diarization result.
+    
+    Parameters:
+        audio (UploadFile): Uploaded audio file to diarize.
+        min_speakers (Optional[int]): Hint for minimum number of speakers (accepted but ignored).
+        max_speakers (Optional[int]): Hint for maximum number of speakers (accepted but ignored).
+        background_tasks (BackgroundTasks): FastAPI background task scheduler used to enqueue temp-file cleanup.
+    
+    Returns:
+        DiarizationResponse: Structured response containing diarization segments and the detected speaker count.
+    
+    Raises:
+        HTTPException: Raised with status 400 when diarization fails for reasons other than pre-existing HTTP errors.
     """
     _ = min_speakers
     _ = max_speakers

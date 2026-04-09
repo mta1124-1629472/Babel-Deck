@@ -30,12 +30,24 @@ public sealed class GpuHostBackendDisplayConverter : IValueConverter
         _ => value?.ToString() ?? string.Empty,
     };
 
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+    /// <summary>
+        /// Conversion back from the target type to the source type is not supported by this converter.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always thrown to indicate reverse conversion is not implemented.</exception>
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 
 public sealed class DiarizationProviderDisplayConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a diarization provider identifier into a user-facing display string.
+    /// </summary>
+    /// <param name="value">The provider identifier (may be null or a ProviderNames value).</param>
+    /// <returns>
+    /// "Off" when <paramref name="value"/> is null or whitespace; "NeMo" for <see cref="ProviderNames.NemoLocal"/>; 
+    /// "WeSpeaker" for <see cref="ProviderNames.WeSpeakerLocal"/>; otherwise the result of <c>value.ToString()</c> or an empty string if null.
+    /// </returns>
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
     {
         null => "Off",
@@ -45,12 +57,22 @@ public sealed class DiarizationProviderDisplayConverter : IValueConverter
         _ => value?.ToString() ?? string.Empty,
     };
 
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+    /// <summary>
+        /// Conversion back from the target type to the source type is not supported by this converter.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always thrown to indicate reverse conversion is not implemented.</exception>
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 
 public sealed class SpeakerIdToShortLabelConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a speaker identifier in the form "spk_<n>" into a short label "S<n>".
+    /// </summary>
+    /// <returns>
+    /// "S<n>" when <paramref name="value"/> is a non-empty string that starts with "spk_" and the suffix parses as an integer; otherwise an empty string.
+    /// </returns>
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not string speakerId || string.IsNullOrWhiteSpace(speakerId))
@@ -66,7 +88,11 @@ public sealed class SpeakerIdToShortLabelConverter : IValueConverter
         return $"S{index}";
     }
 
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+    /// <summary>
+        /// Conversion back from the target type to the source type is not supported by this converter.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always thrown to indicate reverse conversion is not implemented.</exception>
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 
@@ -86,6 +112,11 @@ public sealed class SpeakerIdToColorConverter : IValueConverter
         new(Color.Parse("#DB2777")),
     ];
 
+    /// <summary>
+    /// Converts a speaker identifier of the form "spk_<index>" into a SolidColorBrush from the palette, returning a fallback brush for null, empty, malformed, or non-matching inputs.
+    /// </summary>
+    /// <param name="value">The speaker identifier (expected to be a string like "spk_0").</param>
+    /// <returns>The palette brush corresponding to the parsed speaker index, or the fallback brush if the input is null, empty, does not start with "spk_", or the index cannot be parsed as an integer.</returns>
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not string speakerId || string.IsNullOrWhiteSpace(speakerId))
@@ -101,6 +132,10 @@ public sealed class SpeakerIdToColorConverter : IValueConverter
         return Palette[index % Palette.Count];
     }
 
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+    /// <summary>
+        /// Conversion back from the target type to the source type is not supported by this converter.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always thrown to indicate reverse conversion is not implemented.</exception>
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
