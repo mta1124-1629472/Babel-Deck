@@ -13,4 +13,4 @@ public sealed record VideoPlaybackOptions(
     bool   HdrEnabled      = false,
     string ToneMapping     = "bt.2390",
     string TargetPeak      = "auto",
-    bool   HdrComputePeak  = false);
+    bool   HdrComputePeak  = true);

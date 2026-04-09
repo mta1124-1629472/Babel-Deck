@@ -224,10 +224,10 @@ public sealed class AppSettings
 
     /// <summary>
     /// Enable dynamic per-frame peak detection for HDR tone-mapping.
-    /// May cause brightness instability on some content. Default false.
+    /// May cause brightness instability on some content. Default true.
     /// Takes effect on app restart.
     /// </summary>
-    public bool VideoHdrComputePeak { get; set; } = false;
+    public bool VideoHdrComputePeak { get; set; } = true;
 
     /// <summary>
     /// ffmpeg encoder used by the video export stage (not yet implemented).

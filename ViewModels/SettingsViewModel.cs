@@ -65,12 +65,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         _videoExportEncoder  = current.VideoExportEncoder;
         _videoUseGpuNext     = current.VideoUseGpuNext;
 
-        // RTX Video Enhancement settings
+        // Video enhancement settings
         _videoVsrEnabled     = current.VideoVsrEnabled;
         _videoHdrEnabled     = current.VideoHdrEnabled;
-        _videoToneMapping    = current.VideoToneMapping;
-        _videoTargetPeak     = current.VideoTargetPeak;
-        _videoHdrComputePeak = current.VideoHdrComputePeak;
 
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
 
@@ -243,17 +240,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _videoHdrEnabled;
 
-    [ObservableProperty]
-    private string _videoToneMapping = "bt.2390";
-
-    [ObservableProperty]
-    private string _videoTargetPeak = "auto";
-
-    [ObservableProperty]
-    private bool _videoHdrComputePeak;
-
-    public string[] ToneMappingOptions { get; } = ["bt.2390", "mobius", "clip", "auto"];
-
     public string VsrSupportHintText => _coordinator.VideoEnhancementDiagnostics.SupportHintText;
     public string VsrRequestedStateText => _coordinator.VideoEnhancementDiagnostics.RequestedStateText;
     public string VsrResolvedStateText => _coordinator.VideoEnhancementDiagnostics.ResolvedStateText;
@@ -321,9 +307,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         settings.VideoUseGpuNext     = VideoUseGpuNext;
         settings.VideoVsrEnabled     = VideoVsrEnabled;
         settings.VideoHdrEnabled     = VideoHdrEnabled;
-        settings.VideoToneMapping    = VideoToneMapping;
-        settings.VideoTargetPeak     = VideoTargetPeak;
-        settings.VideoHdrComputePeak = VideoHdrComputePeak;
 
         // Apply theme change immediately when Save & Close is pressed
         if (Application.Current is { } app)

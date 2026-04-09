@@ -259,24 +259,6 @@
                                    Opacity="0.5"
                                    Text="{x:Static vm:SettingsViewModel.HdrDriverFeatureHintText}" />
 
-                        <StackPanel Spacing="8" IsEnabled="{Binding VideoHdrEnabled}">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="Tone Mapping:" VerticalAlignment="Center" Width="100"/>
-                                <ComboBox ItemsSource="{Binding ToneMappingOptions}"
-                                          SelectedItem="{Binding VideoToneMapping, Mode=TwoWay}"
-                                          Width="140"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="Target Peak (nits):" VerticalAlignment="Center" Width="100"/>
-                                <TextBox Text="{Binding VideoTargetPeak, Mode=TwoWay}"
-                                         Width="80"
-                                         ToolTip.Tip="Enter a nit value (e.g. 1000) or 'auto'"/>
-                            </StackPanel>
-                            <CheckBox IsChecked="{Binding VideoHdrComputePeak, Mode=TwoWay}"
-                                      Content="Dynamic peak detection (hdr-compute-peak)"
-                                      ToolTip.Tip="Per-frame brightness peak analysis. May cause brightness instability on some content."/>
-                        </StackPanel>
-
                         <TextBlock TextWrapping="Wrap"
                                    Opacity="0.6"
                                    Margin="0,12,0,0"
