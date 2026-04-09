@@ -575,7 +575,7 @@ public sealed class RegistryTests : IDisposable
     }
 
     [Fact]
-    public void DiarizationRegistry_NemoLocal_CheckReadiness_UsesProviderSpecificContainerCapability()
+    public async Task DiarizationRegistry_NemoLocal_CheckReadiness_UsesProviderSpecificContainerCapability()
     {
         var probe = new ContainerizedServiceProbe(_log, (_, _, _) => Task.FromResult(new ContainerHealthStatus(
             true,
@@ -619,7 +619,7 @@ public sealed class RegistryTests : IDisposable
                && readiness.BlockingReason?.Contains("starting", StringComparison.OrdinalIgnoreCase) == true
                && DateTimeOffset.UtcNow < deadline)
         {
-            Thread.Sleep(10);
+            await Task.Delay(50);
             readiness = registry.CheckReadiness(
                 ProviderNames.NemoLocal,
                 new AppSettings

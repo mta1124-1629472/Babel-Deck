@@ -55,15 +55,19 @@ public sealed class NemoContainerizedDiarizationProvider : IDiarizationProvider
         IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
-        progress?.Report(1.0);
         if (_probe is null)
-            return CheckReadiness(settings, null).IsReady;
+        {
+            var result = CheckReadiness(settings, null);
+            progress?.Report(1.0);
+            return result.IsReady;
+        }
 
         var readiness = await ContainerizedProviderReadiness.CheckDiarizationForExecutionAsync(
             settings,
             ProviderNames.NemoLocal,
             _probe,
             ct);
+        progress?.Report(1.0);
         return readiness.IsReady;
     }
 

@@ -764,7 +764,7 @@ async def transcribe(
         logger.error(f"Transcription failed: {exc}", exc_info=True)
         if temp_audio_path:
             background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ============================================================================
@@ -954,7 +954,7 @@ async def diarize_wespeaker(
         logger.error(f"WeSpeaker diarization failed: {exc}", exc_info=True)
         if temp_audio_path:
             background_tasks.add_task(lambda p=temp_audio_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ============================================================================

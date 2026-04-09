@@ -1710,7 +1710,7 @@ partial void OnSourcePositionMsChanged(double value)
     private void SyncDubToCurrentPosition(bool seekVideoToSegmentStart)
         => ApplyDubForSegment(FindSegmentAt(SourcePositionMs / 1000.0), seekVideoToSegmentStart);
 
-    private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private async void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
         {
@@ -1766,7 +1766,7 @@ partial void OnSourcePositionMsChanged(double value)
 
                 if (_coordinator.CurrentSession.Stage >= SessionWorkflowStage.Transcribed)
                 {
-                    _ = RefreshSegmentsAsync();
+                    await RefreshSegmentsAsync();
                 }
                 else
                 {
@@ -2010,6 +2010,7 @@ partial void OnSourcePositionMsChanged(double value)
     }
 
     private CancellationTokenSource? _pipelineCts;
+    private CancellationTokenSource? _diarizationCts;
 
     [RelayCommand]
     private void CancelPipeline()
@@ -2088,6 +2089,11 @@ partial void OnSourcePositionMsChanged(double value)
     [RelayCommand(CanExecute = nameof(CanRunDiarizationOnly))]
     private async Task RunDiarizationOnlyAsync()
     {
+        _diarizationCts?.Cancel();
+        _diarizationCts?.Dispose();
+        _diarizationCts = new CancellationTokenSource();
+        var ct = _diarizationCts.Token;
+
         try
         {
             IsBusy = true;
@@ -2095,7 +2101,7 @@ partial void OnSourcePositionMsChanged(double value)
             ClearStatusErrorDetail();
 
             var hadTranslatableOutput = _coordinator.CurrentSession.Stage >= SessionWorkflowStage.Translated;
-            var speakerAssignmentsChanged = await _coordinator.RunDiarizationAsync();
+            var speakerAssignmentsChanged = await _coordinator.RunDiarizationAsync(ct);
             string completionStatus;
 
             if (speakerAssignmentsChanged && hadTranslatableOutput)
@@ -2129,6 +2135,8 @@ partial void OnSourcePositionMsChanged(double value)
         finally
         {
             IsBusy = false;
+            _diarizationCts?.Dispose();
+            _diarizationCts = null;
         }
     }
 

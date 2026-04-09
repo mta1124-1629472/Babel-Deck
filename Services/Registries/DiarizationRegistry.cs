@@ -27,6 +27,7 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
 {
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
+    private readonly Dictionary<string, ContainerizedInferenceClient> _clientCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="DiarizationRegistry"/> with the given logging facility and an optional probe for containerized services.
@@ -98,14 +99,21 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     /// <exception cref="PipelineProviderException">Thrown when the specified providerId is not implemented.</exception>
     public IDiarizationProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)
     {
+        var serviceUrl = settings.EffectiveContainerizedServiceUrl;
+        if (!_clientCache.TryGetValue(serviceUrl, out var client))
+        {
+            client = new ContainerizedInferenceClient(serviceUrl, _log);
+            _clientCache[serviceUrl] = client;
+        }
+
         return providerId switch
         {
             ProviderNames.NemoLocal => new NemoContainerizedDiarizationProvider(
-                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                client,
                 _log,
                 _containerizedProbe),
             ProviderNames.WeSpeakerLocal => new WeSpeakerContainerizedDiarizationProvider(
-                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                client,
                 _log,
                 _containerizedProbe),
             _ => throw new PipelineProviderException(
