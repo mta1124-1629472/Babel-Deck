@@ -336,6 +336,23 @@ public sealed class InferenceRuntimeCatalogTests
     }
 
     [Fact]
+    public void NormalizeDiarizationProvider_Null_ReturnsDefaultProvider()
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(null);
+        Assert.Equal(ProviderNames.NemoLocal, result);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    public void NormalizeDiarizationProvider_Whitespace_PreservesDisabledState(string providerId)
+    {
+        var result = InferenceRuntimeCatalog.NormalizeDiarizationProvider(providerId);
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
     public void NormalizeDiarizationCapabilityProviderId_WeSpeaker_ReturnsWeSpeakerLocal()
     {
         var result = InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId("wespeaker");

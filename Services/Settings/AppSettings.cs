@@ -39,7 +39,9 @@ public sealed class AppSettings
     /// </summary>
     public int TranscriptionNumWorkers { get; set; } = 1;
 
-    /// <summary>Diarization provider identifier (e.g. "nemo-local"). Empty string = diarization disabled.</summary>
+    /// <summary>
+    /// Diarization provider identifier (e.g. "nemo-local"). Defaults to NeMo; empty string disables diarization.
+    /// </summary>
     public string DiarizationProvider { get; set; } = ProviderNames.NemoLocal;
 
     /// <summary>

@@ -198,11 +198,18 @@ public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
     /// Normalizes a diarization provider identifier, accepting legacy aliases and falling back to the default when unspecified or unrecognized.
     /// </summary>
     /// <param name="providerId">The provider identifier or legacy alias (may be null or whitespace).</param>
-    /// <returns>The canonical diarization provider identifier; if <paramref name="providerId"/> is null, whitespace, or not recognized, returns the default provider identifier.</returns>
+    /// <returns>
+    /// The canonical diarization provider identifier. Null values fall back to the default provider,
+    /// empty or whitespace values preserve the disabled state as an empty string, and unrecognized
+    /// non-empty values fall back to the default provider identifier.
+    /// </returns>
     public static string NormalizeDiarizationProvider(string? providerId)
     {
-        if (string.IsNullOrWhiteSpace(providerId))
+        if (providerId is null)
             return DefaultDiarizationProvider();
+
+        if (string.IsNullOrWhiteSpace(providerId))
+            return string.Empty;
 
         var normalized = providerId switch
         {
