@@ -2,14 +2,14 @@
 fastapi==0.104.0
 uvicorn[standard]==0.24.0
 pydantic==2.0.0
-python-multipart==0.0.6
+python-multipart==0.0.22
 
 # Transcription
 faster-whisper==0.10.0
 
 # Translation
 ctranslate2==3.20.0
-sentencepiece==0.1.99
+sentencepiece==0.2.1
 
 # TTS - Coqui XTTS
 tts==0.22.0
@@ -22,8 +22,8 @@ soundfile==0.12.1
 pyannote.audio==3.3.2
 
 # Shared ML
-torch==2.1.0
-transformers==4.51.0
+torch==2.7.1+cu128
+transformers==5.0.0rc3
 # FIX: was "accelerator==1.2.0" (wrong package name); correct package is "accelerate"
 accelerate==1.12.0
 
