@@ -259,19 +259,16 @@ public static class ContainerizedProviderReadiness
             return new ProviderReadiness(false, BuildUnreachableMessage(settings, probeResult.ServiceUrl, unreachableDetail));
         }
 
-        string? detail = null;
-        if (probeResult.Capabilities is null || !IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out detail))
+        if (probeResult.Capabilities is null)
         {
-            if (stage == ContainerCapabilityStage.Diarization
-                && string.Equals(
-                    InferenceRuntimeCatalog.NormalizeDiarizationCapabilityProviderId(
-                        string.IsNullOrWhiteSpace(providerId) ? settings.DiarizationProvider : providerId),
-                    ProviderNames.WeSpeakerLocal,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return new ProviderReadiness(false, BuildWeSpeakerCapabilityNotReadyMessage(settings, detail));
-            }
+            return new ProviderReadiness(
+                false,
+                BuildCapabilitiesUnavailableMessage(hostLabel, stage, probeResult.CapabilitiesError));
+        }
 
+        string? detail = null;
+        if (!IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out detail))
+        {
             var stageLabel = stage switch
             {
                 ContainerCapabilityStage.Transcription => "transcription",
@@ -295,7 +292,8 @@ public static class ContainerizedProviderReadiness
             health.ErrorMessage,
             health.CudaAvailable,
             health.CudaVersion,
-            health.Capabilities);
+            health.Capabilities,
+            health.CapabilitiesError);
 
     private static string BuildUnreachableMessage(AppSettings settings, string serviceUrl, string detail)
     {
@@ -320,11 +318,6 @@ public static class ContainerizedProviderReadiness
             ? "Managed local GPU host"
             : "Docker GPU host";
 
-    private static string GetInferenceHostLabel(AppSettings settings) =>
-        settings.PreferredLocalGpuBackend == GpuHostBackend.ManagedVenv
-            ? "Managed local inference host"
-            : "Docker inference host";
-
     private static string BuildCapabilityNotReadyMessage(string hostLabel, string stageLabel, string? detail)
     {
         if (string.IsNullOrWhiteSpace(detail))
@@ -339,19 +332,23 @@ public static class ContainerizedProviderReadiness
         return $"{hostLabel} is live but missing {stageLabel} capability: {detail}";
     }
 
-    private static string BuildWeSpeakerCapabilityNotReadyMessage(AppSettings settings, string? detail)
+    private static string BuildCapabilitiesUnavailableMessage(
+        string hostLabel,
+        ContainerCapabilityStage stage,
+        string? detail)
     {
-        var hostLabel = GetInferenceHostLabel(settings);
-        if (string.IsNullOrWhiteSpace(detail))
-            return $"{hostLabel} is live but WeSpeaker CPU fallback is not ready.";
-
-        if (detail.Contains("warming", StringComparison.OrdinalIgnoreCase)
-            || detail.Contains("probe", StringComparison.OrdinalIgnoreCase))
+        var stageLabel = stage switch
         {
-            return $"{hostLabel} is live but WeSpeaker CPU fallback is still warming: {detail}";
-        }
+            ContainerCapabilityStage.Transcription => "transcription",
+            ContainerCapabilityStage.Translation => "translation",
+            ContainerCapabilityStage.Tts => "TTS",
+            _ => "diarization",
+        };
 
-        return $"{hostLabel} is live but WeSpeaker CPU fallback is not ready: {detail}";
+        if (string.IsNullOrWhiteSpace(detail))
+            return $"{hostLabel} is live but {stageLabel} capability metadata is unavailable.";
+
+        return $"{hostLabel} is live but {stageLabel} capability metadata could not be read: {detail}";
     }
 
     /// <summary>

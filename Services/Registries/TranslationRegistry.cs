@@ -23,11 +23,16 @@ public sealed class TranslationRegistry : ITranslationRegistry
 {
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
 
-    public TranslationRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null)
+    public TranslationRegistry(
+        AppLog log,
+        ContainerizedServiceProbe? containerizedProbe = null,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker = null)
     {
         _log = log;
         _containerizedProbe = containerizedProbe;
+        _requestLeaseTracker = requestLeaseTracker;
     }
 
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null)
@@ -199,7 +204,7 @@ public sealed class TranslationRegistry : ITranslationRegistry
             }
 
             return new ContainerizedTranslationProvider(
-                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log, null, _requestLeaseTracker),
                 _log,
                 containerizedModel);
         }

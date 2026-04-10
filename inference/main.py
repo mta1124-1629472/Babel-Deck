@@ -11,8 +11,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import threading
-from importlib import import_module
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -47,19 +45,38 @@ nllb_model_key = None
 qwen_reference_registry: dict[str, dict[str, str | None]] = {}
 qwen_model = None
 qwen_model_key = None
-wespeaker_model = None
-wespeaker_model_key: str | None = None
-_wespeaker_model_lock = threading.Lock()
-
-# Warmup state: None = not started, "warming" = in progress,
-# "ready" = model loaded, "failed: <reason>" = terminal failure
-_qwen_warmup_status: str | None = None
 HOST_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOST_COMPUTE_TYPE = "float16" if HOST_DEVICE == "cuda" else "int8"
 # Tracks effective compute type after per-stage validation and potential downgrades
 EFFECTIVE_HOST_COMPUTE_TYPE = HOST_COMPUTE_TYPE
 # Tracks downgrade reasons per stage for UI/logging projection
 COMPUTE_DOWNGRADE_REASONS: dict[str, str] = {}
+DEFAULT_QWEN_MODEL_NAME = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+PROVIDER_HEALTH_REFRESH_STALE_SECONDS = 60.0
+
+_provider_health_cache: dict[str, dict[str, object]] = {
+    "qwen": {
+        "ready": False,
+        "state": "pending",
+        "detail": "Qwen3-TTS capability check pending",
+        "checked_at": None,
+        "is_stale": True,
+    },
+    "nemo": {
+        "ready": False,
+        "state": "pending",
+        "detail": "NeMo capability check pending",
+        "checked_at": None,
+        "is_stale": True,
+    },
+}
+_provider_health_refresh_lock: asyncio.Lock | None = None
+_provider_health_refresh_task: asyncio.Task | None = None
+_qwen_model_load_lock: asyncio.Lock | None = None
+_qwen_segment_semaphore: asyncio.Semaphore | None = None
+_active_request_count = 0
+_active_qwen_request_count = 0
+_active_diarization_request_count = 0
 
 # Temporary directory for artifacts
 TEMP_DIR = Path(tempfile.gettempdir()) / "babel_inference"
@@ -88,7 +105,6 @@ NEMO_VAD_PARAMETERS = {
     "min_duration_off": 0.2,
     "filter_speech_first": True,
 }
-WESPEAKER_MODEL = "english"
 
 FLORES = {
     # Latin-script European
@@ -156,6 +172,11 @@ class HealthLiveResponse(BaseModel):
     timestamp: str
     cuda_available: bool
     cuda_version: Optional[str] = None
+    active_requests: int = 0
+    active_qwen_requests: int = 0
+    active_diarization_requests: int = 0
+    busy: bool = False
+    busy_reason: Optional[str] = None
 
 
 class StageCapability(BaseModel):
@@ -284,21 +305,6 @@ def _probe_nllb_available() -> tuple[bool, str]:
 
 
 
-def _probe_qwen_available() -> tuple[bool, str]:
-    """
-    Report Qwen3-TTS warmup readiness and a human-readable status message.
-    
-    Returns:
-        A tuple `(ready, detail)` where `ready` is `True` if the Qwen3-TTS model is loaded and ready, `False` otherwise, and `detail` is a short human-readable status message describing the warmup state or device.
-    """
-    status = _qwen_warmup_status
-    if status is None or status == "warming":
-        return False, "Qwen3-TTS warming up"
-    if status == "ready":
-        return True, f"Qwen3-TTS model loaded on {HOST_DEVICE}"
-    return False, f"Qwen3-TTS warmup {status}"
-
-
 def _find_module(module_name: str):
     """
     Locate the import specification for a given module name.
@@ -315,12 +321,87 @@ def _find_module(module_name: str):
         return None
 
 
-def _probe_nemo_diarization_available() -> tuple[bool, str]:
+def _ensure_provider_health_defaults(provider: str) -> dict[str, object]:
+    entry = _provider_health_cache.get(provider)
+    if entry is None:
+        entry = {
+            "ready": False,
+            "state": "pending",
+            "detail": f"{provider} capability check pending",
+            "checked_at": None,
+            "is_stale": True,
+        }
+        _provider_health_cache[provider] = entry
+    return entry
+
+
+def _provider_health_is_stale(provider: str) -> bool:
+    entry = _ensure_provider_health_defaults(provider)
+    checked_at = entry.get("checked_at")
+    if checked_at is None:
+        entry["is_stale"] = True
+        return True
+    if entry.get("state") in {"pending", "refreshing"}:
+        entry["is_stale"] = True
+        return True
+    if not isinstance(checked_at, datetime):
+        entry["is_stale"] = True
+        return True
+    age_seconds = (datetime.utcnow() - checked_at).total_seconds()
+    is_stale = age_seconds >= PROVIDER_HEALTH_REFRESH_STALE_SECONDS
+    entry["is_stale"] = is_stale
+    return is_stale
+
+
+def _record_provider_health(
+    provider: str,
+    ready: bool,
+    state: str,
+    detail: str,
+    *,
+    checked_at: Optional[datetime] = None,
+) -> None:
+    entry = _ensure_provider_health_defaults(provider)
+    entry["ready"] = ready
+    entry["state"] = state
+    entry["detail"] = detail
+    entry["checked_at"] = checked_at or datetime.utcnow()
+    entry["is_stale"] = False
+
+
+def _mark_provider_health_refreshing(provider: str, detail: str) -> None:
+    _record_provider_health(provider, False, "refreshing", detail)
+    _provider_health_cache[provider]["is_stale"] = True
+
+
+async def _ensure_provider_health_primitives() -> None:
+    global _provider_health_refresh_lock, _qwen_model_load_lock, _qwen_segment_semaphore
+    if _provider_health_refresh_lock is None:
+        _provider_health_refresh_lock = asyncio.Lock()
+    if _qwen_model_load_lock is None:
+        _qwen_model_load_lock = asyncio.Lock()
+    if _qwen_segment_semaphore is None:
+        _qwen_segment_semaphore = asyncio.Semaphore(1)
+
+
+def _schedule_provider_health_refresh(force: bool = False) -> None:
+    global _provider_health_refresh_task
+    if _provider_health_refresh_task is not None and not _provider_health_refresh_task.done():
+        return
+    if not force and not (
+        _provider_health_is_stale("qwen") or _provider_health_is_stale("nemo")
+    ):
+        return
+    _provider_health_refresh_task = asyncio.create_task(_refresh_provider_health_cache(force=force))
+
+
+def _check_nemo_diarization_contract() -> tuple[bool, str]:
     """
-    Check whether the Python packages required for NeMo-based diarization are importable.
-    
-    Returns:
-        tuple: First element is `True` if required NeMo packages are present, `False` otherwise; second element is a human-readable detail message describing availability or listing missing packages.
+    Check the NeMo diarization runtime contract without constructing the diarizer.
+
+    This validates the modules and config keys that the background refresh and
+    the startup probe rely on, while keeping the public capabilities endpoint
+    lightweight.
     """
     missing: list[str] = []
     if _find_module("nemo.collections.asr") is None:
@@ -355,22 +436,104 @@ def _probe_nemo_diarization_available() -> tuple[bool, str]:
     return True, "NeMo ClusteringDiarizer available"
 
 
-def _probe_wespeaker_available() -> tuple[bool, str]:
-    """
-    Check whether the WeSpeaker diarization backend is importable and available for use.
-    
-    Returns:
-        tuple[bool, str]: `True` and an availability message if WeSpeaker can be imported; `False` and an error message otherwise.
-    """
-    if _find_module("wespeaker") is None:
-        return False, "Missing diarization dependency: wespeaker"
+async def _refresh_qwen_provider_health(force: bool = False) -> None:
+    if not force and not _provider_health_is_stale("qwen"):
+        return
+    try:
+        await _ensure_qwen_model_ready(DEFAULT_QWEN_MODEL_NAME)
+    except Exception:
+        pass
+
+
+async def _refresh_nemo_provider_health(force: bool = False) -> None:
+    if not force and not _provider_health_is_stale("nemo"):
+        return
+    _mark_provider_health_refreshing("nemo", "NeMo capability check in progress")
+    try:
+        ready, detail = _check_nemo_diarization_contract()
+        _record_provider_health("nemo", ready, "ready" if ready else "failed", detail)
+    except Exception as exc:
+        _record_provider_health("nemo", False, "failed", f"NeMo capability check failed: {exc}")
+        logger.warning(f"NeMo capability check failed: {exc}", exc_info=True)
+
+
+async def _refresh_provider_health_cache(force: bool = False) -> None:
+    global _provider_health_refresh_task
+    await _ensure_provider_health_primitives()
+    lock = _provider_health_refresh_lock
+    if lock is None:
+        return
+
+    async with lock:
+        try:
+            await _refresh_qwen_provider_health(force=force)
+            await _refresh_nemo_provider_health(force=force)
+        finally:
+            _provider_health_refresh_task = None
+
+
+@app.middleware("http")
+async def _count_active_requests(request, call_next):
+    path = request.url.path
+    track = path not in {"/health", "/health/live", "/capabilities"}
+    category: str | None = None
+    global _active_request_count, _active_qwen_request_count, _active_diarization_request_count
+
+    if track:
+        _active_request_count += 1
+        if path.startswith("/tts/qwen/"):
+            _active_qwen_request_count += 1
+            category = "qwen"
+        elif path.startswith("/diarize"):
+            _active_diarization_request_count += 1
+            category = "diarization"
+        else:
+            category = "general"
 
     try:
-        import wespeaker  # noqa: F401
-    except Exception as exc:
-        return False, f"WeSpeaker import failed: {exc}"
+        return await call_next(request)
+    finally:
+        if track:
+            _active_request_count = max(0, _active_request_count - 1)
+            if category == "qwen":
+                _active_qwen_request_count = max(0, _active_qwen_request_count - 1)
+            elif category == "diarization":
+                _active_diarization_request_count = max(0, _active_diarization_request_count - 1)
 
-    return True, "WeSpeaker available (CPU only; min/max speaker hints ignored)"
+
+def _build_busy_reason() -> Optional[str]:
+    if _active_qwen_request_count > 0 and _active_diarization_request_count > 0:
+        return (
+            f"qwen requests active ({_active_qwen_request_count}); "
+            f"diarization requests active ({_active_diarization_request_count})"
+        )
+    if _active_qwen_request_count > 0:
+        return f"qwen requests active ({_active_qwen_request_count})"
+    if _active_diarization_request_count > 0:
+        return f"diarization requests active ({_active_diarization_request_count})"
+    if _active_request_count > 0:
+        return f"{_active_request_count} request(s) active"
+    return None
+
+
+def _probe_qwen_available() -> tuple[bool, str]:
+    entry = _ensure_provider_health_defaults("qwen")
+    if _provider_health_is_stale("qwen"):
+        _schedule_provider_health_refresh()
+    return bool(entry["ready"]), str(entry["detail"])
+
+
+def _probe_nemo_diarization_available() -> tuple[bool, str]:
+    """
+    Return the cached NeMo provider-health snapshot and schedule a refresh when stale.
+    
+    Returns:
+        tuple: First element is `True` if the last cached NeMo contract check succeeded, `False` otherwise; second element is the cached human-readable detail message.
+    """
+    entry = _ensure_provider_health_defaults("nemo")
+    if _provider_health_is_stale("nemo"):
+        _schedule_provider_health_refresh()
+    return bool(entry["ready"]), str(entry["detail"])
 
 
 def _normalize_native_speaker_label(raw_label, assigned_labels: dict[str, str]) -> str:
@@ -549,34 +712,6 @@ def _run_nemo_diarization(
         return _parse_rttm_file(rttm_files[0])
 
 
-def load_wespeaker_model(model_name: str = WESPEAKER_MODEL):
-    """
-    Load and cache a WeSpeaker model and ensure the model is placed on the CPU.
-    
-    If a different model name is requested than the currently cached one, the function loads the named model, sets it to use the CPU, and updates the module cache.
-    
-    Parameters:
-        model_name (str): Identifier or path of the WeSpeaker model to load (defaults to the module's WESPEAKER_MODEL).
-    
-    Returns:
-        wespeaker_model: The loaded WeSpeaker model instance (cached for subsequent calls).
-    """
-    global wespeaker_model, wespeaker_model_key
-    if wespeaker_model is not None and wespeaker_model_key == model_name:
-        return wespeaker_model
-
-    with _wespeaker_model_lock:
-        if wespeaker_model is None or wespeaker_model_key != model_name:
-            import wespeaker
-
-            logger.info(f"Loading WeSpeaker '{model_name}' on cpu")
-            wespeaker_model = wespeaker.load_model(model_name)
-            wespeaker_model.set_device("cpu")
-            wespeaker_model_key = model_name
-            logger.info("WeSpeaker loaded")
-    return wespeaker_model
-
-
 def _validate_diarization_speaker_bounds(
     min_speakers: Optional[int],
     max_speakers: Optional[int],
@@ -589,77 +724,36 @@ def _validate_diarization_speaker_bounds(
         raise HTTPException(status_code=400, detail="min_speakers cannot be greater than max_speakers")
 
 
-def _run_wespeaker_diarization(audio_path: Path) -> tuple[list[DiarizationSegment], int]:
-    """
-    Run speaker diarization on an audio file using the WeSpeaker backend and return normalized segments.
-    
-    Parameters:
-        audio_path (Path): Path to the audio file to be diarized.
-    
-    Returns:
-        segments (list[DiarizationSegment]): Ordered list of diarization segments with start/end times and normalized speaker IDs.
-        speaker_count (int): Number of distinct normalized speakers detected.
-    """
-    model = load_wespeaker_model()
-    diar_result = model.diarize(str(audio_path))
-
-    segments: list[DiarizationSegment] = []
-    seen_speakers: set[str] = set()
-    assigned_labels: dict[str, str] = {}
-    for item in diar_result:
-        _, start, end, raw_speaker_id = item
-        speaker_id = _normalize_native_speaker_label(raw_speaker_id, assigned_labels)
-        segments.append(
-            DiarizationSegment(
-                start=round(float(start), 3),
-                end=round(float(end), 3),
-                speaker_id=speaker_id,
-            )
-        )
-        seen_speakers.add(speaker_id)
-
-    return segments, len(seen_speakers)
-
-
 def _probe_diarization_providers() -> tuple[dict[str, bool], dict[str, str], bool, str]:
     """
-    Probe availability of NeMo and WeSpeaker diarization providers and summarize overall readiness.
+    Probe availability of the managed-GPU NeMo diarization provider and summarize overall readiness.
     
     Returns:
-        provider_ready (dict[str, bool]): Mapping of provider name to availability (e.g., {'nemo': True, 'wespeaker': False}).
+        provider_ready (dict[str, bool]): Mapping of provider name to availability (currently only {'nemo': True/False}).
         provider_details (dict[str, str]): Mapping of provider name to a human-readable availability/detail message.
-        stage_ready (bool): `True` if at least one provider is available, `False` otherwise.
+        stage_ready (bool): `True` if NeMo is available, `False` otherwise.
         detail (str): Human-readable stage-level status:
-            - "Diarization available" when the default provider (NeMo) is available,
-            - "Default diarization provider unavailable; CPU fallback available" when some provider is available but the default is not,
-            - otherwise a concatenation of provider-specific detail messages.
+            - "Diarization available" when NeMo is available,
+            - otherwise the NeMo detail string.
     """
     provider_ready: dict[str, bool] = {}
     provider_details: dict[str, str] = {}
 
     nemo_ready, nemo_detail = _probe_nemo_diarization_available()
-    wespeaker_ready, wespeaker_detail = _probe_wespeaker_available()
-
     provider_ready["nemo"] = nemo_ready
-    provider_ready["wespeaker"] = wespeaker_ready
     provider_details["nemo"] = nemo_detail
-    provider_details["wespeaker"] = wespeaker_detail
 
     logger.info(
-        "Diarization capability probe: nemo=%s (%s); wespeaker=%s (%s)",
+        "Diarization capability probe: nemo=%s (%s)",
         nemo_ready,
         nemo_detail,
-        wespeaker_ready,
-        wespeaker_detail,
     )
 
-    stage_ready = any(provider_ready.values())
-    if stage_ready and provider_ready[NEMO_DIARIZATION_DEFAULT_PROVIDER]:
+    stage_ready = nemo_ready
+    if stage_ready:
         detail = "Diarization available"
-    elif stage_ready:
-        detail = "Default diarization provider unavailable; CPU fallback available"
     else:
-        detail = f"nemo: {nemo_detail}; wespeaker: {wespeaker_detail}"
+        detail = nemo_detail
 
     return provider_ready, provider_details, stage_ready, detail
 
@@ -713,6 +807,11 @@ async def health_live():
         timestamp=datetime.utcnow().isoformat(),
         cuda_available=cuda_available,
         cuda_version=torch.version.cuda if cuda_available else None,
+        active_requests=_active_request_count,
+        active_qwen_requests=_active_qwen_request_count,
+        active_diarization_requests=_active_diarization_request_count,
+        busy=(_active_request_count > 0),
+        busy_reason=_build_busy_reason(),
     )
 
 
@@ -726,14 +825,14 @@ async def get_stage_capabilities():
     """
     Builds and returns the service capabilities for transcription, translation, TTS, and diarization.
     
-    Queries available backends (Whisper, NLLB, Qwen3-TTS, NeMo/WeSpeaker) and assembles a CapabilitiesResponse summarizing readiness, human-readable details, per-stage provider availability, provider-specific details, the diarization default provider, and supported diarization engines.
+    Queries available backends (Whisper, NLLB, Qwen3-TTS, NeMo) and assembles a CapabilitiesResponse summarizing readiness, human-readable details, per-stage provider availability, provider-specific details, the diarization default provider, and supported diarization engines.
     
     Returns:
         CapabilitiesResponse: Summary of stage capabilities with the following fields populated:
             - transcription: StageCapability for Whisper readiness and detail.
             - translation: StageCapability for NLLB readiness and detail.
             - tts: StageCapability indicating Qwen3-TTS readiness, detail, and provider map/details for "qwen-tts".
-            - diarization: StageCapability indicating overall diarization readiness, detail, provider readiness map, provider detail map, `default_provider` (NeMo), and `engines` (["nemo", "wespeaker"]).
+            - diarization: StageCapability indicating overall diarization readiness, detail, provider readiness map, provider detail map, `default_provider` (NeMo), and `engines` (["nemo"]).
     """
     tx_ready, tx_detail = _probe_whisper_available()
     tl_ready, tl_detail = _probe_nllb_available()
@@ -766,7 +865,7 @@ async def get_stage_capabilities():
             providers=diar_providers,
             provider_details=diar_provider_details,
             default_provider=NEMO_DIARIZATION_DEFAULT_PROVIDER,
-            engines=["nemo", "wespeaker"],
+            engines=["nemo"],
         ),
     )
 
@@ -1030,43 +1129,15 @@ async def diarize_wespeaker(
     max_speakers: Optional[int] = Form(None),
 ):
     """
-    Perform speaker diarization on uploaded audio using the WeSpeaker backend.
-    
-    This endpoint accepts optional speaker-count hints for parity with the NeMo endpoint but ignores them; it writes the uploaded audio to a temporary file, runs WeSpeaker diarization in a background thread, cleans up the temp file in a finally block, and returns the diarization result.
-    
-    Parameters:
-        audio (UploadFile): Uploaded audio file to diarize.
-        min_speakers (Optional[int]): Hint for minimum number of speakers (accepted but ignored).
-        max_speakers (Optional[int]): Hint for maximum number of speakers (accepted but ignored).
-    
-    Returns:
-        DiarizationResponse: Structured response containing diarization segments and the detected speaker count.
-    
-    Raises:
-        HTTPException: Raised with status 400 when diarization fails for reasons other than pre-existing HTTP errors.
+    Legacy endpoint kept only to fail honestly after WeSpeaker moved to the managed CPU runtime.
     """
-    _validate_diarization_speaker_bounds(min_speakers, max_speakers)
+    _ = audio
     _ = min_speakers
     _ = max_speakers
-
-    temp_audio_path: Optional[Path] = None
-    try:
-        temp_audio_path = _stage_audio_upload_to_temp(audio, "diar_wespeaker")
-        temp_audio_path.write_bytes(await audio.read())
-        segments, speaker_count = await asyncio.to_thread(
-            _run_wespeaker_diarization,
-            temp_audio_path,
-        )
-        return _build_diarization_response(segments, speaker_count)
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error(f"WeSpeaker diarization failed: {exc}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    finally:
-        if temp_audio_path:
-            temp_audio_path.unlink(missing_ok=True)
+    raise HTTPException(
+        status_code=410,
+        detail="WeSpeaker moved to the managed CPU runtime and is no longer served by the managed GPU host.",
+    )
 
 
 # ============================================================================
@@ -1323,11 +1394,55 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
     return qwen_model
 
 
+async def _ensure_qwen_model_ready(model_name: str) -> object:
+    await _ensure_provider_health_primitives()
+    entry = _ensure_provider_health_defaults("qwen")
+
+    if qwen_model is not None and qwen_model_key == model_name and bool(entry["ready"]):
+        _record_provider_health("qwen", True, "ready", f"Qwen3-TTS model loaded on {HOST_DEVICE}")
+        return qwen_model
+
+    _mark_provider_health_refreshing("qwen", "Qwen3-TTS warming up")
+    lock = _qwen_model_load_lock
+    if lock is None:
+        raise RuntimeError("Qwen3-TTS model load lock was not initialized")
+
+    async with lock:
+        if qwen_model is not None and qwen_model_key == model_name:
+            _record_provider_health("qwen", True, "ready", f"Qwen3-TTS model loaded on {HOST_DEVICE}")
+            return qwen_model
+
+        try:
+            model = await asyncio.to_thread(load_qwen_model, model_name)
+        except OSError as exc:
+            reason = str(exc)
+            if "Errno 22" in reason or "Invalid argument" in reason:
+                reason = (
+                    f"Windows memory-mapping failure ({reason}). "
+                    "Try increasing your Windows page file size or use the smaller 0.6B model."
+                )
+            elif "paging file" in reason.lower():
+                reason = (
+                    f"Insufficient virtual memory ({reason}). "
+                    "Increase your Windows page file size or use the smaller 0.6B model."
+                )
+            _record_provider_health("qwen", False, "failed", f"failed: {reason}")
+            logger.warning(f"Qwen3-TTS warmup failed: {reason}", exc_info=True)
+            raise
+        except Exception as exc:
+            _record_provider_health("qwen", False, "failed", f"failed: {exc}")
+            logger.warning(f"Qwen3-TTS warmup failed: {exc}", exc_info=True)
+            raise
+
+        _record_provider_health("qwen", True, "ready", f"Qwen3-TTS model loaded on {HOST_DEVICE}")
+        return model
+
+
 @app.get("/tts/qwen/warmup")
 async def qwen_warmup(model: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
     """Pre-load model weights into memory / VRAM."""
     try:
-        load_qwen_model(model)
+        await _ensure_qwen_model_ready(model)
         return {"success": True, "model": model}
     except Exception as exc:
         logger.error(f"Qwen warmup failed: {exc}", exc_info=True)
@@ -1344,71 +1459,72 @@ async def qwen_segment(
     reference_file: Optional[UploadFile] = File(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    if _qwen_warmup_status == "warming":
-        raise HTTPException(status_code=503, detail="Qwen3-TTS model is still loading, please wait")
-    if _qwen_warmup_status is not None and _qwen_warmup_status.startswith("failed"):
-        raise HTTPException(status_code=503, detail=f"Qwen3-TTS model not available: {_qwen_warmup_status}")
+    await _ensure_provider_health_primitives()
+    semaphore = _qwen_segment_semaphore
+    if semaphore is None:
+        raise HTTPException(status_code=500, detail="Qwen3-TTS execution semaphore was not initialized")
 
     temp_ref_path: Optional[Path] = None
     out_path = TEMP_DIR / f"qwen_{uuid4().hex}.wav"
 
-    try:
-        if not text.strip():
-            raise HTTPException(status_code=400, detail="text cannot be empty")
+    async with semaphore:
+        try:
+            if not text.strip():
+                raise HTTPException(status_code=400, detail="text cannot be empty")
 
-        tts = load_qwen_model(model)
+            tts = await _ensure_qwen_model_ready(model)
 
-        ref_audio_path: Optional[str] = None
-        if reference_file is not None:
-            safe_reference_name = os.path.basename(reference_file.filename or "")
-            if not safe_reference_name:
-                safe_reference_name = "reference_audio"
-            temp_ref_path = TEMP_DIR / f"qwenref_{uuid4().hex}_{safe_reference_name}"
-            temp_ref_path.write_bytes(await reference_file.read())
-            ref_audio_path = str(temp_ref_path)
-        elif reference_id and reference_id in qwen_reference_registry:
-            ref_audio_path = qwen_reference_registry[reference_id]["path"]
+            ref_audio_path: Optional[str] = None
+            if reference_file is not None:
+                safe_reference_name = os.path.basename(reference_file.filename or "")
+                if not safe_reference_name:
+                    safe_reference_name = "reference_audio"
+                temp_ref_path = TEMP_DIR / f"qwenref_{uuid4().hex}_{safe_reference_name}"
+                temp_ref_path.write_bytes(await reference_file.read())
+                ref_audio_path = str(temp_ref_path)
+            elif reference_id and reference_id in qwen_reference_registry:
+                ref_audio_path = qwen_reference_registry[reference_id]["path"]
 
-        lang = (language or "english").strip().lower()
+            lang = (language or "english").strip().lower()
 
-        if ref_audio_path is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Qwen3-TTS requires reference audio: provide reference_file or a valid reference_id")
+            if ref_audio_path is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Qwen3-TTS requires reference audio: provide reference_file or a valid reference_id")
 
-        def _synth_and_write() -> None:
-            import soundfile as sf
-            wavs, sample_rate = tts.generate_voice_clone(
-                text=text,
-                language=lang,
-                ref_audio=ref_audio_path,
-                x_vector_only_mode=True,
-                non_streaming_mode=True,
+            def _synth_and_write() -> None:
+                import soundfile as sf
+                wavs, sample_rate = tts.generate_voice_clone(
+                    text=text,
+                    language=lang,
+                    ref_audio=ref_audio_path,
+                    x_vector_only_mode=True,
+                    non_streaming_mode=True,
+                )
+                sf.write(str(out_path), wavs[0], sample_rate, subtype="PCM_16")
+
+            await asyncio.to_thread(_synth_and_write)
+
+            if temp_ref_path:
+                background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
+
+            logger.info(f"Qwen3-TTS segment written: {out_path} ({out_path.stat().st_size} bytes)")
+            return TtsResponse(
+                success=True,
+                voice=model,
+                audio_path=str(out_path),
+                file_size_bytes=out_path.stat().st_size,
             )
-            sf.write(str(out_path), wavs[0], sample_rate, subtype="PCM_16")
 
-        await asyncio.to_thread(_synth_and_write)
-
-        if temp_ref_path:
-            background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
-
-        logger.info(f"Qwen3-TTS segment written: {out_path} ({out_path.stat().st_size} bytes)")
-        return TtsResponse(
-            success=True,
-            voice=model,
-            audio_path=str(out_path),
-            file_size_bytes=out_path.stat().st_size,
-        )
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error(f"Qwen3-TTS segment failed: {exc}", exc_info=True)
-        if temp_ref_path:
-            background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
-        if out_path.exists():
-            background_tasks.add_task(lambda p=out_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(exc))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error(f"Qwen3-TTS segment failed: {exc}", exc_info=True)
+            if temp_ref_path:
+                background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
+            if out_path.exists():
+                background_tasks.add_task(lambda p=out_path: p.unlink(missing_ok=True))
+            raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ============================================================================
@@ -1443,33 +1559,6 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
 
 
 
-async def _warmup_qwen():
-    global _qwen_warmup_status
-    _qwen_warmup_status = "warming"
-    try:
-        logger.info("Qwen3-TTS warmup starting")
-        await asyncio.to_thread(load_qwen_model)
-        _qwen_warmup_status = "ready"
-        logger.info("Qwen3-TTS warmup complete")
-    except OSError as exc:
-        reason = str(exc)
-        if "Errno 22" in reason or "Invalid argument" in reason:
-            reason = (
-                f"Windows memory-mapping failure ({reason}). "
-                "Try increasing your Windows page file size or use the smaller 0.6B model."
-            )
-        elif "paging file" in reason.lower():
-            reason = (
-                f"Insufficient virtual memory ({reason}). "
-                "Increase your Windows page file size or use the smaller 0.6B model."
-            )
-        _qwen_warmup_status = f"failed: {reason}"
-        logger.warning(f"Qwen3-TTS warmup failed: {reason}", exc_info=True)
-    except Exception as exc:
-        _qwen_warmup_status = f"failed: {exc}"
-        logger.warning(f"Qwen3-TTS warmup failed: {exc}", exc_info=True)
-
-
 # ============================================================================
 # Startup / shutdown
 # ============================================================================
@@ -1481,7 +1570,8 @@ async def startup_event():
     if torch.cuda.is_available():
         logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
         logger.info(f"CUDA version: {torch.version.cuda}")
-    asyncio.create_task(_warmup_qwen())
+    await _ensure_provider_health_primitives()
+    _schedule_provider_health_refresh(force=True)
 
 
 @app.on_event("shutdown")

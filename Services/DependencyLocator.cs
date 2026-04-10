@@ -339,17 +339,21 @@ public static class DependencyLocator
         out ManagedVenvHostManager primaryGpuManager)
     {
         var containerizedProbe = new ContainerizedServiceProbe(appLog);
-        var managedHostManager = new ManagedVenvHostManager(appLog, containerizedProbe);
+        var requestLeaseTracker = new ContainerizedRequestLeaseTracker();
+        var managedHostManager = new ManagedVenvHostManager(
+            appLog,
+            containerizedProbe,
+            requestLeaseTracker: requestLeaseTracker);
         primaryGpuManager = managedHostManager;
         var dockerHostManager = new ContainerizedInferenceManager(appLog, containerizedProbe);
         var containerizedManager = new CompositeInferenceHostManager(managedHostManager, dockerHostManager);
 
         var audioProcessingService = new FfmpegAudioProcessingService(appLog);
 
-        var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe);
-        var translationRegistry = new TranslationRegistry(appLog, containerizedProbe);
-        var ttsRegistry = new TtsRegistry(appLog, containerizedProbe, audioProcessingService);
-        var diarizationRegistry = new DiarizationRegistry(appLog, containerizedProbe);
+        var transcriptionRegistry = new TranscriptionRegistry(appLog, containerizedProbe, requestLeaseTracker);
+        var translationRegistry = new TranslationRegistry(appLog, containerizedProbe, requestLeaseTracker);
+        var ttsRegistry = new TtsRegistry(appLog, containerizedProbe, audioProcessingService, requestLeaseTracker);
+        var diarizationRegistry = new DiarizationRegistry(appLog, containerizedProbe, requestLeaseTracker);
 
         var snapshotStore = new SessionSnapshotStore(
             Path.Combine(appDataRoot, "state", "current-session.json"), appLog);

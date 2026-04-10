@@ -28,6 +28,7 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
 {
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private readonly ConcurrentDictionary<string, ContainerizedInferenceClient> _clientCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -35,10 +36,14 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     /// </summary>
     /// <param name="log">Application logger used by the registry and the providers it creates.</param>
     /// <param name="containerizedProbe">Optional probe to check containerized inference service health and availability; may be <c>null</c>.</param>
-    public DiarizationRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null)
+    public DiarizationRegistry(
+        AppLog log,
+        ContainerizedServiceProbe? containerizedProbe = null,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker = null)
     {
         _log = log;
         _containerizedProbe = containerizedProbe;
+        _requestLeaseTracker = requestLeaseTracker;
     }
 
     /// <summary>
@@ -63,10 +68,10 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
             false,
             null,
             [ProviderNames.WeSpeakerDiarizationAlias],
-            SupportedRuntimes: [InferenceRuntime.Containerized],
-            DefaultRuntime: InferenceRuntime.Containerized,
+            SupportedRuntimes: [InferenceRuntime.Local],
+            DefaultRuntime: InferenceRuntime.Local,
             IsImplemented: true,
-            Notes: "Uses the containerized WeSpeaker CPU fallback endpoint."),
+            Notes: "Uses the managed CPU WeSpeaker provider."),
     ];
 
     /// <summary>
@@ -100,23 +105,25 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     /// <exception cref="PipelineProviderException">Thrown when the specified providerId is not implemented.</exception>
     public IDiarizationProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)
     {
-        var serviceUrl = ContainerizedInferenceClient.NormalizeBaseUrl(settings.EffectiveContainerizedServiceUrl);
-        var client = _clientCache.GetOrAdd(serviceUrl, normalizedServiceUrl => new ContainerizedInferenceClient(normalizedServiceUrl, _log));
-
         return providerId switch
         {
             ProviderNames.NemoLocal => new NemoContainerizedDiarizationProvider(
-                client,
+                GetOrCreateContainerizedClient(settings),
                 _log,
                 _containerizedProbe),
-            ProviderNames.WeSpeakerLocal => new WeSpeakerContainerizedDiarizationProvider(
-                client,
-                _log,
-                _containerizedProbe),
+            ProviderNames.WeSpeakerLocal => new WeSpeakerCpuDiarizationProvider(_log),
             _ => throw new PipelineProviderException(
                 $"Diarization provider '{providerId}' is not implemented. " +
                 "Select an implemented provider in Settings.")
         };
+    }
+
+    private ContainerizedInferenceClient GetOrCreateContainerizedClient(AppSettings settings)
+    {
+        var serviceUrl = ContainerizedInferenceClient.NormalizeBaseUrl(settings.EffectiveContainerizedServiceUrl);
+        return _clientCache.GetOrAdd(
+            serviceUrl,
+            normalizedServiceUrl => new ContainerizedInferenceClient(normalizedServiceUrl, _log, null, _requestLeaseTracker));
     }
 
 }

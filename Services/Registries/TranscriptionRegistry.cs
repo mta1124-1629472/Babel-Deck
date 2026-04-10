@@ -23,11 +23,16 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
 {
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
 
-    public TranscriptionRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null)
+    public TranscriptionRegistry(
+        AppLog log,
+        ContainerizedServiceProbe? containerizedProbe = null,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker = null)
     {
         _log = log;
         _containerizedProbe = containerizedProbe;
+        _requestLeaseTracker = requestLeaseTracker;
     }
 
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null)
@@ -150,7 +155,7 @@ public sealed class TranscriptionRegistry : ITranscriptionRegistry
         if (resolvedRuntime == InferenceRuntime.Containerized)
         {
             return new ContainerizedTranscriptionProvider(
-                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log, null, _requestLeaseTracker),
                 _log);
         }
 

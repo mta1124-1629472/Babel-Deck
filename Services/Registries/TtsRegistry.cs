@@ -24,12 +24,18 @@ public sealed class TtsRegistry : ITtsRegistry
     private readonly AppLog _log;
     private readonly ContainerizedServiceProbe? _containerizedProbe;
     private readonly IAudioProcessingService? _audioProcessingService;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
 
-    public TtsRegistry(AppLog log, ContainerizedServiceProbe? containerizedProbe = null, IAudioProcessingService? audioProcessingService = null)
+    public TtsRegistry(
+        AppLog log,
+        ContainerizedServiceProbe? containerizedProbe = null,
+        IAudioProcessingService? audioProcessingService = null,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker = null)
     {
         _log = log;
         _containerizedProbe = containerizedProbe;
         _audioProcessingService = audioProcessingService;
+        _requestLeaseTracker = requestLeaseTracker;
     }
 
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null)
@@ -168,7 +174,7 @@ public sealed class TtsRegistry : ITtsRegistry
             return normalizedProviderId switch
             {
                 ProviderNames.Qwen => new QwenContainerTtsProvider(
-                    new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log),
+                    new ContainerizedInferenceClient(settings.EffectiveContainerizedServiceUrl, _log, null, _requestLeaseTracker),
                     _log,
                     new TtsReferenceExtractor(_log)),
                 _ => throw new PipelineProviderException(

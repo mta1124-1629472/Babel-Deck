@@ -21,8 +21,10 @@ public sealed record ContainerizedProbeResult(
     bool CudaAvailable = false,
     string? CudaVersion = null,
     ContainerCapabilitiesSnapshot? Capabilities = null,
+    string? CapabilitiesError = null,
     TimeSpan? Duration = null,
-    bool WasCacheHit = false);
+    bool WasCacheHit = false,
+    bool IsStale = false);
 
 public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
 {
@@ -92,7 +94,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                 if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
                 {
                     _log.Info($"Container probe cache hit (after race): url={normalizedUrl}, state={entry.CachedResult.State}");
-                    return entry.CachedResult;
+                    return entry.CachedResult with { WasCacheHit = true };
                 }
 
                 // If the in-flight task completed but the observer hasn't cached the result yet,
@@ -115,9 +117,18 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     {
                         entry.CachedResult = completedResult;
                         entry.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+                        if (completedResult.State == ContainerizedProbeState.Available)
+                            entry.LastAvailableResult = completedResult;
                     }
                     _log.Info($"Container probe completed (observer not yet run): url={normalizedUrl}, state={completedResult.State}");
                     return completedResult;
+                }
+
+                if (entry.LastAvailableResult is not null)
+                {
+                    _log.Info($"Container probe returning stale available result while refresh is in-flight: url={normalizedUrl}");
+                    ReportCacheAccess(normalizedUrl, true);
+                    return entry.LastAvailableResult with { WasCacheHit = true, IsStale = true };
                 }
 
                 _log.Info($"Container probe reuse in-flight: url={normalizedUrl}");
@@ -163,6 +174,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             : ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
  
         ContainerizedProbeResult? lastFailure = null;
+        ContainerizedProbeResult? lastAvailable = null;
  
         while (DateTimeOffset.UtcNow < deadline)
         {
@@ -171,8 +183,12 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
             var result = GetCurrentOrStartBackgroundProbe(serviceUrl, forceRefresh);
  
             if (result.State == ContainerizedProbeState.Available)
+            {
+                if (result.IsStale)
+                    lastAvailable = result;
                 return result;
- 
+            }
+
             if (result.State == ContainerizedProbeState.Unavailable)
             {
                 lastFailure = result;
@@ -200,6 +216,12 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         {
             _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning last unavailable state.");
             return lastFailure;
+        }
+
+        if (lastAvailable != null)
+        {
+            _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning last stale available state.");
+            return lastAvailable;
         }
  
         _log.Info($"Container probe wait budget exhausted: url={normalizedUrl}, returning Checking state.");
@@ -278,6 +300,8 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     {
                         entry.CachedResult = result;
                         entry.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+                        if (result.State == ContainerizedProbeState.Available)
+                            entry.LastAvailableResult = result;
                     }
                 }
             }
@@ -321,6 +345,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     health.CudaAvailable,
                     health.CudaVersion,
                     health.Capabilities,
+                    health.CapabilitiesError,
                     stopwatch.Elapsed,
                     WasCacheHit: false);
             }
@@ -338,6 +363,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                     DateTimeOffset.UtcNow,
                     ex.Message,
                     false,
+                    null,
                     null,
                     null,
                     stopwatch.Elapsed,
@@ -404,6 +430,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         public Task<ContainerizedProbeResult>? InFlightTask { get; set; }
         public CancellationTokenSource? Cts { get; set; }
         public ContainerizedProbeResult? CachedResult { get; set; }
+        public ContainerizedProbeResult? LastAvailableResult { get; set; }
         public DateTimeOffset ExpiresAtUtc { get; set; }
     }
 }

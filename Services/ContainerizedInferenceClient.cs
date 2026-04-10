@@ -13,22 +13,32 @@ namespace Babel.Player.Services;
 
 public sealed class ContainerizedInferenceClient
 {
-    private const string CapabilitiesWarmupPrefix = "Capabilities probe is still warming or failed";
     private readonly HttpClient _httpClient;
     private readonly AppLog _log;
     private readonly string _inferenceServiceUrl;
+    private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = false };
 
     public ContainerizedInferenceClient(string inferenceServiceUrl, AppLog log)
-        : this(inferenceServiceUrl, log, null)
+        : this(inferenceServiceUrl, log, null, null)
     {
     }
 
     public ContainerizedInferenceClient(string inferenceServiceUrl, AppLog log, HttpClient? httpClient)
+        : this(inferenceServiceUrl, log, httpClient, null)
+    {
+    }
+
+    public ContainerizedInferenceClient(
+        string inferenceServiceUrl,
+        AppLog log,
+        HttpClient? httpClient,
+        ContainerizedRequestLeaseTracker? requestLeaseTracker)
     {
         _inferenceServiceUrl = NormalizeBaseUrl(inferenceServiceUrl);
         _log = log;
         _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        _requestLeaseTracker = requestLeaseTracker;
     }
 
     public Task<ContainerHealthStatus> CheckHealthAsync(
@@ -83,6 +93,8 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Transcription);
+
             if (!File.Exists(audioFilePath))
                 throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
 
@@ -144,6 +156,8 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Translation);
+
             _log.Info($"Translating {sourceLanguage} -> {targetLanguage}");
 
             using var content = new FormUrlEncodedContent(
@@ -206,6 +220,8 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Tts);
+
             _log.Info($"Generating TTS with voice: {voice}");
 
             using var content = new FormUrlEncodedContent(
@@ -254,11 +270,19 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Diarization);
+
             if (!File.Exists(audioFilePath))
                 throw new FileNotFoundException($"Audio file not found: {audioFilePath}");
 
             var normalizedEngine = NormalizeDiarizationEngine(engine);
-            var endpoint = normalizedEngine == ProviderNames.WeSpeakerLocal ? "/diarize/wespeaker" : "/diarize";
+            if (!string.Equals(normalizedEngine, ProviderNames.NemoLocal, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Containerized diarization only supports {ProviderNames.NemoLocal}; '{normalizedEngine}' now runs via the managed CPU runtime.");
+            }
+
+            const string endpoint = "/diarize";
             _log.Info($"Diarizing with containerized service: {audioFilePath} (engine={normalizedEngine})");
 
             using var content = new MultipartFormDataContent();
@@ -305,6 +329,8 @@ public sealed class ContainerizedInferenceClient
         string referenceAudioPath,
         CancellationToken cancellationToken = default)
     {
+        using var lease = AcquireLease(ContainerizedRequestKind.Qwen);
+
         if (!File.Exists(referenceAudioPath))
             throw new FileNotFoundException($"Reference audio file not found: {referenceAudioPath}");
 
@@ -352,6 +378,8 @@ public sealed class ContainerizedInferenceClient
     {
         try
         {
+            using var lease = AcquireLease(ContainerizedRequestKind.Qwen);
+
             using var content = new MultipartFormDataContent();
             content.Add(new StringContent(text), "text");
             content.Add(new StringContent(string.IsNullOrWhiteSpace(model) ? "Qwen/Qwen3-TTS-12Hz-1.7B-Base" : model), "model");
@@ -408,6 +436,8 @@ public sealed class ContainerizedInferenceClient
         string localOutputPath,
         CancellationToken cancellationToken = default)
     {
+        using var lease = AcquireLease(ContainerizedRequestKind.Tts);
+
         using var response = await _httpClient.GetAsync(
             $"{_inferenceServiceUrl}/tts/audio/{Uri.EscapeDataString(filename)}",
             HttpCompletionOption.ResponseHeadersRead,
@@ -453,7 +483,7 @@ public sealed class ContainerizedInferenceClient
             if (!string.Equals(live.Status, "healthy", StringComparison.OrdinalIgnoreCase))
                 return ContainerHealthStatus.Unavailable(serviceUrl, $"Unexpected live status '{live.Status ?? "unknown"}'.");
 
-            ContainerCapabilitiesSnapshot capabilities;
+            ContainerCapabilitiesSnapshot? capabilities = null;
             string? capabilitiesError = null;
             try
             {
@@ -478,8 +508,7 @@ public sealed class ContainerizedInferenceClient
             }
             catch (Exception ex)
             {
-                capabilitiesError = $"{CapabilitiesWarmupPrefix}: {ex.Message}";
-                capabilities = CreateUnavailableCapabilitiesSnapshot(capabilitiesError);
+                capabilitiesError = ex.Message;
             }
 
             return new ContainerHealthStatus(
@@ -487,30 +516,20 @@ public sealed class ContainerizedInferenceClient
                 CudaAvailable: live.CudaAvailable,
                 CudaVersion: live.CudaVersion,
                 ServiceUrl: serviceUrl,
-                ErrorMessage: capabilitiesError,
-                Capabilities: capabilities);
+                ErrorMessage: null,
+                Capabilities: capabilities,
+                CapabilitiesError: capabilitiesError,
+                ActiveRequests: live.ActiveRequests,
+                ActiveQwenRequests: live.ActiveQwenRequests,
+                ActiveDiarizationRequests: live.ActiveDiarizationRequests,
+                Busy: live.Busy,
+                BusyReason: live.BusyReason);
         }
         catch (Exception ex)
         {
             return ContainerHealthStatus.Unavailable(serviceUrl, ex.Message);
         }
     }
-
-    /// <summary>
-    /// Creates a capabilities snapshot where every capability stage is marked not ready and all detail fields contain the provided message.
-    /// </summary>
-    /// <param name="detail">A message describing why capabilities are unavailable; stored in each stage's detail field.</param>
-    /// <returns>A <see cref="ContainerCapabilitiesSnapshot"/> with all stages set as not ready and their detail fields populated with <paramref name="detail"/>.</returns>
-    private static ContainerCapabilitiesSnapshot CreateUnavailableCapabilitiesSnapshot(string detail) =>
-        new(
-            TranscriptionReady: false,
-            TranscriptionDetail: detail,
-            TranslationReady: false,
-            TranslationDetail: detail,
-            TtsReady: false,
-            TtsDetail: detail,
-            DiarizationReady: false,
-            DiarizationDetail: detail);
 
     /// <summary>
     /// Deserialize an HTTP response JSON payload into an instance of <typeparamref name="T"/> and ensure the response indicates success.
@@ -551,6 +570,21 @@ public sealed class ContainerizedInferenceClient
 
         [JsonPropertyName("cuda_version")]
         public string? CudaVersion { get; set; }
+
+        [JsonPropertyName("active_requests")]
+        public int ActiveRequests { get; set; }
+
+        [JsonPropertyName("active_qwen_requests")]
+        public int ActiveQwenRequests { get; set; }
+
+        [JsonPropertyName("active_diarization_requests")]
+        public int ActiveDiarizationRequests { get; set; }
+
+        [JsonPropertyName("busy")]
+        public bool Busy { get; set; }
+
+        [JsonPropertyName("busy_reason")]
+        public string? BusyReason { get; set; }
     }
 
     private sealed class CapabilitiesResponseDto
@@ -840,6 +874,9 @@ public sealed class ContainerizedInferenceClient
         return speakers.Count;
     }
 
+    private IDisposable? AcquireLease(ContainerizedRequestKind kind) =>
+        _requestLeaseTracker?.Acquire(kind);
+
 }
 
 public enum ContainerCapabilityStage
@@ -954,10 +991,16 @@ public sealed record ContainerHealthStatus(
     string? CudaVersion,
     string ServiceUrl,
     string? ErrorMessage,
-    ContainerCapabilitiesSnapshot? Capabilities = null)
+    ContainerCapabilitiesSnapshot? Capabilities = null,
+    string? CapabilitiesError = null,
+    int ActiveRequests = 0,
+    int ActiveQwenRequests = 0,
+    int ActiveDiarizationRequests = 0,
+    bool Busy = false,
+    string? BusyReason = null)
 {
     public static ContainerHealthStatus Unavailable(string url, string? reason = null) =>
-        new(false, false, null, url, reason, null);
+        new(false, false, null, url, reason, null, null, 0, 0, 0, false, null);
 
     public string StatusLine
     {
@@ -970,7 +1013,11 @@ public sealed record ContainerHealthStatus(
                 : "CPU-only";
 
             if (Capabilities is null)
-                return $"Healthy ({cuda})";
+            {
+                return string.IsNullOrWhiteSpace(CapabilitiesError)
+                    ? $"Healthy ({cuda})"
+                    : $"Healthy ({cuda}) · capabilities unavailable";
+            }
 
             return $"Healthy ({cuda}) · tx={(Capabilities.TranscriptionReady ? "✓" : "x")} · tl={(Capabilities.TranslationReady ? "✓" : "x")} · tts={(Capabilities.TtsReady ? "✓" : "x")} · diar={(Capabilities.DiarizationReady ? "✓" : "x")}";
         }

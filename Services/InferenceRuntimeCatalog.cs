@@ -90,6 +90,21 @@ public static class InferenceRuntimeCatalog
     public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
 
     /// <summary>
+    /// Returns the effective runtime ownership for a diarization provider.
+    /// </summary>
+    /// <param name="providerId">The diarization provider identifier or legacy alias.</param>
+    /// <returns>
+    /// <see cref="InferenceRuntime.Containerized"/> for NeMo and
+    /// <see cref="InferenceRuntime.Local"/> for WeSpeaker and any unrecognized diarization provider.
+    /// </returns>
+    public static InferenceRuntime InferDiarizationRuntime(string? providerId) => providerId switch
+    {
+        ProviderNames.NemoLocal or ProviderNames.NemoDiarizationAlias => InferenceRuntime.Containerized,
+        ProviderNames.WeSpeakerLocal or ProviderNames.WeSpeakerDiarizationAlias => InferenceRuntime.Local,
+        _ => InferenceRuntime.Local,
+    };
+
+    /// <summary>
     /// Normalizes a transcription provider identifier to a canonical provider ID appropriate for the given compute profile.
     /// </summary>
     /// <param name="profile">The compute profile used to determine which providers are appropriate.</param>
