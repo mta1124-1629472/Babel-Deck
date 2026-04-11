@@ -69,23 +69,6 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
         Assert.Null(readiness.BlockingReason);
     }
 
-    private static string FindRepoRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        for (var i = 0; i < 8; i++)
-        {
-            if (File.Exists(Path.Combine(dir, "BabelPlayer.csproj")))
-                return dir;
-
-            var parent = Directory.GetParent(dir)?.FullName;
-            if (parent is null)
-                break;
-            dir = parent;
-        }
-
-        throw new InvalidOperationException($"Could not locate repo root from {AppContext.BaseDirectory}.");
-    }
-
     private static string FindInferenceDirectory()
     {
         var outputDir = Path.Combine(AppContext.BaseDirectory, "inference");

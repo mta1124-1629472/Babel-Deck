@@ -414,15 +414,26 @@ def _record_provider_health(
 def _mark_provider_health_refreshing(provider: str, detail: str) -> None:
     """
     Mark a provider's health entry as refreshing and mark its cached status as stale.
-    
-    This updates the provider's recorded health state to indicate it is not ready, sets the state to "refreshing", stores the provided detail message, and marks the cached entry as stale so a background refresh will be scheduled.
-    
+
+    Preserves the last-known "ready" and other probe fields from the existing cache entry when present,
+    so that callers can still see stale success while a refresh is in progress. Only sets state to
+    "refreshing", marks as stale, and updates the detail field. Falls back to recording a fresh not-ready
+    state when there is no existing cache entry.
+
     Parameters:
         provider (str): Provider identifier (e.g., "qwen" or "nemo").
         detail (str): Human-readable detail or reason for the refreshing state.
     """
-    _record_provider_health(provider, False, "refreshing", detail)
-    _provider_health_cache[provider]["is_stale"] = True
+    existing = _provider_health_cache.get(provider)
+    if existing is not None:
+        # Preserve last-known probe values; only update state, detail, and staleness
+        existing["state"] = "refreshing"
+        existing["detail"] = detail
+        existing["is_stale"] = True
+    else:
+        # No existing entry: record a fresh not-ready state
+        _record_provider_health(provider, False, "refreshing", detail)
+        _provider_health_cache[provider]["is_stale"] = True
 
 
 async def _ensure_provider_health_primitives() -> None:
@@ -544,9 +555,9 @@ async def _refresh_nemo_provider_health(force: bool = False) -> None:
 async def _refresh_provider_health_cache(force: bool = False) -> None:
     """
     Refresh cached provider health information for Qwen and NeMo.
-    
-    Ensures provider-health primitives are initialized and updates the cached readiness and detail for both providers. When `force` is True, performs a refresh regardless of cache staleness.
-    
+
+    Ensures provider-health primitives are initialized and updates the cached readiness and detail for both providers concurrently. Qwen warmup runs in the background while NeMo contract check completes promptly. When `force` is True, performs a refresh regardless of cache staleness.
+
     Parameters:
         force (bool): If True, force a refresh even if cached entries are not marked stale.
     """
@@ -558,8 +569,14 @@ async def _refresh_provider_health_cache(force: bool = False) -> None:
 
     async with lock:
         try:
-            await _refresh_qwen_provider_health(force=force)
+            # Start Qwen warmup in background; NeMo runs immediately without waiting
+            qwen_task = asyncio.create_task(_refresh_qwen_provider_health(force=force))
             await _refresh_nemo_provider_health(force=force)
+            # Ensure Qwen task completes and log any errors
+            try:
+                await qwen_task
+            except Exception as exc:
+                logger.warning(f"Background Qwen provider health refresh failed: {exc}", exc_info=True)
         finally:
             _provider_health_refresh_task = None
 
