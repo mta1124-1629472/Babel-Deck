@@ -708,21 +708,21 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             ProviderNames.Manual,
             "Manual speaker mapping",
             "Local",
-            "Ready",
+            "Disabled",
             NormalizeDiagnosticText(inlineStatus),
-            "No provider selected.",
+            "Manual speaker mapping — no provider selected",
             "No diarization provider selected.",
             string.Empty,
-            IsReady: true,
-            IsLive: true,
-            IsStale: false,
+            IsReady: false,
+            IsLive: false,
+            IsStale: true,
             CheckedAtText: DateTimeOffset.UtcNow.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture),
             History: AppendProviderHealthHistory(
                 $"Diarization|{ProviderNames.Manual}|Manual speaker mapping|Local",
                 DateTimeOffset.UtcNow,
-                "Ready",
+                "Disabled",
                 "No diarization provider selected.",
-                isReady: true));
+                isReady: false));
 
     private ProviderHealthSnapshot BuildHealthSnapshot(
         string section,

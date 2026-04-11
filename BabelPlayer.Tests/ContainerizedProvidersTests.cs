@@ -1139,7 +1139,7 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         var settings = new AppSettings
         {
             PreferredLocalGpuBackend = GpuHostBackend.ManagedVenv,
-            ContainerizedServiceUrl = "http://localhost:8000",
+            ContainerizedServiceUrl = AppSettings.ManagedGpuServiceUrl,
             DiarizationProvider = ProviderNames.NemoLocal,
         };
 

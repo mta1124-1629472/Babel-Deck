@@ -753,31 +753,6 @@ public sealed class SegmentInspectionTests
         throw new Xunit.Sdk.XunitException($"Timed out waiting for provider health snapshot '{section}'.");
     }
 
-    private static object InvokePrivateSnapshotCapture(EmbeddedPlaybackViewModel playback)
-    {
-        var method = typeof(EmbeddedPlaybackViewModel).GetMethod(
-            "CaptureProviderHealthSelectionSnapshot",
-            BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not find CaptureProviderHealthSelectionSnapshot method.");
-
-        return method.Invoke(playback, null)
-            ?? throw new InvalidOperationException("Provider selection snapshot was null.");
-    }
-
-    private static ProviderHealthSnapshot InvokePrivateSnapshotBuild(
-        EmbeddedPlaybackViewModel playback,
-        string methodName,
-        object selectionSnapshot)
-    {
-        var method = typeof(EmbeddedPlaybackViewModel).GetMethod(
-            methodName,
-            BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException($"Could not find {methodName} method.");
-
-        return (ProviderHealthSnapshot)(method.Invoke(playback, [selectionSnapshot])
-            ?? throw new InvalidOperationException($"{methodName} returned null."));
-    }
-
     [Fact]
     public void EmbeddedPlaybackViewModel_DiarizationProviderOptions_ShowOffNeMoAndWeSpeaker()
     {
@@ -825,8 +800,10 @@ public sealed class SegmentInspectionTests
 
         playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
 
-        var selectionSnapshot = InvokePrivateSnapshotCapture(playback);
-        var snapshot = InvokePrivateSnapshotBuild(playback, "BuildDiarizationHealthSnapshot", selectionSnapshot);
+        var snapshot = await WaitForProviderHealthSnapshotAsync(
+            playback,
+            "Diarization",
+            s => s.StatusLine == "Ready");
 
         Assert.Equal("Ready", snapshot.StatusLine);
         Assert.Contains("Managed local CPU runtime", snapshot.HostState, StringComparison.Ordinal);
