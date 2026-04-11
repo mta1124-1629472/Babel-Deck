@@ -2551,7 +2551,7 @@ partial void OnSourcePositionMsChanged(double value)
         await RefreshSegmentsAsync();
     }
 
-public void Dispose()
+    public void Dispose()
     {
         _coordinator.PropertyChanged -= OnCoordinatorPropertyChanged;
         _coordinator.SettingsModified -= OnCoordinatorSettingsModified;
