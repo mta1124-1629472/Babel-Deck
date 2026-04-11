@@ -327,7 +327,18 @@ public static class DependencyLocator
     /// <param name="transportManager">Media transport manager used by the coordinator.</param>
     /// <param name="appDataRoot">Root application data directory used to locate the session snapshot file.</param>
     /// <param name="primaryGpuManager">Outputs the ManagedVenvHostManager instance selected as the primary GPU manager.</param>
-    /// <returns>A SessionWorkflowCoordinator instance configured with transcription, translation, TTS, diarization registries, audio processing, containerized probes and inference managers, and the snapshot store.</returns>
+    /// <summary>
+    /// Constructs and wires a SessionWorkflowCoordinator with transcription, translation, TTS, and diarization registries, audio processing, containerized probes and inference managers, and a session snapshot store.
+    /// </summary>
+    /// <param name="appLog">Application logger used by the created components.</param>
+    /// <param name="appSettings">Application settings passed to the coordinator.</param>
+    /// <param name="perSessionStore">Per-session snapshot store for active session state.</param>
+    /// <param name="recentStore">Store of recent sessions.</param>
+    /// <param name="apiKeyStore">API key store used by the coordinator.</param>
+    /// <param name="transportManager">Media transport manager supplied to the coordinator.</param>
+    /// <param name="appDataRoot">Root directory used to locate the persisted session snapshot file.</param>
+    /// <param name="primaryGpuManager">Outputs the managed virtual environment host manager that serves as the primary GPU-backed inference host.</param>
+    /// <returns>The configured SessionWorkflowCoordinator instance.</returns>
     private static SessionWorkflowCoordinator CreateCoordinatorInstance(
         AppLog appLog,
         AppSettings appSettings,

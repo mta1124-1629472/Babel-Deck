@@ -25,17 +25,30 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
 
     private readonly ManagedCpuRuntimeManager _cpuRuntimeManager;
 
+    /// <summary>
+    /// Creates a WeSpeakerCpuDiarizationProvider and initializes an internal ManagedCpuRuntimeManager for CPU-based WeSpeaker diarization.
+    /// </summary>
+    /// <param name="log">Application logging instance used by the provider and the created ManagedCpuRuntimeManager.</param>
     public WeSpeakerCpuDiarizationProvider(AppLog log)
         : this(log, new ManagedCpuRuntimeManager(log))
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of WeSpeakerCpuDiarizationProvider using the supplied application log and managed CPU runtime manager.
+    /// </summary>
+    /// <param name="log">Application logging facility used by the provider.</param>
+    /// <param name="cpuRuntimeManager">Managed CPU runtime manager that controls bootstrap, installation, and runtime state for WeSpeaker.</param>
     internal WeSpeakerCpuDiarizationProvider(AppLog log, ManagedCpuRuntimeManager cpuRuntimeManager)
         : base(log, cpuRuntimeManager)
     {
         _cpuRuntimeManager = cpuRuntimeManager;
     }
 
+    /// <summary>
+    /// Checks whether the managed CPU runtime is prepared to run the WeSpeaker diarization provider.
+    /// </summary>
+    /// <returns>A <see cref="ProviderReadiness"/> that is Ready when the managed CPU runtime is available; otherwise not ready with a diagnostic message explaining whether the runtime failed or still requires bootstrapping.</returns>
     public ProviderReadiness CheckReadiness(AppSettings settings, ApiKeyStore? keyStore)
     {
         if (_cpuRuntimeManager.State == ManagedCpuState.Failed)
@@ -55,6 +68,13 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
         return ProviderReadiness.Ready;
     }
 
+    /// <summary>
+    /// Ensures the managed CPU runtime required for WeSpeaker is installed and reports progress.
+    /// </summary>
+    /// <param name="settings">Application settings used during installation or bootstrap (may influence installation behavior).</param>
+    /// <param name="progress">Optional progress reporter that receives a completion value (1.0) when installation finishes.</param>
+    /// <param name="ct">Cancellation token to cancel the installation/bootstrap operation.</param>
+    /// <returns>`true` if the managed CPU runtime reached the Ready state, `false` otherwise.</returns>
     public async Task<bool> EnsureReadyAsync(
         AppSettings settings,
         IProgress<double>? progress = null,
@@ -73,6 +93,20 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
         }
     }
 
+    /// <summary>
+    /// Run WeSpeaker diarization on the provided audio file and return normalized segments with speaker labels.
+    /// </summary>
+    /// <param name="request">Diarization request; its SourceAudioPath must point to an existing audio file to process.</param>
+    /// <param name="ct">Cancellation token to cancel the operation.</param>
+    /// <returns>
+    /// A DiarizationResult containing:
+    /// - success state,
+    /// - a list of normalized diarized segments,
+    /// - the number of distinct normalized speakers,
+    /// - and an error message when the operation failed.
+    /// </returns>
+    /// <exception cref="FileNotFoundException">Thrown when the file at request.SourceAudioPath does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the WeSpeaker subprocess returns no JSON payload.</exception>
     public async Task<DiarizationResult> DiarizeAsync(
         DiarizationRequest request,
         CancellationToken ct = default)
@@ -113,6 +147,11 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
         }
     }
 
+    /// <summary>
+    /// Converts raw WeSpeaker segment DTOs into diarized segments and assigns stable normalized speaker labels.
+    /// </summary>
+    /// <param name="segments">Raw segments produced by the WeSpeaker model.</param>
+    /// <returns>A read-only list of <see cref="DiarizedSegment"/> where each segment has a normalized speaker label (e.g., "spk_00").</returns>
     private static IReadOnlyList<DiarizedSegment> NormalizeSegments(IReadOnlyList<WeSpeakerRawSegmentDto> segments)
     {
         var normalized = new List<DiarizedSegment>(segments.Count);
@@ -129,6 +168,12 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
         return normalized;
     }
 
+    /// <summary>
+    /// Normalize or assign a stable speaker label for a raw speaker identifier.
+    /// </summary>
+    /// <param name="rawSpeakerId">The raw speaker identifier which may be null or whitespace; if null/whitespace a synthetic lookup key is generated.</param>
+    /// <param name="assignedLabels">A mapping from lookup keys to normalized speaker labels; this dictionary is updated when a new normalized label is created.</param>
+    /// <returns>The normalized speaker label (for example, "spk_00"); returns an existing label if the lookup key is already present in <paramref name="assignedLabels"/>.</returns>
     private static string NormalizeSpeakerId(string? rawSpeakerId, IDictionary<string, string> assignedLabels)
     {
         var key = string.IsNullOrWhiteSpace(rawSpeakerId)

@@ -26,6 +26,13 @@ public sealed class TtsRegistry : ITtsRegistry
     private readonly IAudioProcessingService? _audioProcessingService;
     private readonly ContainerizedRequestLeaseTracker? _requestLeaseTracker;
 
+    /// <summary>
+    /// Creates a TtsRegistry and stores runtime and service dependencies used to resolve and instantiate TTS providers.
+    /// </summary>
+    /// <param name="log">Application logger used by the registry.</param>
+    /// <param name="containerizedProbe">Probe for checking containerized TTS runtime availability; may be null.</param>
+    /// <param name="audioProcessingService">Optional audio processing service used by some providers; may be null.</param>
+    /// <param name="requestLeaseTracker">Optional tracker for containerized request leases passed to containerized providers; may be null.</param>
     public TtsRegistry(
         AppLog log,
         ContainerizedServiceProbe? containerizedProbe = null,
@@ -38,6 +45,11 @@ public sealed class TtsRegistry : ITtsRegistry
         _requestLeaseTracker = requestLeaseTracker;
     }
 
+    /// <summary>
+    /// Lists TTS provider descriptors available for the given compute profile.
+    /// </summary>
+    /// <param name="profile">Optional compute profile to filter providers; when null returns local (CPU), GPU, and cloud providers combined.</param>
+    /// <returns>A read-only list of ProviderDescriptor objects representing providers supported for the specified profile; when no descriptor matches a profile the list will be empty for that profile.</returns>
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders(ComputeProfile? profile = null)
     {
         if (profile is null)
@@ -163,6 +175,15 @@ public sealed class TtsRegistry : ITtsRegistry
         return await provider.EnsureReadyAsync(settings, progress, ct);
     }
 
+    /// <summary>
+    /// Create an ITtsProvider instance for the resolved provider identifier and runtime.
+    /// </summary>
+    /// <param name="providerId">The requested provider identifier or alias to resolve.</param>
+    /// <param name="settings">Application settings used to resolve provider normalization, profile and runtime.</param>
+    /// <param name="keyStore">Optional store to obtain provider API keys (used for cloud providers).</param>
+    /// <param name="profile">Optional compute profile override; if null the profile is inferred from settings or provider.</param>
+    /// <returns>The concrete ITtsProvider implementation corresponding to the resolved provider and runtime.</returns>
+    /// <exception cref="PipelineProviderException">Thrown when the requested provider or containerized provider is not implemented.</exception>
     public ITtsProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null, ComputeProfile? profile = null)
     {
         var resolvedProfile = ResolveProfile(providerId, settings, profile);

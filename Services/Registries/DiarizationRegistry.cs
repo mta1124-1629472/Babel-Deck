@@ -35,7 +35,12 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     /// Initializes a new instance of <see cref="DiarizationRegistry"/> with the given logging facility and an optional probe for containerized services.
     /// </summary>
     /// <param name="log">Application logger used by the registry and the providers it creates.</param>
+    /// <summary>
+    /// Initializes a DiarizationRegistry with the required application log and optional components for containerized inference support.
+    /// </summary>
+    /// <param name="log">Application logger used for registry and provider operations.</param>
     /// <param name="containerizedProbe">Optional probe to check containerized inference service health and availability; may be <c>null</c>.</param>
+    /// <param name="requestLeaseTracker">Optional tracker for managing request leases when creating or using containerized inference clients; may be <c>null</c>.</param>
     public DiarizationRegistry(
         AppLog log,
         ContainerizedServiceProbe? containerizedProbe = null,
@@ -49,7 +54,10 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     /// <summary>
     /// Lists the diarization providers available in this registry.
     /// </summary>
-    /// <returns>A read-only list of <see cref="ProviderDescriptor"/> objects describing each available diarization provider.</returns>
+    /// <summary>
+    /// Lists the diarization providers supported by this registry.
+    /// </summary>
+    /// <returns>A read-only list of <see cref="ProviderDescriptor"/> instances describing each available diarization provider.</returns>
     public IReadOnlyList<ProviderDescriptor> GetAvailableProviders() =>
     [
         new ProviderDescriptor(
@@ -102,6 +110,13 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     /// <param name="settings">Application settings used to configure the provider (its EffectiveContainerizedServiceUrl is used to construct the containerized client).</param>
     /// <param name="keyStore">API key store (accepted but not used by the current provider implementations).</param>
     /// <returns>The instantiated diarization provider configured according to the provided settings.</returns>
+    /// <summary>
+    /// Creates a diarization provider instance for the specified provider ID.
+    /// </summary>
+    /// <param name="providerId">The identifier of the diarization provider to create.</param>
+    /// <param name="settings">Application settings used when constructing provider instances (e.g., service endpoints).</param>
+    /// <param name="keyStore">Optional API key store; may be used by some providers to obtain credentials.</param>
+    /// <returns>An <see cref="IDiarizationProvider"/> implementation corresponding to <paramref name="providerId"/>.</returns>
     /// <exception cref="PipelineProviderException">Thrown when the specified providerId is not implemented.</exception>
     public IDiarizationProvider CreateProvider(string providerId, AppSettings settings, ApiKeyStore? keyStore = null)
     {
@@ -118,6 +133,11 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
         };
     }
 
+    /// <summary>
+    /// Get or create a cached ContainerizedInferenceClient for the effective containerized service URL in the provided settings.
+    /// </summary>
+    /// <param name="settings">Application settings used to determine the effective containerized service URL.</param>
+    /// <returns>The ContainerizedInferenceClient associated with the normalized service URL; a previously created instance is returned when available.</returns>
     private ContainerizedInferenceClient GetOrCreateContainerizedClient(AppSettings settings)
     {
         var serviceUrl = ContainerizedInferenceClient.NormalizeBaseUrl(settings.EffectiveContainerizedServiceUrl);

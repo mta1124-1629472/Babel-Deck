@@ -59,6 +59,17 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         _metrics = metrics ?? new ContainerizedProbeMetrics();
     }
 
+    /// <summary>
+    /// Gets the current probe result for the specified containerized service URL or starts a background probe and returns a checking result.
+    /// </summary>
+    /// <param name="serviceUrl">The service base URL to probe. If null or blank, an unavailable result is returned with an explanatory error detail.</param>
+    /// <param name="forceRefresh">If true, bypasses cached results and forces a new background probe (cancelling any in-flight probe for the same URL).</param>
+    /// <returns>
+    /// A <see cref="ContainerizedProbeResult"/> that is one of:
+    /// - a cached available or unavailable result (cached returns have <c>WasCacheHit = true</c>),
+    /// - a stale available result (returned during an in-flight refresh and marked with <c>IsStale = true</c>),
+    /// - or a Checking result when a background probe has been started or an in-flight probe is being reused.
+    /// </returns>
     public ContainerizedProbeResult GetCurrentOrStartBackgroundProbe(
         string? serviceUrl,
         bool forceRefresh = false)
@@ -161,6 +172,16 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         }
     }
 
+    /// <summary>
+    /// Waits until the service probe reports an Available state or the wait budget is exhausted.
+    /// </summary>
+    /// <param name="serviceUrl">The service base URL to probe; blank or null is treated as an empty URL.</param>
+    /// <param name="forceRefresh">If true, bypasses cached results and starts a fresh probe attempt (used to bypass negative cache).</param>
+    /// <param name="waitTimeout">Maximum time to wait for an Available result; if null, the passive probe timeout is used.</param>
+    /// <param name="cancellationToken">Token to cancel the wait operation.</param>
+    /// <returns>
+    /// The observed probe result: an Available result if one was observed within the budget; otherwise the most recent Unavailable result if any, or the most recent stale Available result if present, or a Checking result when no prior outcomes exist.
+    /// </returns>
     public async Task<ContainerizedProbeResult> WaitForProbeAsync(
         string? serviceUrl,
         bool forceRefresh = false,
@@ -244,6 +265,12 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         }
     }
 
+    /// <summary>
+    /// Observes the completion of an in-flight probe task, updates the entry's cached state and last-available snapshot, clears in-flight tracking on completion or cancellation, and reports probe metrics and logs.
+    /// </summary>
+    /// <param name="normalizedUrl">Normalized base URL of the service being probed.</param>
+    /// <param name="entry">The per-service probe entry containing coordination and cached results to update.</param>
+    /// <param name="task">The probe task whose completion is being observed.</param>
     private async Task ObserveCompletionAsync(
         string normalizedUrl,
         ProbeEntry entry,
@@ -327,6 +354,16 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
         }
     }
 
+    /// <summary>
+    /// Runs the configured health check for the given normalized service URL and produces a ContainerizedProbeResult.
+    /// </summary>
+    /// <param name="normalizedUrl">The normalized base URL of the containerized service to probe.</param>
+    /// <param name="timeout">Maximum time budget for the underlying health check.</param>
+    /// <param name="cancellationToken">Token used to cancel the probe.</param>
+    /// <returns>
+    /// A ContainerizedProbeResult representing the probe outcome (state, timing, CUDA and capabilities info, and error details).
+    /// If the underlying probe throws an exception other than cancellation, the method returns an Unavailable result with ErrorDetail set to the exception message.
+    /// </returns>
     private Task<ContainerizedProbeResult> StartProbeTask(string normalizedUrl, TimeSpan timeout, CancellationToken cancellationToken)
     {
         return Task.Run(async () =>

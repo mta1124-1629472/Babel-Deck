@@ -322,6 +322,22 @@ def _find_module(module_name: str):
 
 
 def _ensure_provider_health_defaults(provider: str) -> dict[str, object]:
+    """
+    Ensure a provider health cache entry exists for the given provider and return it.
+    
+    If no entry exists, creates and stores a default health dictionary for the provider with these keys:
+    - `ready`: readiness boolean (initially False)
+    - `state`: lifecycle state string (initially "pending")
+    - `detail`: human-readable detail message
+    - `checked_at`: timestamp of last check (initially None)
+    - `is_stale`: boolean indicating staleness (initially True)
+    
+    Parameters:
+        provider (str): Provider identifier used as the cache key.
+    
+    Returns:
+        dict[str, object]: The provider's health entry from the global cache.
+    """
     entry = _provider_health_cache.get(provider)
     if entry is None:
         entry = {
@@ -336,6 +352,17 @@ def _ensure_provider_health_defaults(provider: str) -> dict[str, object]:
 
 
 def _provider_health_is_stale(provider: str) -> bool:
+    """
+    Determine whether a provider's cached health entry is considered stale and update its `is_stale` flag accordingly.
+    
+    Checks whether the entry has a valid `checked_at` timestamp, whether its `state` is `"pending"` or `"refreshing"`, and whether the timestamp age exceeds the configured stale threshold; sets `entry["is_stale"]` to reflect the result.
+    
+    Parameters:
+        provider (str): The provider key whose health entry to evaluate (e.g., "qwen" or "nemo").
+    
+    Returns:
+        bool: `True` if the provider's health entry is stale, `False` otherwise.
+    """
     entry = _ensure_provider_health_defaults(provider)
     checked_at = entry.get("checked_at")
     if checked_at is None:
@@ -361,6 +388,20 @@ def _record_provider_health(
     *,
     checked_at: Optional[datetime] = None,
 ) -> None:
+    """
+    Record the readiness and state details for a health provider in the provider health cache.
+    
+    Updates the provider's cached entry with the given readiness (`ready`), lifecycle `state`,
+    human-readable `detail`, and `checked_at` timestamp (uses current UTC time when omitted).
+    Also clears any staleness flag so the entry is considered fresh.
+    
+    Parameters:
+        provider (str): Provider key/name to update (e.g., "qwen", "nemo").
+        ready (bool): Whether the provider is currently considered ready.
+        state (str): Short state string describing the provider lifecycle (e.g., "ready", "refreshing", "failed").
+        detail (str): Human-readable detail or diagnostic message about the provider state.
+        checked_at (Optional[datetime]): Timestamp of the health check; when None, current UTC time is used.
+    """
     entry = _ensure_provider_health_defaults(provider)
     entry["ready"] = ready
     entry["state"] = state
@@ -370,11 +411,27 @@ def _record_provider_health(
 
 
 def _mark_provider_health_refreshing(provider: str, detail: str) -> None:
+    """
+    Mark a provider's health entry as refreshing and mark its cached status as stale.
+    
+    This updates the provider's recorded health state to indicate it is not ready, sets the state to "refreshing", stores the provided detail message, and marks the cached entry as stale so a background refresh will be scheduled.
+    
+    Parameters:
+        provider (str): Provider identifier (e.g., "qwen" or "nemo").
+        detail (str): Human-readable detail or reason for the refreshing state.
+    """
     _record_provider_health(provider, False, "refreshing", detail)
     _provider_health_cache[provider]["is_stale"] = True
 
 
 async def _ensure_provider_health_primitives() -> None:
+    """
+    Ensure module-level async primitives for provider health and Qwen concurrency are initialized.
+    
+    Creates (if not already set) an asyncio.Lock for provider health refresh coordination, an
+    asyncio.Lock for serializing Qwen model loads, and an asyncio.Semaphore(1) to limit concurrent
+    Qwen segment syntheses.
+    """
     global _provider_health_refresh_lock, _qwen_model_load_lock, _qwen_segment_semaphore
     if _provider_health_refresh_lock is None:
         _provider_health_refresh_lock = asyncio.Lock()
@@ -385,6 +442,11 @@ async def _ensure_provider_health_primitives() -> None:
 
 
 def _schedule_provider_health_refresh(force: bool = False) -> None:
+    """
+    Schedule a background refresh of provider health status if needed.
+    
+    If `force` is True or either the "qwen" or "nemo" provider health entries are stale, create an asynchronous task to refresh the provider health cache; do nothing if a refresh task is already in progress.
+    """
     global _provider_health_refresh_task
     if _provider_health_refresh_task is not None and not _provider_health_refresh_task.done():
         return
@@ -397,11 +459,15 @@ def _schedule_provider_health_refresh(force: bool = False) -> None:
 
 def _check_nemo_diarization_contract() -> tuple[bool, str]:
     """
-    Check the NeMo diarization runtime contract without constructing the diarizer.
-
-    This validates the modules and config keys that the background refresh and
-    the startup probe rely on, while keeping the public capabilities endpoint
-    lightweight.
+    Check the NeMo diarization runtime contract without instantiating the diarizer.
+    
+    Validates that required modules are importable and that the NeMo diarization
+    configuration exposes the expected fields used by probes and background refresh.
+    
+    Returns:
+        tuple: A pair where the first element is `True` if the contract appears valid
+        and `False` otherwise; the second element is a human-readable detail string
+        describing success or the failure reason.
     """
     missing: list[str] = []
     if _find_module("nemo.collections.asr") is None:
@@ -437,6 +503,14 @@ def _check_nemo_diarization_contract() -> tuple[bool, str]:
 
 
 async def _refresh_qwen_provider_health(force: bool = False) -> None:
+    """
+    Refresh the cached readiness state for the Qwen TTS provider when stale or requested.
+    
+    Attempts to ensure the default Qwen model is loaded so the provider health cache is updated. If `force` is True, performs the refresh regardless of cached staleness. Failures during the refresh are suppressed.
+     
+    Parameters:
+        force (bool): If True, force a refresh even when the provider health cache is not stale.
+    """
     if not force and not _provider_health_is_stale("qwen"):
         return
     try:
@@ -446,6 +520,14 @@ async def _refresh_qwen_provider_health(force: bool = False) -> None:
 
 
 async def _refresh_nemo_provider_health(force: bool = False) -> None:
+    """
+    Update cached health state for the NeMo diarization provider.
+    
+    Performs a capability/contract check for NeMo diarization and records the resulting readiness, state, and detail into the provider health cache. If `force` is False and the cached entry is not stale, the function returns immediately. On error the failure is recorded and a warning is logged.
+    
+    Parameters:
+    	force (bool): If True, run the check even when the cached health entry is not stale.
+    """
     if not force and not _provider_health_is_stale("nemo"):
         return
     _mark_provider_health_refreshing("nemo", "NeMo capability check in progress")
@@ -458,6 +540,14 @@ async def _refresh_nemo_provider_health(force: bool = False) -> None:
 
 
 async def _refresh_provider_health_cache(force: bool = False) -> None:
+    """
+    Refresh cached provider health information for Qwen and NeMo.
+    
+    Ensures provider-health primitives are initialized and updates the cached readiness and detail for both providers. When `force` is True, performs a refresh regardless of cache staleness.
+    
+    Parameters:
+        force (bool): If True, force a refresh even if cached entries are not marked stale.
+    """
     global _provider_health_refresh_task
     await _ensure_provider_health_primitives()
     lock = _provider_health_refresh_lock
@@ -474,6 +564,18 @@ async def _refresh_provider_health_cache(force: bool = False) -> None:
 
 @app.middleware("http")
 async def _count_active_requests(request, call_next):
+    """
+    Middleware that tracks active in-flight requests and categorizes them for health metrics.
+    
+    Increments global counters for total active requests and, when applicable, the Qwen TTS or diarization counters for the duration of the request; decrements the same counters after the request completes. Health and capabilities paths are not tracked.
+    
+    Parameters:
+        request: The incoming ASGI/Starlette request.
+        call_next: Callable that invokes the next request handler and returns a response.
+    
+    Returns:
+        The response produced by the next handler.
+    """
     path = request.url.path
     track = path not in {"/health", "/health/live", "/capabilities"}
     category: str | None = None
@@ -502,6 +604,15 @@ async def _count_active_requests(request, call_next):
 
 
 def _build_busy_reason() -> Optional[str]:
+    """
+    Construct a human-readable busy reason based on active request counters.
+    
+    Returns:
+        busy_reason (Optional[str]): A descriptive string summarizing which request
+        categories are currently active and their counts (for example,
+        "qwen requests active (2); diarization requests active (1)"), or `None`
+        when there are no active requests.
+    """
     if _active_qwen_request_count > 0 and _active_diarization_request_count > 0:
         return (
             f"qwen requests active ({_active_qwen_request_count}); "
@@ -517,6 +628,12 @@ def _build_busy_reason() -> Optional[str]:
 
 
 def _probe_qwen_available() -> tuple[bool, str]:
+    """
+    Return the cached readiness and detail for the Qwen TTS provider, scheduling a background health refresh if the cached entry is stale.
+    
+    Returns:
+        (ready, detail) (tuple[bool, str]): `true` if Qwen is marked ready, `false` otherwise; `detail` contains a human-readable status or error message.
+    """
     entry = _ensure_provider_health_defaults("qwen")
     if _provider_health_is_stale("qwen"):
         _schedule_provider_health_refresh()
@@ -525,10 +642,10 @@ def _probe_qwen_available() -> tuple[bool, str]:
 
 def _probe_nemo_diarization_available() -> tuple[bool, str]:
     """
-    Return the cached NeMo provider-health snapshot and schedule a refresh when stale.
+    Return the cached readiness and diagnostic detail for the NeMo diarization provider and schedule a background refresh if the cached entry is stale.
     
     Returns:
-        tuple: First element is `True` if the last cached NeMo contract check succeeded, `False` otherwise; second element is the cached human-readable detail message.
+        tuple: `(ready, detail)` where `ready` is `True` if the last cached NeMo contract check succeeded, `False` otherwise; `detail` is the cached human-readable diagnostic message.
     """
     entry = _ensure_provider_health_defaults("nemo")
     if _provider_health_is_stale("nemo"):
@@ -654,12 +771,12 @@ def _run_nemo_diarization(
     max_speakers: Optional[int],
 ) -> tuple[list[DiarizationSegment], int]:
     """
-    Run NeMo's ClusteringDiarizer on a staged audio file and return parsed diarization results.
+    Run NeMo's ClusteringDiarizer on a staged audio file and produce parsed diarization segments.
     
     Parameters:
         audio_path (Path): Path to the input audio file to diarize.
-        min_speakers (Optional[int]): Minimum number of speakers hint; if equal to `max_speakers` the diarizer is instructed to use that exact speaker count.
-        max_speakers (Optional[int]): Maximum number of speakers hint; used to limit clustering if provided.
+        min_speakers (Optional[int]): Minimum speaker count hint; when equal to `max_speakers`, the diarizer is instructed to use that exact speaker count.
+        max_speakers (Optional[int]): Maximum speaker count hint to bound clustering when provided.
     
     Returns:
         tuple[list[DiarizationSegment], int]: A tuple where the first element is a list of diarization segments with normalized speaker IDs and rounded start/end times, and the second element is the number of distinct speakers detected.
@@ -716,6 +833,19 @@ def _validate_diarization_speaker_bounds(
     min_speakers: Optional[int],
     max_speakers: Optional[int],
 ) -> None:
+    """
+    Validate optional diarization speaker bounds and raise an HTTP 400 error for invalid values.
+    
+    Parameters:
+        min_speakers (Optional[int]): Minimum number of speakers; when provided it must be greater than or equal to 1.
+        max_speakers (Optional[int]): Maximum number of speakers; when provided it must be greater than or equal to 1.
+    
+    Raises:
+        HTTPException: Raised with status code 400 if:
+            - `min_speakers` is provided and is less than 1 (detail: "min_speakers must be at least 1"),
+            - `max_speakers` is provided and is less than 1 (detail: "max_speakers must be at least 1"),
+            - both are provided and `min_speakers` is greater than `max_speakers` (detail: "min_speakers cannot be greater than max_speakers").
+    """
     if min_speakers is not None and min_speakers < 1:
         raise HTTPException(status_code=400, detail="min_speakers must be at least 1")
     if max_speakers is not None and max_speakers < 1:
@@ -801,6 +931,12 @@ def _build_diarization_response(
 
 @app.get("/health/live", response_model=HealthLiveResponse)
 async def health_live():
+    """
+    Report current liveness and runtime health metrics for the service.
+    
+    Returns:
+        HealthLiveResponse: Contains service status, UTC ISO-8601 timestamp, CUDA availability and CUDA version (when available), current active request counters (total, Qwen TTS, diarization), a `busy` flag indicating whether there are in-flight requests, and a human-readable `busy_reason`.
+    """
     cuda_available = torch.cuda.is_available()
     return HealthLiveResponse(
         status="healthy",
@@ -823,16 +959,16 @@ async def health_check():
 @app.get("/capabilities", response_model=CapabilitiesResponse)
 async def get_stage_capabilities():
     """
-    Builds and returns the service capabilities for transcription, translation, TTS, and diarization.
+    Constructs the service capability summary for transcription, translation, TTS, and diarization.
     
-    Queries available backends (Whisper, NLLB, Qwen3-TTS, NeMo) and assembles a CapabilitiesResponse summarizing readiness, human-readable details, per-stage provider availability, provider-specific details, the diarization default provider, and supported diarization engines.
+    Probes available backends and assembles a CapabilitiesResponse describing per-stage readiness, human-readable detail strings, provider readiness maps and provider detail maps, the diarization default provider, and supported diarization engines.
     
     Returns:
-        CapabilitiesResponse: Summary of stage capabilities with the following fields populated:
-            - transcription: StageCapability for Whisper readiness and detail.
-            - translation: StageCapability for NLLB readiness and detail.
-            - tts: StageCapability indicating Qwen3-TTS readiness, detail, and provider map/details for "qwen-tts".
-            - diarization: StageCapability indicating overall diarization readiness, detail, provider readiness map, provider detail map, `default_provider` (NeMo), and `engines` (["nemo"]).
+        CapabilitiesResponse: Aggregated capability information with these fields populated:
+            - transcription: readiness/detail for Whisper.
+            - translation: readiness/detail for NLLB.
+            - tts: readiness/detail for Qwen3-TTS and provider maps for "qwen-tts".
+            - diarization: overall readiness/detail, per-provider readiness/details, `default_provider` set to NEMO_DIARIZATION_DEFAULT_PROVIDER, and `engines` set to ["nemo"].
     """
     tx_ready, tx_detail = _probe_whisper_available()
     tl_ready, tl_detail = _probe_nllb_available()
@@ -1129,7 +1265,11 @@ async def diarize_wespeaker(
     max_speakers: Optional[int] = Form(None),
 ):
     """
-    Legacy endpoint kept only to fail honestly after WeSpeaker moved to the managed CPU runtime.
+    Handle the legacy WeSpeaker diarization endpoint by rejecting requests with a clear permanent-deprecation response.
+    
+    Raises:
+        HTTPException: Always raised with status_code=410 and detail
+        "WeSpeaker moved to the managed CPU runtime and is no longer served by the managed GPU host."
     """
     _ = audio
     _ = min_speakers
@@ -1378,7 +1518,17 @@ async def register_qwen_reference(
 # ============================================================================
 
 def load_qwen_model(model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
-    """Lazy-load Qwen3-TTS pipeline; cached globally per model name."""
+    """
+    Ensure the specified Qwen3-TTS model is loaded and cached globally.
+    
+    Loads the Qwen3-TTS model identified by `model_name` if it is not already loaded or if a different model is currently cached, and updates the global cache keys used by the module.
+    
+    Parameters:
+        model_name (str): Hugging Face repository ID or model identifier for Qwen3-TTS. Defaults to "Qwen/Qwen3-TTS-12Hz-1.7B-Base".
+    
+    Returns:
+        The loaded Qwen3-TTS model instance.
+    """
     global qwen_model, qwen_model_key
     if qwen_model is None or qwen_model_key != model_name:
         from qwen_tts import Qwen3TTSModel
@@ -1395,6 +1545,20 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
 
 
 async def _ensure_qwen_model_ready(model_name: str) -> object:
+    """
+    Ensure the specified Qwen3-TTS model is loaded and update the provider health state accordingly.
+    
+    Parameters:
+        model_name (str): Identifier of the Qwen3-TTS model to ensure is loaded.
+    
+    Returns:
+        object: The loaded Qwen3-TTS model instance.
+    
+    Raises:
+        RuntimeError: If the Qwen model load lock was not initialized.
+        OSError: If the underlying model load fails due to low-level I/O or memory errors.
+        Exception: For other failures encountered while loading the model.
+    """
     await _ensure_provider_health_primitives()
     entry = _ensure_provider_health_defaults("qwen")
 
@@ -1440,7 +1604,18 @@ async def _ensure_qwen_model_ready(model_name: str) -> object:
 
 @app.get("/tts/qwen/warmup")
 async def qwen_warmup(model: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"):
-    """Pre-load model weights into memory / VRAM."""
+    """
+    Ensure the specified Qwen TTS model is loaded into memory/VRAM and marked ready.
+    
+    Parameters:
+        model (str): HuggingFace repository identifier of the Qwen TTS model to warm up (default "Qwen/Qwen3-TTS-12Hz-1.7B-Base").
+    
+    Returns:
+        dict: `{"success": True, "model": <model>}` when the model is ready.
+    
+    Raises:
+        HTTPException: If warmup fails (status 500 with the underlying error message).
+    """
     try:
         await _ensure_qwen_model_ready(model)
         return {"success": True, "model": model}
@@ -1459,6 +1634,24 @@ async def qwen_segment(
     reference_file: Optional[UploadFile] = File(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    """
+    Synthesize speech for the given text using a Qwen3-TTS model and a reference audio clip.
+    
+    Parameters:
+    	text (str): The text to synthesize; must not be empty or whitespace.
+    	model (str): Qwen3-TTS model identifier to use (e.g., "Qwen/Qwen3-TTS-12Hz-1.7B-Base").
+    	language (Optional[str]): Language hint; defaults to "english" when omitted.
+    	reference_text (Optional[str]): Unused by the endpoint (accepted but not processed).
+    	reference_id (Optional[str]): ID of a previously registered reference audio in the Qwen reference registry.
+    	reference_file (Optional[UploadFile]): Uploaded reference audio file to use for voice cloning; takes precedence over reference_id.
+    	background_tasks (BackgroundTasks): FastAPI background tasks manager used to schedule temporary-file cleanup.
+    
+    Returns:
+    	TtsResponse: On success contains fields `voice` (model used), `audio_path` (temporary WAV file path), and `file_size_bytes`.
+    
+    Raises:
+    	HTTPException: 400 for validation or synthesis errors; 500 if internal server resources (semaphore) are uninitialized.
+    """
     await _ensure_provider_health_primitives()
     semaphore = _qwen_segment_semaphore
     if semaphore is None:
@@ -1493,6 +1686,11 @@ async def qwen_segment(
                     detail="Qwen3-TTS requires reference audio: provide reference_file or a valid reference_id")
 
             def _synth_and_write() -> None:
+                """
+                Generate a voice-cloned waveform from the surrounding context and write the first output to out_path as a 16-bit PCM WAV.
+                
+                Uses the available `tts` object with the current `text`, `lang`, and `ref_audio_path` to produce one or more waveforms, then writes the first waveform to the file path referenced by `out_path` with subtype "PCM_16".
+                """
                 import soundfile as sf
                 wavs, sample_rate = tts.generate_voice_clone(
                     text=text,
@@ -1565,6 +1763,11 @@ async def get_tts_audio(filename: str, background_tasks: BackgroundTasks):
 
 @app.on_event("startup")
 async def startup_event():
+    """
+    Perform application startup initialization for the inference service.
+    
+    Initializes provider-health primitives and schedules an immediate provider health refresh; also records basic runtime information (CUDA availability and device/version) to the application logs.
+    """
     logger.info("Babel Player inference service starting")
     logger.info(f"CUDA available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():

@@ -86,7 +86,10 @@ public static class InferenceRuntimeCatalog
     /// <summary>
     /// Gets the default diarization provider identifier.
     /// </summary>
-    /// <returns>The provider ID for the default diarization provider: <c>ProviderNames.NemoLocal</c>.</returns>
+    /// <summary>
+/// Gets the canonical provider identifier used as the default for diarization.
+/// </summary>
+/// <returns>The provider ID for the default diarization provider: <c>ProviderNames.NemoLocal</c>.</returns>
     public static string DefaultDiarizationProvider() => ProviderNames.NemoLocal;
 
     /// <summary>
@@ -96,7 +99,11 @@ public static class InferenceRuntimeCatalog
     /// <returns>
     /// <see cref="InferenceRuntime.Containerized"/> for NeMo and
     /// <see cref="InferenceRuntime.Local"/> for WeSpeaker and any unrecognized diarization provider.
-    /// </returns>
+    /// <summary>
+    /// Determines the effective InferenceRuntime for a diarization provider identifier.
+    /// </summary>
+    /// <param name="providerId">The diarization provider identifier or null; accepts canonical names and legacy aliases.</param>
+    /// <returns><see cref="InferenceRuntime.Containerized"/> when the provider is NeMo (canonical or legacy alias); <see cref="InferenceRuntime.Local"/> for WeSpeaker (canonical or legacy alias) or any other/unknown value.</returns>
     public static InferenceRuntime InferDiarizationRuntime(string? providerId) => providerId switch
     {
         ProviderNames.NemoLocal or ProviderNames.NemoDiarizationAlias => InferenceRuntime.Containerized,

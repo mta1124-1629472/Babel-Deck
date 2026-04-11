@@ -236,7 +236,14 @@ public static class ContainerizedProviderReadiness
     /// <param name="probeResult">Probe information including service URL, state, capabilities, and any error/detail text.</param>
     /// <param name="stage">The capability stage to evaluate (Transcription, Translation, Tts, or Diarization).</param>
     /// <param name="providerId">Optional provider identifier to evaluate provider-specific readiness for TTS or Diarization; when null or empty the corresponding default from <paramref name="settings"/> is used.</param>
-    /// <returns>A <see cref="ProviderReadiness"/> indicating readiness; when not ready the returned object contains a user-facing message explaining the reason.</returns>
+    /// <summary>
+    /// Converts a container probe result into a ProviderReadiness that reflects whether the requested capability stage (and optional provider) is ready on the configured GPU host.
+    /// </summary>
+    /// <param name="settings">Application settings used to derive host labeling and provider defaults.</param>
+    /// <param name="probeResult">Result of the container probe or health check containing host state, advertised capabilities, and any error details.</param>
+    /// <param name="stage">The capability stage to evaluate (transcription, translation, TTS, or diarization).</param>
+    /// <param name="providerId">Optional provider identifier to select a specific TTS or diarization provider; when null or empty the corresponding provider configured in <paramref name="settings"/> is used.</param>
+    /// <returns>`ProviderReadiness.Ready` when the requested stage/provider is available; otherwise a non-ready ProviderReadiness containing a user-facing message explaining why the capability or host is not ready.</returns>
     internal static ProviderReadiness MapProbeResultToReadiness(
         AppSettings settings,
         ContainerizedProbeResult probeResult,
@@ -284,7 +291,12 @@ public static class ContainerizedProviderReadiness
         return ProviderReadiness.Ready;
     }
 
-    private static ContainerizedProbeResult FromHealth(ContainerHealthStatus health) =>
+    /// <summary>
+            /// Create a ContainerizedProbeResult from a ContainerHealthStatus snapshot.
+            /// </summary>
+            /// <param name="health">Health snapshot from the container inference host.</param>
+            /// <returns>A ContainerizedProbeResult representing the same service URL, availability state, timestamped now, error text, CUDA info, capabilities, and capability error as the provided health snapshot.</returns>
+            private static ContainerizedProbeResult FromHealth(ContainerHealthStatus health) =>
         new(
             health.ServiceUrl,
             health.IsAvailable ? ContainerizedProbeState.Available : ContainerizedProbeState.Unavailable,
@@ -295,6 +307,12 @@ public static class ContainerizedProviderReadiness
             health.Capabilities,
             health.CapabilitiesError);
 
+    /// <summary>
+    /// Builds a user-facing message explaining that the configured GPU inference host is unreachable and how to proceed.
+    /// </summary>
+    /// <param name="serviceUrl">The configured service URL for the GPU inference host.</param>
+    /// <param name="detail">Probe detail or error text to include in the message.</param>
+    /// <returns>A human-readable message guiding the user to start or check the configured GPU host, including probe detail.</returns>
     private static string BuildUnreachableMessage(AppSettings settings, string serviceUrl, string detail)
     {
         var hostLabel = GetHostLabel(settings);
@@ -313,11 +331,23 @@ public static class ContainerizedProviderReadiness
         return $"Configured {hostLabel} is not reachable: {detail}";
     }
 
-    private static string GetHostLabel(AppSettings settings) =>
+    /// <summary>
+            /// Selects a human-readable label for the configured local GPU host backend.
+            /// </summary>
+            /// <param name="settings">Application settings whose PreferredLocalGpuBackend determines the label.</param>
+            /// <returns>A label describing the configured local GPU host: "Managed local GPU host" for ManagedVenv, otherwise "Docker GPU host".</returns>
+            private static string GetHostLabel(AppSettings settings) =>
         settings.PreferredLocalGpuBackend == GpuHostBackend.ManagedVenv
             ? "Managed local GPU host"
             : "Docker GPU host";
 
+    /// <summary>
+    /// Builds a user-facing message indicating the host is reachable but the requested capability stage is not ready.
+    /// </summary>
+    /// <param name="hostLabel">Human-readable label for the GPU host (for example, "Docker GPU host" or "Managed local GPU host").</param>
+    /// <param name="stageLabel">Human-readable label for the capability stage (for example, "TTS", "transcription", or "diarization").</param>
+    /// <param name="detail">Optional detail text from the host's capability metadata; influences wording when it mentions warming or probe activity.</param>
+    /// <returns>A message stating that the host is live but the specified capability is not ready. If <paramref name="detail"/> is provided, it is appended and the message wording indicates active warming when the detail contains "warming" or "probe".</returns>
     private static string BuildCapabilityNotReadyMessage(string hostLabel, string stageLabel, string? detail)
     {
         if (string.IsNullOrWhiteSpace(detail))
@@ -332,6 +362,13 @@ public static class ContainerizedProviderReadiness
         return $"{hostLabel} is live but missing {stageLabel} capability: {detail}";
     }
 
+    /// <summary>
+    /// Builds a human-readable status message indicating that the host's capability metadata for the specified stage is unavailable or could not be read.
+    /// </summary>
+    /// <param name="hostLabel">Label for the host (e.g., "Managed local GPU host" or "Docker GPU host") used in the message.</param>
+    /// <param name="stage">The capability stage (transcription, translation, TTS, or diarization) to include in the message.</param>
+    /// <param name="detail">Optional detail or error text to append; if null or whitespace the message states metadata is unavailable without additional detail.</param>
+    /// <returns>A formatted message stating that the host is live but the specified stage's capability metadata is unavailable or could not be read; includes the provided detail when present.</returns>
     private static string BuildCapabilitiesUnavailableMessage(
         string hostLabel,
         ContainerCapabilityStage stage,
