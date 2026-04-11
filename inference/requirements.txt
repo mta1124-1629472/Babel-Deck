@@ -21,7 +21,7 @@ soundfile==0.12.1
 
 # Diarization
 git+https://github.com/wenet-e2e/wespeaker.git@c92349a14d6b426808c4e09b8b12e076864dfc11
-s3prl
+s3prl==0.4.17
 
 # Shared ML
 torch==2.2.2
