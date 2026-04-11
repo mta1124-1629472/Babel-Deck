@@ -406,19 +406,21 @@ public sealed class ContainerizedProvidersTests() : IDisposable
     }
 
     [Fact]
-    public void QwenContainerTtsProvider_MaxConcurrency_UsesRuntimePolicy()
+    public void QwenContainerTtsProvider_MaxConcurrency_ReturnsSingleThreaded()
     {
+        var original = Environment.GetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable);
         Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, "2");
         try
         {
             var client = CreateClient((_, _) => Json(HttpStatusCode.OK, "{\"success\":true}"));
             var provider = new QwenContainerTtsProvider(client, _ctx.Log, new TtsReferenceExtractor(_ctx.Log));
 
-            Assert.Equal(2, provider.MaxConcurrency);
+            // MaxConcurrency is hardcoded to 1 until thread-safety is implemented for _referenceIdCache
+            Assert.Equal(1, provider.MaxConcurrency);
         }
         finally
         {
-            Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, null);
+            Environment.SetEnvironmentVariable(QwenRuntimePolicy.MaxConcurrencyEnvironmentVariable, original);
         }
     }
 
@@ -1153,10 +1155,10 @@ public sealed class ContainerizedProvidersTests() : IDisposable
         Assert.Equal(ContainerizedProbeState.Available, cached.State);
         Assert.True(cached.WasCacheHit);
 
-        ExpireCachedProbeResult(probe, AppSettings.ManagedGpuServiceUrl);
+        ProbeTestHelpers.ExpireCachedProbeResult(probe, AppSettings.ManagedGpuServiceUrl);
 
         var readiness = ContainerizedProviderReadiness.CheckDiarization(settings, ProviderNames.NemoLocal, probe);
-        await WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
+        await ProbeTestHelpers.WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
 
         Assert.False(readiness.IsReady);
         Assert.Contains("NeMo diarization config contract invalid", readiness.BlockingReason, StringComparison.OrdinalIgnoreCase);
@@ -1350,45 +1352,5 @@ public sealed class ContainerizedProvidersTests() : IDisposable
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             _handler(request, cancellationToken);
-    }
-
-    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
-    {
-        var entriesField = typeof(ContainerizedServiceProbe).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not find _entries field.");
-
-        var entries = entriesField.GetValue(probe)
-            ?? throw new InvalidOperationException("ContainerizedServiceProbe entries cache was null.");
-
-        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
-        var tryGetValue = entries.GetType().GetMethod("TryGetValue")
-            ?? throw new InvalidOperationException("Could not find TryGetValue on probe cache.");
-
-        var tryGetArgs = new object?[] { normalizedUrl, null };
-        var found = (bool)(tryGetValue.Invoke(entries, tryGetArgs) ?? false);
-        if (!found)
-            throw new InvalidOperationException($"No cached probe entry found for {normalizedUrl}.");
-
-        var entry = tryGetArgs[1] ?? throw new InvalidOperationException("Probe cache entry was null.");
-        var expiresProperty = entry.GetType().GetProperty("ExpiresAtUtc")
-            ?? throw new InvalidOperationException("Could not find ExpiresAtUtc on probe cache entry.");
-        expiresProperty.SetValue(entry, DateTimeOffset.UtcNow.AddSeconds(-1));
-    }
-
-    private static async Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500)
-    {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (getCount() >= expectedMinimum)
-                return;
-
-            await Task.Delay(10);
-        }
-
-        var actualCount = getCount();
-        Assert.True(
-            actualCount >= expectedMinimum,
-            $"Timed out after {timeoutMs}ms waiting for at least {expectedMinimum} calls, but observed {actualCount}.");
     }
 }

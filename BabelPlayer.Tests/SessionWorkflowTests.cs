@@ -753,29 +753,6 @@ public sealed class SegmentInspectionTests
         throw new Xunit.Sdk.XunitException($"Timed out waiting for provider health snapshot '{section}'.");
     }
 
-    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
-    {
-        var entriesField = typeof(ContainerizedServiceProbe).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not find _entries field.");
-
-        var entries = entriesField.GetValue(probe)
-            ?? throw new InvalidOperationException("ContainerizedServiceProbe entries cache was null.");
-
-        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
-        var tryGetValue = entries.GetType().GetMethod("TryGetValue")
-            ?? throw new InvalidOperationException("Could not find TryGetValue on probe cache.");
-
-        var tryGetArgs = new object?[] { normalizedUrl, null };
-        var found = (bool)(tryGetValue.Invoke(entries, tryGetArgs) ?? false);
-        if (!found)
-            throw new InvalidOperationException($"No cached probe entry found for {normalizedUrl}.");
-
-        var entry = tryGetArgs[1] ?? throw new InvalidOperationException("Probe cache entry was null.");
-        var expiresProperty = entry.GetType().GetProperty("ExpiresAtUtc")
-            ?? throw new InvalidOperationException("Could not find ExpiresAtUtc on probe cache entry.");
-        expiresProperty.SetValue(entry, DateTimeOffset.UtcNow.AddSeconds(-1));
-    }
-
     private static object InvokePrivateSnapshotCapture(EmbeddedPlaybackViewModel playback)
     {
         var method = typeof(EmbeddedPlaybackViewModel).GetMethod(
@@ -820,12 +797,11 @@ public sealed class SegmentInspectionTests
     }
 
     [Fact]
-    public async Task EmbeddedPlaybackViewModel_DiarizationProvider_UpdatesSettingsAndStatus()
+    public void EmbeddedPlaybackViewModel_DiarizationProvider_UpdatesSettingsAndStatus()
     {
         using var playback = CreatePlaybackVm(new LocalDiarizationRegistry());
 
         playback.DiarizationProvider = ProviderNames.WeSpeakerLocal;
-        await Task.Delay(50);
 
         Assert.Equal(ProviderNames.WeSpeakerLocal, playback.Coordinator.CurrentSettings.DiarizationProvider);
         Assert.Equal(ProviderNames.WeSpeakerLocal, playback.DiarizationProvider);

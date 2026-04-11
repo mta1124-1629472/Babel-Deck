@@ -705,7 +705,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private ProviderHealthSnapshot BuildManualDiarizationSnapshot(string inlineStatus) =>
         new(
             "Diarization",
-            "manual",
+            ProviderNames.Manual,
             "Manual speaker mapping",
             "Local",
             "Ready",
@@ -718,7 +718,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             IsStale: false,
             CheckedAtText: DateTimeOffset.UtcNow.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture),
             History: AppendProviderHealthHistory(
-                "Diarization|manual|Manual speaker mapping|Local",
+                $"Diarization|{ProviderNames.Manual}|Manual speaker mapping|Local",
                 DateTimeOffset.UtcNow,
                 "Ready",
                 "No diarization provider selected.",

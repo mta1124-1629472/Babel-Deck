@@ -83,7 +83,7 @@ public sealed class ContainerizedServiceProbeTests
         Assert.Equal(ContainerizedProbeState.Available, first.State);
         Assert.False(first.IsStale);
 
-        ExpireCachedProbeResult(probe, "http://localhost:8000");
+        ProbeTestHelpers.ExpireCachedProbeResult(probe, "http://localhost:8000");
         var refresh = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000", forceRefresh: true);
         Assert.Equal(ContainerizedProbeState.Checking, refresh.State);
 
@@ -137,9 +137,9 @@ public sealed class ContainerizedServiceProbeTests
         Assert.Equal(ContainerizedProbeState.Available, first.State);
         Assert.False(first.IsStale);
 
-        ExpireCachedProbeResult(probe, "http://localhost:8000");
+        ProbeTestHelpers.ExpireCachedProbeResult(probe, "http://localhost:8000");
         var stale = probe.GetCurrentOrStartBackgroundProbe("http://localhost:8000");
-        await WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
+        await ProbeTestHelpers.WaitForCallCountAsync(() => Volatile.Read(ref callCount), expectedMinimum: 2);
 
         Assert.Equal(ContainerizedProbeState.Available, stale.State);
         Assert.True(stale.IsStale);
@@ -174,53 +174,6 @@ public sealed class ContainerizedServiceProbeTests
         Assert.Equal(ContainerizedProbeState.Unavailable, cachedResult.State);
         Assert.Contains("Simulated probe failure", cachedResult.ErrorDetail);
         Assert.True(exceptionThrown);
-    }
-
-    /// <summary>
-    /// Uses reflection to access ContainerizedServiceProbe's private _entries field and modify the ExpiresAtUtc
-    /// property of a cached probe entry to simulate expiration. This test helper couples the test to the internal
-    /// implementation details of ContainerizedServiceProbe (specifically its _entries cache structure and the
-    /// ExpiresAtUtc property shape) as well as ContainerizedInferenceClient.NormalizeBaseUrl. Maintainers should
-    /// update this helper if those internals are refactored.
-    /// </summary>
-    private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
-    {
-        var entriesField = typeof(ContainerizedServiceProbe).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not find _entries field.");
-
-        var entries = entriesField.GetValue(probe)
-            ?? throw new InvalidOperationException("ContainerizedServiceProbe entries cache was null.");
-
-        var normalizedUrl = ContainerizedInferenceClient.NormalizeBaseUrl(serviceUrl);
-        var tryGetValue = entries.GetType().GetMethod("TryGetValue")
-            ?? throw new InvalidOperationException("Could not find TryGetValue on probe cache.");
-
-        var tryGetArgs = new object?[] { normalizedUrl, null };
-        var found = (bool)(tryGetValue.Invoke(entries, tryGetArgs) ?? false);
-        if (!found)
-            throw new InvalidOperationException($"No cached probe entry found for {normalizedUrl}.");
-
-        var entry = tryGetArgs[1] ?? throw new InvalidOperationException("Probe cache entry was null.");
-        var expiresProperty = entry.GetType().GetProperty("ExpiresAtUtc")
-            ?? throw new InvalidOperationException("Could not find ExpiresAtUtc on probe cache entry.");
-        expiresProperty.SetValue(entry, DateTimeOffset.UtcNow.AddSeconds(-1));
-    }
-
-    private static async Task WaitForCallCountAsync(Func<int> getCount, int expectedMinimum, int timeoutMs = 500)
-    {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (getCount() >= expectedMinimum)
-                return;
-
-            await Task.Delay(10);
-        }
-
-        var actualCount = getCount();
-        Assert.True(
-            actualCount >= expectedMinimum,
-            $"Timed out after {timeoutMs}ms waiting for at least {expectedMinimum} calls, but observed {actualCount}.");
     }
 
     [Fact]
