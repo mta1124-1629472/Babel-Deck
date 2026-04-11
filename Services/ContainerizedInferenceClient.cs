@@ -59,11 +59,11 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-        /// Checks the health of the configured containerized inference service.
-        /// </summary>
-        /// <param name="cancellationToken">Token to cancel the health probe.</param>
-        /// <returns>A ContainerHealthStatus describing service availability, CUDA status/version, capabilities snapshot (if available), active request counts, busy state and reason, and any error or capabilities error messages.</returns>
-        public Task<ContainerHealthStatus> CheckHealthAsync(
+    /// Checks the health of the configured containerized inference service.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the health probe.</param>
+    /// <returns>A ContainerHealthStatus describing service availability, CUDA status/version, capabilities snapshot (if available), active request counts, busy state and reason, and any error or capabilities error messages.</returns>
+    public Task<ContainerHealthStatus> CheckHealthAsync(
         CancellationToken cancellationToken = default) =>
         ProbeHealthAsync(_httpClient, _inferenceServiceUrl, cancellationToken);
 
@@ -177,9 +177,6 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Translates segments from a transcript JSON string.
-    /// <paramref name="transcriptJson"/> must be the raw transcript artifact JSON.
-    /// <summary>
     /// Translates a serialized transcript from a source language into a target language using the specified model.
     /// </summary>
     /// <param name="transcriptJson">JSON-serialized transcript to translate (expected format produced by the transcription endpoint).</param>
@@ -246,14 +243,6 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Generate speech audio for the provided text using the specified voice.
-    /// </summary>
-    /// <param name="text">The text to synthesize to speech.</param>
-    /// <param name="voice">The voice identifier to use for synthesis.</param>
-    /// <param name="cancellationToken">Cancellation token to cancel the HTTP request.</param>
-    /// <returns>
-    /// A <see cref="TtsResult"/> containing success state, the generated audio path (empty on failure), the voice used, the file size in bytes, and an error message when unsuccessful.
-    /// <summary>
     /// Generate speech audio from the provided text using the containerized TTS service.
     /// </summary>
     /// <param name="text">The text to synthesize into speech.</param>
@@ -298,16 +287,6 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Performs speaker diarization on the given audio file using the containerized inference service.
-    /// </summary>
-    /// <param name="audioFilePath">Path to the audio file to diarize.</param>
-    /// <param name="engine">Requested diarization engine identifier (for example, <see cref="ProviderNames.WeSpeakerLocal"/> or its legacy alias).</param>
-    /// <param name="minSpeakers">Optional hint for the minimum number of speakers to detect.</param>
-    /// <param name="maxSpeakers">Optional hint for the maximum number of speakers to detect.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>
-    /// A <see cref="DiarizationResult"/> containing the success flag, normalized diarization segments, the determined speaker count, and an error message if the operation failed.
-    /// <summary>
     /// Performs speaker diarization on a local audio file using the containerized inference service.
     /// </summary>
     /// <param name="audioFilePath">Path to an existing audio file to diarize.</param>
@@ -315,7 +294,7 @@ public sealed class ContainerizedInferenceClient
     /// <param name="minSpeakers">Optional minimum number of speakers to detect.</param>
     /// <param name="maxSpeakers">Optional maximum number of speakers to detect.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
-    /// <returns>`DiarizationResult` containing a success flag, the list of normalized diarization segments, the determined speaker count, and an error message when `success` is `false`.</returns>
+    /// <returns>A <see cref="DiarizationResult"/> containing a success flag, the list of normalized diarization segments, the determined speaker count, and an error message when <see cref="DiarizationResult.Success"/> is <c>false</c>.</returns>
     public async Task<DiarizationResult> DiarizeAsync(
         string audioFilePath,
         string engine,
@@ -372,13 +351,6 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Register an audio reference for a speaker with the Qwen TTS service.
-    /// </summary>
-    /// <param name="speakerId">Identifier of the speaker to associate with the uploaded reference audio.</param>
-    /// <param name="referenceAudioPath">Path to the local audio file to upload as the reference.</param>
-    /// <returns>The created reference identifier.</returns>
-    /// <exception cref="FileNotFoundException">Thrown if <paramref name="referenceAudioPath"/> does not exist.</exception>
-    /// <summary>
     /// Registers a Qwen voice reference audio for a speaker and returns the created reference ID.
     /// </summary>
     /// <param name="speakerId">Identifier of the speaker to associate with the reference.</param>
@@ -416,18 +388,6 @@ public sealed class ContainerizedInferenceClient
 
 
 
-    /// <summary>
-    /// Synthesizes speech for the given text using the Qwen segmented TTS endpoint.
-    /// </summary>
-    /// <param name="text">The text to synthesize.</param>
-    /// <param name="model">TTS model identifier; when null or whitespace the default model "Qwen/Qwen3-TTS-12Hz-1.7B-Base" is used.</param>
-    /// <param name="language">Optional language tag (e.g., BCP-47) to guide synthesis.</param>
-    /// <param name="referenceAudioPath">Path to a reference audio file to upload; the file is uploaded only when <paramref name="referenceId"/> is not provided.</param>
-    /// <param name="referenceText">Optional textual description or transcript of the reference audio.</param>
-    /// <param name="referenceId">Identifier of a previously registered reference; when provided, no reference file is uploaded.</param>
-    /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
-    /// <returns>
-    /// A <see cref="TtsResult"/> containing the synthesis outcome: on success includes the remote audio path, voice identifier, and file size in bytes; on failure includes an error message and an empty audio path.
     /// <summary>
     /// Generate a Qwen-segmented text-to-speech audio asset for the given text using an optional reference audio or reference ID.
     /// </summary>
@@ -499,12 +459,6 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Downloads synthesized TTS audio identified by the given filename from the inference service and writes it to the specified local file path.
-    /// </summary>
-    /// <param name="filename">The remote TTS audio filename on the service (will be URL-escaped).</param>
-    /// <param name="localOutputPath">Path to create or overwrite with the downloaded audio file.</param>
-    /// <param name="cancellationToken">Token to cancel the download operation.</param>
-    /// <summary>
     /// Downloads a TTS audio file from the containerized inference service and saves it to the specified local path.
     /// </summary>
     /// <param name="filename">The remote audio filename to request from the service.</param>
@@ -541,17 +495,11 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Probes the containerized inference service for liveness, CUDA status, and a capabilities snapshot.
+    /// Probes the containerized inference service at the specified base URL for liveness and reported capabilities.
     /// </summary>
     /// <param name="httpClient">The HTTP client used to perform the probe requests.</param>
     /// <param name="serviceUrl">Base URL of the inference service to probe.</param>
     /// <param name="cancellationToken">Cancellation token to abort the probe requests.</param>
-    /// <returns>
-    /// A <see cref="ContainerHealthStatus"/> indicating whether the container is available. When available, includes CUDA availability/version and a capabilities snapshot; when unavailable, contains an error message describing the failure.
-    /// <summary>
-    /// Probes the containerized inference service at the specified base URL for liveness and reported capabilities.
-    /// </summary>
-    /// <param name="serviceUrl">The service base URL to probe.</param>
     /// <returns>A <see cref="ContainerHealthStatus"/> describing availability, CUDA status, active request counts, busy state, and either a capabilities snapshot or a capabilities error when capability probing failed; returns an unavailable status if the probe fails.</returns>
     private static async Task<ContainerHealthStatus> ProbeHealthAsync(
         HttpClient httpClient,
@@ -943,9 +891,6 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-    /// Count distinct non-empty speaker identifiers present in the provided diarization segments.
-    /// </summary>
-    /// <summary>
     /// Counts the unique, non-blank speaker identifiers present in the given diarization segments.
     /// </summary>
     /// <param name="segments">The diarization segments to inspect for speaker identifiers.</param>
@@ -963,11 +908,11 @@ public sealed class ContainerizedInferenceClient
     }
 
     /// <summary>
-        /// Acquire a per-request lease for the specified request kind when a lease tracker is configured.
-        /// </summary>
-        /// <param name="kind">The kind of containerized request to acquire a lease for.</param>
-        /// <returns>An IDisposable representing the acquired lease that must be disposed to release it, or <c>null</c> if no lease tracker is configured.</returns>
-        private IDisposable? AcquireLease(ContainerizedRequestKind kind) =>
+    /// Acquires a per-request lease for the specified request kind when a lease tracker is configured.
+    /// </summary>
+    /// <param name="kind">The kind of containerized request to acquire a lease for.</param>
+    /// <returns>An <see cref="IDisposable"/> representing the acquired lease that must be disposed to release it, or <c>null</c> if no lease tracker is configured.</returns>
+    private IDisposable? AcquireLease(ContainerizedRequestKind kind) =>
         _requestLeaseTracker?.Acquire(kind);
 
 }

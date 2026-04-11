@@ -1183,10 +1183,10 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     }
 
     /// <summary>
-/// Indicates whether there are currently active local requests tracked by the optional request lease tracker.
-/// </summary>
-/// <returns>`true` if a request lease tracker is present and reports active requests; `false` otherwise.</returns>
-private bool HasActiveLocalRequests() => _requestLeaseTracker?.HasActiveRequests == true;
+    /// Indicates whether there are currently active local requests tracked by the optional request lease tracker.
+    /// </summary>
+    /// <returns><c>true</c> if a request lease tracker is present and reports active requests; <c>false</c> otherwise.</returns>
+    private bool HasActiveLocalRequests() => _requestLeaseTracker?.HasActiveRequests == true;
 
     /// <summary>
     /// Determines whether the currently tracked host process exists and has not exited.

@@ -105,6 +105,7 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
                 if (!forceRefresh && entry.CachedResult is not null && entry.ExpiresAtUtc > nowUtc)
                 {
                     _log.Info($"Container probe cache hit (after race): url={normalizedUrl}, state={entry.CachedResult.State}");
+                    ReportCacheAccess(normalizedUrl, true);
                     return entry.CachedResult with { WasCacheHit = true };
                 }
 
@@ -205,9 +206,10 @@ public sealed class ContainerizedServiceProbe : IProbeMetricsReporter
  
             if (result.State == ContainerizedProbeState.Available)
             {
-                if (result.IsStale)
-                    lastAvailable = result;
-                return result;
+                if (!result.IsStale)
+                    return result;
+                // Stale: keep as fallback but keep waiting for a fresh probe.
+                lastAvailable = result;
             }
 
             if (result.State == ContainerizedProbeState.Unavailable)

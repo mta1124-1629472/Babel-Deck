@@ -32,10 +32,6 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
     private readonly ConcurrentDictionary<string, ContainerizedInferenceClient> _clientCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Initializes a new instance of <see cref="DiarizationRegistry"/> with the given logging facility and an optional probe for containerized services.
-    /// </summary>
-    /// <param name="log">Application logger used by the registry and the providers it creates.</param>
-    /// <summary>
     /// Initializes a DiarizationRegistry with the required application log and optional components for containerized inference support.
     /// </summary>
     /// <param name="log">Application logger used for registry and provider operations.</param>
@@ -51,9 +47,6 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
         _requestLeaseTracker = requestLeaseTracker;
     }
 
-    /// <summary>
-    /// Lists the diarization providers available in this registry.
-    /// </summary>
     /// <summary>
     /// Lists the diarization providers supported by this registry.
     /// </summary>
@@ -103,13 +96,6 @@ public sealed class DiarizationRegistry : IDiarizationRegistry
         return provider.CheckReadiness(settings, keyStore);
     }
 
-    /// <summary>
-    /// Create an IDiarizationProvider instance for the specified provider identifier.
-    /// </summary>
-    /// <param name="providerId">The provider identifier to instantiate (e.g., ProviderNames.NemoLocal or ProviderNames.WeSpeakerLocal).</param>
-    /// <param name="settings">Application settings used to configure the provider (its EffectiveContainerizedServiceUrl is used to construct the containerized client).</param>
-    /// <param name="keyStore">API key store (accepted but not used by the current provider implementations).</param>
-    /// <returns>The instantiated diarization provider configured according to the provided settings.</returns>
     /// <summary>
     /// Creates a diarization provider instance for the specified provider ID.
     /// </summary>

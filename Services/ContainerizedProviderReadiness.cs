@@ -234,20 +234,13 @@ public static class ContainerizedProviderReadiness
     }
 
     /// <summary>
-    /// Map a container probe result to a ProviderReadiness describing whether the requested capability stage is available.
-    /// </summary>
-    /// <param name="settings">Application settings used to determine host labeling and provider defaults.</param>
-    /// <param name="probeResult">Probe information including service URL, state, capabilities, and any error/detail text.</param>
-    /// <param name="stage">The capability stage to evaluate (Transcription, Translation, Tts, or Diarization).</param>
-    /// <param name="providerId">Optional provider identifier to evaluate provider-specific readiness for TTS or Diarization; when null or empty the corresponding default from <paramref name="settings"/> is used.</param>
-    /// <summary>
     /// Converts a container probe result into a ProviderReadiness that reflects whether the requested capability stage (and optional provider) is ready on the configured GPU host.
     /// </summary>
     /// <param name="settings">Application settings used to derive host labeling and provider defaults.</param>
     /// <param name="probeResult">Result of the container probe or health check containing host state, advertised capabilities, and any error details.</param>
     /// <param name="stage">The capability stage to evaluate (transcription, translation, TTS, or diarization).</param>
     /// <param name="providerId">Optional provider identifier to select a specific TTS or diarization provider; when null or empty the corresponding provider configured in <paramref name="settings"/> is used.</param>
-    /// <returns>`ProviderReadiness.Ready` when the requested stage/provider is available; otherwise a non-ready ProviderReadiness containing a user-facing message explaining why the capability or host is not ready.</returns>
+    /// <returns><c>ProviderReadiness.Ready</c> when the requested stage/provider is available; otherwise a non-ready ProviderReadiness containing a user-facing message explaining why the capability or host is not ready.</returns>
     internal static ProviderReadiness MapProbeResultToReadiness(
         AppSettings settings,
         ContainerizedProbeResult probeResult,
@@ -300,11 +293,11 @@ public static class ContainerizedProviderReadiness
     }
 
     /// <summary>
-            /// Create a ContainerizedProbeResult from a ContainerHealthStatus snapshot.
-            /// </summary>
-            /// <param name="health">Health snapshot from the container inference host.</param>
-            /// <returns>A ContainerizedProbeResult representing the same service URL, availability state, timestamped now, error text, CUDA info, capabilities, and capability error as the provided health snapshot.</returns>
-            private static ContainerizedProbeResult FromHealth(ContainerHealthStatus health) =>
+    /// Creates a ContainerizedProbeResult from a ContainerHealthStatus snapshot.
+    /// </summary>
+    /// <param name="health">Health snapshot from the container inference host.</param>
+    /// <returns>A ContainerizedProbeResult representing the same service URL, availability state, timestamped now, error text, CUDA info, capabilities, and capability error as the provided health snapshot.</returns>
+    private static ContainerizedProbeResult FromHealth(ContainerHealthStatus health) =>
         new(
             health.ServiceUrl,
             health.IsAvailable ? ContainerizedProbeState.Available : ContainerizedProbeState.Unavailable,
