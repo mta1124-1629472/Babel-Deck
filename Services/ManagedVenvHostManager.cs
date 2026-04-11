@@ -607,6 +607,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
             catch (OperationCanceledException)
             {
                 _log.Warning("Managed GPU host recovery canceled while waiting for active requests to complete.");
+                recoveryToken?.Dispose();
                 throw;
             }
         }

@@ -2041,7 +2041,7 @@ async def qwen_segment(
             background_tasks.add_task(lambda p=temp_ref_path: p.unlink(missing_ok=True))
         if out_path.exists():
             background_tasks.add_task(lambda p=out_path: p.unlink(missing_ok=True))
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         if waiter_counted and _qwen_segment_waiters > 0:
             _qwen_segment_waiters -= 1

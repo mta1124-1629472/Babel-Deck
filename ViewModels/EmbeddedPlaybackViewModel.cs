@@ -818,6 +818,12 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
             History: history);
     }
 
+    // Defensive normalization for mojibake (UTF-8 bytes misinterpreted as Latin-1) in diagnostic text.
+    // These sequences occur due to upstream encoding mismatch in Python subprocess output or container logs:
+    //   "âš  " → "Warning: " (U+26A0 WARNING SIGN mangled)
+    //   "âœ"" → "ok"         (U+2713 CHECK MARK mangled)
+    //   "Â·"  → "|"         (U+00B7 MIDDLE DOT mangled)
+    // TODO: Fix upstream producer to emit properly decoded UTF-8 so this defensive layer can be removed.
     private static string NormalizeDiagnosticText(string text) =>
         string.IsNullOrWhiteSpace(text)
             ? text
