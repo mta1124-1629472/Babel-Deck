@@ -159,8 +159,7 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         {
             var canReuseTrackedHost =
                 preflight.IsAvailable
-                || HasActiveLocalRequests()
-                || (IsTrackedHostProcessRunning() && IsTransientBusyHealthFailure(preflight.ErrorMessage));
+                || (IsTrackedHostProcessRunning() && (HasActiveLocalRequests() || IsTransientBusyHealthFailure(preflight.ErrorMessage)));
 
             if (canReuseTrackedHost)
             {

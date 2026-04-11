@@ -541,7 +541,7 @@ def _get_provider_health_metrics(provider: str) -> dict[str, object]:
 
 
 async def _ensure_provider_health_primitives() -> None:
-    global _provider_health_refresh_lock, _qwen_model_load_lock, _qwen_segment_semaphore
+    global _provider_health_refresh_lock, _qwen_model_load_lock, _qwen_segment_semaphore, _qwen_max_concurrency
     if _provider_health_refresh_lock is None:
         _provider_health_refresh_lock = asyncio.Lock()
     if _qwen_model_load_lock is None:
