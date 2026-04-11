@@ -52,7 +52,7 @@ Tests are filtered by category. Core tests run in CI; full suite requires local 
 
 ### General
 - **Target:** .NET 10 / C# 12+ with Avalonia 12
-- **Nullable/ImplicitUsings:** Enabled project-wide (no manual `using` for framework types)
+- **Nullable:** Enabled. **ImplicitUsings:** Not enabled project-wide; keep or add required manual `using` directives for framework and other types.
 
 ### Formatting
 - Standard .NET conventions (K&R braces, 4-space indent)
