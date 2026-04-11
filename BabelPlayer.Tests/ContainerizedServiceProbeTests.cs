@@ -216,6 +216,11 @@ public sealed class ContainerizedServiceProbeTests
 
             await Task.Delay(10);
         }
+
+        var actualCount = getCount();
+        Assert.True(
+            actualCount >= expectedMinimum,
+            $"Timed out after {timeoutMs}ms waiting for at least {expectedMinimum} calls, but observed {actualCount}.");
     }
 
     [Fact]

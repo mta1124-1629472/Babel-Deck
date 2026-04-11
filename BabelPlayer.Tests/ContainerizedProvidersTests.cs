@@ -1385,5 +1385,10 @@ public sealed class ContainerizedProvidersTests() : IDisposable
 
             await Task.Delay(10);
         }
+
+        var actualCount = getCount();
+        Assert.True(
+            actualCount >= expectedMinimum,
+            $"Timed out after {timeoutMs}ms waiting for at least {expectedMinimum} calls, but observed {actualCount}.");
     }
 }

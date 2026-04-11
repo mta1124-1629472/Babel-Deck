@@ -37,6 +37,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
     private readonly Dictionary<ComputeProfile, IReadOnlyList<string>> _ttsProviderIdsByRuntime = [];
     private readonly ObservableCollection<ProviderHealthSnapshot> _providerHealthSnapshots = [];
     private readonly Dictionary<string, Queue<string>> _providerHealthHistoryByKey = new(StringComparer.Ordinal);
+    private readonly object _providerHealthHistoryLock = new();
     private CancellationTokenSource? _providerHealthRefreshCts;
     private int _providerHealthRefreshVersion;
     private ProviderDiagnosticsSelectionSnapshot? _lastQueuedProviderHealthSnapshot;
@@ -629,7 +630,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 snapshot.TranscriptionRuntime),
             statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
             inlineStatusFactory: GetReadinessStatus,
-            hostLabel: "Managed local GPU host");
+            hostLabel: GetRuntimeHostLabel(snapshot.TranscriptionRuntime));
 
     private ProviderHealthSnapshot BuildTranslationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
@@ -647,7 +648,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 snapshot.TranslationRuntime),
             statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
             inlineStatusFactory: GetReadinessStatus,
-            hostLabel: "Managed local GPU host");
+            hostLabel: GetRuntimeHostLabel(snapshot.TranslationRuntime));
 
     private ProviderHealthSnapshot BuildTtsHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         BuildHealthSnapshot(
@@ -665,7 +666,7 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
                 snapshot.TtsRuntime),
             statusLineFactory: readiness => readiness.IsReady ? "Ready" : GetReadinessStatus(readiness),
             inlineStatusFactory: GetReadinessStatus,
-            hostLabel: "Managed local GPU host");
+            hostLabel: GetRuntimeHostLabel(snapshot.TtsRuntime));
 
     private ProviderHealthSnapshot BuildDiarizationHealthSnapshot(ProviderDiagnosticsSelectionSnapshot snapshot)
     {
@@ -941,18 +942,28 @@ public partial class EmbeddedPlaybackViewModel : ViewModelBase, IDisposable
         string hostState,
         bool isReady)
     {
-        if (!_providerHealthHistoryByKey.TryGetValue(key, out var queue))
-        {
-            queue = new Queue<string>();
-            _providerHealthHistoryByKey[key] = queue;
-        }
-
         var entry = $"{checkedAtUtc.ToLocalTime():HH:mm:ss} · {(isReady ? "ready" : "not ready")} · {statusLine}{(string.IsNullOrWhiteSpace(hostState) ? string.Empty : $" · {hostState}")}";
-        if (queue.Count >= 3)
-            queue.Dequeue();
-        queue.Enqueue(entry);
-        return queue.ToArray();
+        lock (_providerHealthHistoryLock)
+        {
+            if (!_providerHealthHistoryByKey.TryGetValue(key, out var queue))
+            {
+                queue = new Queue<string>();
+                _providerHealthHistoryByKey[key] = queue;
+            }
+
+            if (queue.Count >= 3)
+                queue.Dequeue();
+            queue.Enqueue(entry);
+            return queue.ToArray();
+        }
     }
+
+    private static string GetRuntimeHostLabel(ComputeProfile runtime) => runtime switch
+    {
+        ComputeProfile.Gpu => "Managed local GPU host",
+        ComputeProfile.Cloud => "Cloud runtime",
+        _ => "Local CPU runtime",
+    };
 
     private bool UsesContainerizedRuntime(ProviderDiagnosticsSelectionSnapshot snapshot) =>
         snapshot.TranscriptionRuntime == ComputeProfile.Gpu
