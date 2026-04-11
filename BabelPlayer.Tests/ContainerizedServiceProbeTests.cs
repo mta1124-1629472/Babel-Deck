@@ -127,6 +127,13 @@ public sealed class ContainerizedServiceProbeTests
         Assert.True(exceptionThrown);
     }
 
+    /// <summary>
+    /// Uses reflection to access ContainerizedServiceProbe's private _entries field and modify the ExpiresAtUtc
+    /// property of a cached probe entry to simulate expiration. This test helper couples the test to the internal
+    /// implementation details of ContainerizedServiceProbe (specifically its _entries cache structure and the
+    /// ExpiresAtUtc property shape) as well as ContainerizedInferenceClient.NormalizeBaseUrl. Maintainers should
+    /// update this helper if those internals are refactored.
+    /// </summary>
     private static void ExpireCachedProbeResult(ContainerizedServiceProbe probe, string serviceUrl)
     {
         var entriesField = typeof(ContainerizedServiceProbe).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)

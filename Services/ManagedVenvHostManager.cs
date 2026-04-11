@@ -157,12 +157,23 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
 
         if (ShouldDeferRestartForBusyHost(preflight))
         {
-            State = ManagedHostState.Ready;
-            var deferMessage = BuildBusyHostDeferMessage(serviceUrl, preflight);
-            _log.Info(
-                $"Managed GPU host startup deferred: trigger={trigger}, active_requests={_requestLeaseTracker?.ActiveRequests ?? 0}, " +
-                $"host_busy={preflight.Busy}, reason='{deferMessage}'");
-            return new ContainerizedStartResult(false, true, deferMessage);
+            // Only mark as Ready and return healthy if the host is actually available.
+            if (preflight.IsAvailable)
+            {
+                State = ManagedHostState.Ready;
+                var deferMessage = BuildBusyHostDeferMessage(serviceUrl, preflight);
+                _log.Info(
+                    $"Managed GPU host startup deferred: trigger={trigger}, active_requests={_requestLeaseTracker?.ActiveRequests ?? 0}, " +
+                    $"host_busy={preflight.Busy}, reason='{deferMessage}'");
+                return new ContainerizedStartResult(false, true, deferMessage);
+            }
+            else
+            {
+                // Host is busy but not available; do not mark Ready or return healthy.
+                var notAvailableMessage = $"Managed GPU host is not available: {preflight.ErrorMessage ?? "unknown error"}";
+                _log.Warning($"Managed GPU host startup path: host reported busy but is not available.");
+                return new ContainerizedStartResult(false, false, notAvailableMessage);
+            }
         }
 
         if (preflight.IsAvailable)
@@ -580,11 +591,23 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
         bool stopTrackedProcess,
         CancellationToken cancellationToken)
     {
-        if (HasActiveLocalRequests())
+        if (_requestLeaseTracker is null)
         {
-            _log.Warning(
-                $"Skipping managed GPU host recovery while local requests are in flight: active_requests={_requestLeaseTracker?.ActiveRequests ?? 0}");
+            _log.Warning("Managed GPU host recovery cannot proceed: request lease tracker is not initialized.");
             return false;
+        }
+
+        // Begin recovery gate to block new leases and wait for existing ones to drain.
+        using var recoveryToken = _requestLeaseTracker.BeginRecovery();
+
+        try
+        {
+            await _requestLeaseTracker.WaitForZeroActiveRequestsAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _log.Warning("Managed GPU host recovery canceled while waiting for active requests to complete.");
+            throw;
         }
 
         var stoppedAny = false;
@@ -604,18 +627,14 @@ public sealed class ManagedVenvHostManager : IContainerizedInferenceManager, IDi
     }
 
     /// <summary>
-    /// Stops the currently tracked managed GPU host process if one is running and there are no active local requests.
+    /// Stops the currently tracked managed GPU host process if one is running.
     /// </summary>
     /// <returns>`true` if a tracked process was stopped, `false` otherwise.</returns>
+    /// <remarks>
+    /// This method should be called only during recovery when the recovery gate is active and all active requests have completed.
+    /// </remarks>
     private async Task<bool> StopTrackedHostProcessAsync(CancellationToken cancellationToken)
     {
-        if (HasActiveLocalRequests())
-        {
-            _log.Warning(
-                $"Refusing to stop tracked managed GPU host while local requests are in flight: active_requests={_requestLeaseTracker?.ActiveRequests ?? 0}");
-            return false;
-        }
-
         Process? trackedProcess;
         try
         {

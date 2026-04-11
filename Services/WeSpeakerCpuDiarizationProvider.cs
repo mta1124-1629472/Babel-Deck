@@ -86,6 +86,10 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
             progress?.Report(1.0);
             return _cpuRuntimeManager.State == ManagedCpuState.Ready;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             Log.Error($"Managed CPU runtime bootstrap failed for WeSpeaker: {ex.Message}", ex);
@@ -107,6 +111,7 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
     /// </returns>
     /// <exception cref="FileNotFoundException">Thrown when the file at request.SourceAudioPath does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the WeSpeaker subprocess returns no JSON payload.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled via the cancellation token.</exception>
     public async Task<DiarizationResult> DiarizeAsync(
         DiarizationRequest request,
         CancellationToken ct = default)
@@ -139,6 +144,10 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
                 : normalizedSegments.Select(segment => segment.SpeakerId).Distinct(StringComparer.Ordinal).Count();
 
             return new DiarizationResult(true, normalizedSegments, speakerCount, null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -187,6 +196,11 @@ public sealed class WeSpeakerCpuDiarizationProvider : PythonSubprocessServiceBas
         assignedLabels[key] = normalized;
         return normalized;
     }
+
+    /// <summary>
+    /// Gets the embedded Python script used to perform WeSpeaker diarization.
+    /// </summary>
+    public static string Script => DiarizeScript;
 
     private const string DiarizeScript = """
 import json

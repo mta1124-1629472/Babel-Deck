@@ -208,15 +208,19 @@ public static class ContainerizedProviderReadiness
     /// <param name="stage">The capability stage to evaluate (e.g., Transcription, Tts, Diarization).</param>
     /// <param name="settings">Application settings used to resolve provider selection when applicable.</param>
     /// <param name="providerId">Optional provider identifier to evaluate provider-specific readiness for stages that support it; may be null.</param>
-    /// <returns>`true` if the capability is available at the host level but not yet ready and its detail contains "warming" without "failed"; `false` otherwise.</returns>
+    /// <returns>`true` if the capability is available at the host level but not yet ready and its detail contains "warming" without "failed"; also returns `true` when the host is available but capabilities are null with a non-null error (indicating transient startup/warmup); `false` otherwise.</returns>
     private static bool IsCapabilityActivelyWarming(
         ContainerizedProbeResult probeResult,
         ContainerCapabilityStage stage,
         AppSettings settings,
         string? providerId)
     {
-        if (probeResult.State != ContainerizedProbeState.Available || probeResult.Capabilities is null)
+        if (probeResult.State != ContainerizedProbeState.Available)
             return false;
+
+        // Treat null capabilities with a non-null error as actively warming to allow retry.
+        if (probeResult.Capabilities is null)
+            return !string.IsNullOrWhiteSpace(probeResult.CapabilitiesError);
 
         if (IsStageReadyForSelection(settings, probeResult.Capabilities, stage, providerId, out var detail))
             return false;
@@ -268,6 +272,10 @@ public static class ContainerizedProviderReadiness
 
         if (probeResult.Capabilities is null)
         {
+            // Return not-ready status but do not prevent warmup retry path from operating.
+            // The null capabilities could be transient (e.g., host just starting), and
+            // IsCapabilityActivelyWarming will treat this case as "not warming" allowing
+            // the caller (CheckForExecutionAsync) to continue normally.
             return new ProviderReadiness(
                 false,
                 BuildCapabilitiesUnavailableMessage(hostLabel, stage, probeResult.CapabilitiesError));

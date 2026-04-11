@@ -52,6 +52,7 @@ EFFECTIVE_HOST_COMPUTE_TYPE = HOST_COMPUTE_TYPE
 # Tracks downgrade reasons per stage for UI/logging projection
 COMPUTE_DOWNGRADE_REASONS: dict[str, str] = {}
 DEFAULT_QWEN_MODEL_NAME = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+DEFAULT_MINIMAL_QWEN_MODEL = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
 PROVIDER_HEALTH_REFRESH_STALE_SECONDS = 60.0
 
 _provider_health_cache: dict[str, dict[str, object]] = {
@@ -505,16 +506,17 @@ def _check_nemo_diarization_contract() -> tuple[bool, str]:
 async def _refresh_qwen_provider_health(force: bool = False) -> None:
     """
     Refresh the cached readiness state for the Qwen TTS provider when stale or requested.
-    
-    Attempts to ensure the default Qwen model is loaded so the provider health cache is updated. If `force` is True, performs the refresh regardless of cached staleness. Failures during the refresh are suppressed.
-     
+
+    Attempts to ensure the currently loaded or default minimal Qwen model is ready so the provider health cache is updated. If `force` is True, performs the refresh regardless of cached staleness. Failures during the refresh are suppressed.
+
     Parameters:
         force (bool): If True, force a refresh even when the provider health cache is not stale.
     """
     if not force and not _provider_health_is_stale("qwen"):
         return
     try:
-        await _ensure_qwen_model_ready(DEFAULT_QWEN_MODEL_NAME)
+        model_to_warm = qwen_model_key if qwen_model_key is not None else DEFAULT_MINIMAL_QWEN_MODEL
+        await _ensure_qwen_model_ready(model_to_warm)
     except Exception:
         pass
 

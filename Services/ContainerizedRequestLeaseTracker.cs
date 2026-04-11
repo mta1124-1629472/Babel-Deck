@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Babel.Player.Services;
 
@@ -22,6 +23,8 @@ public sealed class ContainerizedRequestLeaseTracker
     private int _activeRequests;
     private int _activeQwenRequests;
     private int _activeDiarizationRequests;
+    private int _isRecovering;
+    private readonly SemaphoreSlim _zeroRequestsSignal = new(0, 1);
 
     public int ActiveRequests => Volatile.Read(ref _activeRequests);
 
@@ -35,9 +38,13 @@ public sealed class ContainerizedRequestLeaseTracker
     /// Reserves an active request slot for the specified request kind and returns a lease that releases that reservation when disposed.
     /// </summary>
     /// <param name="kind">The category of the request (for example: Qwen, Diarization, Transcription).</param>
-    /// <returns>An <see cref="IDisposable"/> lease that, when disposed, releases the reserved request slot for the given kind.</returns>
-    public IDisposable Acquire(ContainerizedRequestKind kind)
+    /// <returns>An <see cref="IDisposable"/> lease that, when disposed, releases the reserved request slot for the given kind; returns null when recovery is in progress and new leases are blocked.</returns>
+    public IDisposable? Acquire(ContainerizedRequestKind kind)
     {
+        // Reject new leases while recovering to prevent TOCTOU races.
+        if (Volatile.Read(ref _isRecovering) == 1)
+            return null;
+
         Interlocked.Increment(ref _activeRequests);
 
         switch (kind)
@@ -51,6 +58,48 @@ public sealed class ContainerizedRequestLeaseTracker
         }
 
         return new Lease(this, kind);
+    }
+
+    /// <summary>
+    /// Begins a recovery lifecycle gate that blocks new lease acquisitions and returns a token to end recovery.
+    /// </summary>
+    /// <returns>An <see cref="IDisposable"/> token that, when disposed, re-enables lease acquisitions.</returns>
+    public IDisposable BeginRecovery()
+    {
+        Interlocked.Exchange(ref _isRecovering, 1);
+        return new RecoveryToken(this);
+    }
+
+    /// <summary>
+    /// Waits until all active requests have completed or the cancellation token is triggered.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the wait operation.</param>
+    /// <returns>A task that completes when the active request count reaches zero.</returns>
+    public async Task WaitForZeroActiveRequestsAsync(CancellationToken cancellationToken = default)
+    {
+        while (ActiveRequests > 0)
+        {
+            try
+            {
+                await _zeroRequestsSignal.WaitAsync(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Timeout is expected; loop and check count again.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ends the recovery gate and re-enables lease acquisitions.
+    /// </summary>
+    private void EndRecovery()
+    {
+        Interlocked.Exchange(ref _isRecovering, 0);
     }
 
     /// <summary>
@@ -69,7 +118,20 @@ public sealed class ContainerizedRequestLeaseTracker
                 break;
         }
 
-        Interlocked.Decrement(ref _activeRequests);
+        var newCount = Interlocked.Decrement(ref _activeRequests);
+
+        // Signal waiters when count reaches zero.
+        if (newCount == 0)
+        {
+            try
+            {
+                _zeroRequestsSignal.Release();
+            }
+            catch
+            {
+                // Already signaled; ignore.
+            }
+        }
     }
 
     private sealed class Lease(ContainerizedRequestLeaseTracker owner, ContainerizedRequestKind kind) : IDisposable
@@ -86,6 +148,20 @@ public sealed class ContainerizedRequestLeaseTracker
         {
             var owner = Interlocked.Exchange(ref _owner, null);
             owner?.Release(kind);
+        }
+    }
+
+    private sealed class RecoveryToken(ContainerizedRequestLeaseTracker owner) : IDisposable
+    {
+        private ContainerizedRequestLeaseTracker? _owner = owner;
+
+        /// <summary>
+        /// Ends the recovery gate when disposed.
+        /// </summary>
+        public void Dispose()
+        {
+            var owner = Interlocked.Exchange(ref _owner, null);
+            owner?.EndRecovery();
         }
     }
 }

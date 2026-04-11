@@ -6,11 +6,14 @@ date: 2026-04-10
 ---
 
 ## Metadata
+
 - Scope: managed GPU host lifecycle hardening, cached/serialized provider health, truthful probe/readiness reporting, Qwen concurrency reduction, WeSpeaker migration to managed CPU runtime
 - Status: `partial`
 - Operator: Codex
 
 ## Gate Summary
+
+
 - [x] Qwen and NeMo heavy readiness work is serialized and cached on the managed GPU host.
 - [x] `/capabilities` no longer performs heavy live warmup/import work inline for Qwen and NeMo.
 - [x] Managed GPU host restart logic defers when local requests are active or the host reports busy.
@@ -23,6 +26,8 @@ date: 2026-04-10
 - [ ] Manual app-shell smoke of Qwen synthesis, NeMo diarization, and WeSpeaker CPU fallback.
 
 ## What Was Verified
+
+
 1. `python -m py_compile inference/main.py` passed.
 2. `python3 scripts/check-architecture.py` passed all checks.
 3. `dotnet build Babel-Player.sln` passed.
@@ -39,6 +44,8 @@ date: 2026-04-10
 7. The managed GPU Python host now reports cached provider-health state for Qwen and NeMo instead of running deep imports inline on `/capabilities`.
 
 ## What Was Not Verified
+
+
 - Real app-shell startup with Qwen selected after this repair pass.
 - End-to-end Qwen segment synthesis under the repaired host lifecycle.
 - End-to-end NeMo diarization against a real media file on the rebuilt managed GPU runtime.
@@ -46,6 +53,8 @@ date: 2026-04-10
 - Real hardware validation that host restarts no longer interrupt in-flight Qwen work.
 
 ## Evidence
+
+
 - Host orchestration and health caching:
   - `inference/main.py`
 - Host lifecycle protection:
@@ -69,16 +78,22 @@ date: 2026-04-10
   - `BabelPlayer.Tests/RegistryTests.cs`
 
 ## Notes
+
+
 This pass intentionally fixes the managed inference stack as a coordinated system. WeSpeaker is no longer treated as a GPU-hosted diarization engine. It now belongs to the managed CPU runtime, which removes the misleading GPU warmup/readiness messaging from its execution path.
 
 The automated verification in this environment is strong enough to confirm the code paths, host-health semantics, and runtime ownership split. It does not substitute for a real app-shell smoke with actual provider startup and media execution.
 
 ## Conclusion
+
+
 Status: `partial`.
 
 The managed inference architecture is repaired in code and regression-tested, but manual end-to-end validation for Qwen, NeMo, and WeSpeaker is still outstanding before this area should be considered fully complete.
 
 ## Deferred Items
+
+
 - Run a manual app-shell smoke with Qwen selected and confirm no restart interrupts active synthesis.
 - Run NeMo diarization from the shell and verify honest status reporting on both success and failure.
 - Run WeSpeaker CPU fallback from the shell and verify readiness and execution no longer mention GPU warmup.

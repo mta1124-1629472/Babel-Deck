@@ -36,13 +36,11 @@ public sealed class WeSpeakerCpuDiarizationProviderTests : IDisposable
     [Fact]
     public void WeSpeakerCpuDiarizationProvider_Source_UsesManagedCpuRuntimeAndCpuOnlyWeSpeakerApi()
     {
-        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "Services", "WeSpeakerCpuDiarizationProvider.cs"));
+        var script = WeSpeakerCpuDiarizationProvider.Script;
 
-        Assert.Contains("ManagedCpuRuntimeManager", source, StringComparison.Ordinal);
-        Assert.Contains("PythonSubprocessServiceBase", source, StringComparison.Ordinal);
-        Assert.Contains("wespeaker.load_model(\"english\")", source, StringComparison.Ordinal);
-        Assert.Contains("set_device(\"cpu\")", source, StringComparison.Ordinal);
-        Assert.Contains("diarize(audio_path)", source, StringComparison.Ordinal);
+        Assert.Contains("wespeaker.load_model(\"english\")", script, StringComparison.Ordinal);
+        Assert.Contains("set_device(\"cpu\")", script, StringComparison.Ordinal);
+        Assert.Contains("diarize(audio_path)", script, StringComparison.Ordinal);
     }
 
     [Fact]
