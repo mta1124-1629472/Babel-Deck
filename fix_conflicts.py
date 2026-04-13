@@ -1,28 +1,31 @@
-from pathlib import Path
-import sys
+import os
 
+def fix_file(filename):
+    with open(filename, 'r') as f:
+        lines = f.readlines()
 
-def main() -> int:
-    if len(sys.argv) != 2:
-        print("Usage: python fix_conflicts.py <path-to-file>")
-        return 1
+    out = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith('<<<<<<< HEAD'):
+            # Skip until =======
+            i += 1
+            while i < len(lines) and not lines[i].startswith('======='):
+                i += 1
+            # Now we are at =======, keep everything until >>>>>>>
+            i += 1
+            while i < len(lines) and not lines[i].startswith('>>>>>>>'):
+                out.append(lines[i])
+                i += 1
+            i += 1 # skip >>>>>>>
+            continue
+        else:
+            out.append(line)
+            i += 1
 
-    target_path = Path(sys.argv[1])
-    if not target_path.is_file():
-        print(f"File not found: {target_path}")
-        return 1
+    with open(filename, 'w') as f:
+        f.write(''.join(out))
 
-    content = target_path.read_text(encoding="utf-8")
-
-    if not all(marker in content for marker in ("<<<<<<<", "=======", ">>>>>>>")):
-        print(f"No merge-conflict markers found in {target_path}")
-        return 0
-
-    normalized_content = content.replace("\r\n", "\n")
-    target_path.write_text(normalized_content, encoding="utf-8")
-    print(f"Conflict markers still require manual resolution in: {target_path}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+fix_file('BabelPlayer.Tests/ManagedVenvHostManagerTests.cs')
+fix_file('Services/ManagedVenvHostManager.cs')
